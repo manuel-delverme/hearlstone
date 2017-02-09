@@ -1,16 +1,9 @@
+import fireplace
 import random
-import os.path
-from bisect import bisect
-from importlib import import_module
-from pkgutil import iter_modules
-from typing import List
-from xml.etree import ElementTree
 from hearthstone.enums import CardClass, CardType
 
 from fireplace.game import Game
 from fireplace.player import Player
-from fireplace.exceptions import GameOver
-import fireplace
 
 def setup_game() -> ".game.Game":
     deck1 = fireplace.utils.random_draft(CardClass.MAGE)
@@ -20,21 +13,6 @@ def setup_game() -> ".game.Game":
 
     game = Game(players=(player1, player2))
     game.start()
-
-    return game
-
-def play_full_game() -> ".game.Game":
-    game = setup_game()
-
-    for player in game.players:
-        print("Can mulligan %r" % (player.choice.cards))
-        mull_count = random.randint(0, len(player.choice.cards))
-        cards_to_mulligan = random.sample(player.choice.cards, mull_count)
-        player.choice.choose(*cards_to_mulligan)
-
-    import ipdb; ipdb.set_trace()
-    while True:
-        fireplace.utils.play_turn(game)
 
     return game
 
