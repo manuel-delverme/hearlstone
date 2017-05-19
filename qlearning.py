@@ -299,7 +299,7 @@ class Agent(object):
 
     def __init__(self):
         # self.simulation = simulation
-        self.epsilon = 0.1
+        self.epsilon = 0.3
         self.learning_rate = 0.99
         self.gamma = 0.99
 
@@ -344,7 +344,7 @@ class Agent(object):
         else:
             q = [self.getQ(state, self.simulation.action_to_action_id(a)) for a in possible_actions]
             maxQ = max(q)
-            if maxQ == 0:
+            if maxQ == 0.0:  # FIXME: account for no-action which is always present
                 self.qmiss += 1
             else:
                 self.qhit += 1
