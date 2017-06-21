@@ -1,4 +1,6 @@
 #!/usr/bin/env python3.5
+from utils import disk_cache
+import bz2
 import shelve
 import pickle
 import fireplace
@@ -14,6 +16,9 @@ from fireplace.card import Minion, Secret
 from fireplace.exceptions import GameOver
 from fireplace.player import Player
 from itertools import combinations, product, permutations
+
+with open("data/string_encoding.pkl", "rb") as fin:
+    encoded_strings, str_encoding = pickle.load(fin)
 
 
 class Action(object):
@@ -34,11 +39,32 @@ class Action(object):
         return "card: {}, usage: {}".format(self.card_obj, self.params)
 
 
+def player_to_bow(player_obj):
+    # TODO: check all the possible attributes
+    player_dict = {
+        'combo': None,
+        'fatigue_counter': None,
+        'healing_as_damage': None,
+        'healing_double': None,
+        'shadowform': None,
+        'times_hero_power_used_this_game': None,
+    }
+    player_lst = []
+    for k in sorted(player_dict.keys()):
+        try:
+            val = player_obj.__getattribute__(k)
+        except AttributeError:
+            val = None
+        val = encode_to_numerical(k, val)
+        player_lst.append(val)
+    return player_lst
+
+@disk_cache
 def card_to_bow(card_obj):
     # TODO: check all the possible attributes
     card_dict = {
         'atk': None,
-        'entourage': None,
+        # 'entourage': None,
         'has_battlecry': None,
 
         # character
@@ -104,14 +130,60 @@ def card_to_bow(card_obj):
     except AttributeError:
         card_dict['description'] = None
 
-    return card_dict
+    card_lst = []
+    for k in sorted(card_dict.keys()):
+        val = card_dict[k]
+        val = encode_to_numerical(k, val)
+
+        card_lst.append(val)
+
+    return np.array(card_lst)
+
+
+def encode_to_numerical(k, val):
+    if k == "power" and val:
+        val = val.data.id
+    if val is None:
+        val = -1
+    elif val is False:
+        val = 0
+    elif val is True:
+        val = 0
+    elif isinstance(val, str):
+        try:
+            val = str_encoding[val]
+        except KeyError:
+            encoded_strings.append(val)
+            str_encoding[val] = len(encoded_strings)
+            with open("data/string_encoding.pkl", "wb") as fout:
+                pickle.dump((encoded_strings, str_encoding), fout)
+            val = str_encoding[val]
+    elif isinstance(val, list):
+        if len(val) != 0:
+            raise Exception("wtf is this list?", val)
+        val = 0
+    elif isinstance(val, int):
+        pass
+    else:
+        raise Exception("wtf is this data?", val)
+    return val
+
+
+def setup_game() -> ".game.Game":
+    draft1 = fireplace.utils.random_draft(CardClass.MAGE)
+    draft2 = set(fireplace.utils.random_draft(CardClass.WARRIOR))
+    player1 = Player("Player1", draft1, CardClass.MAGE.default_hero)
+    player2 = Player("Player2", draft2, CardClass.WARRIOR.default_hero)
+    new_game = Game(players=(player1, player2))
+    new_game.start()
+    return new_game
 
 
 class HSsimulation(object):
     def __init__(self):
         while True:
             try:
-                self.game = self.setup_game()
+                self.game = setup_game()
                 self.player = self.game.players[0]
                 self.opponent = self.game.players[1]
                 self.skip_the_boring_parts()
@@ -119,26 +191,6 @@ class HSsimulation(object):
                 pass
             else:
                 break
-
-    def setup_game(self) -> ".game.Game":
-        try:
-            with open("decks", "rb") as fin:
-                deck1, deck2 = pickle.load(fin)
-        except IOError:
-            draft1 = fireplace.utils.random_draft(CardClass.MAGE)
-            deck1 = list(card for card in set(draft1) if not fireplace.cards.db[card].discover)[:15]
-            draft2 = set(fireplace.utils.random_draft(CardClass.WARRIOR))
-            deck2 = list(card for card in draft2 if not fireplace.cards.db[card].discover)[:15]
-            assert len(deck1) == 15
-            assert len(deck2) == 15
-            with open("decks", "wb") as fout:
-                pickle.dump((deck1, deck2), fout)
-
-        player1 = Player("Player1", deck1, CardClass.MAGE.default_hero)
-        player2 = Player("Player2", deck2, CardClass.WARRIOR.default_hero)
-        new_game = Game(players=(player1, player2))
-        new_game.start()
-        return new_game
 
     def terminal(self):
         return self.game.ended
@@ -153,9 +205,25 @@ class HSsimulation(object):
                 #     card = random.choice(card.choose_cards)
                 if card.requires_target():
                     for target in card.targets:
-                        actions.append(Action(card, card.play, {'target': target}))
+                        if card.must_choose_one:
+                            for choice in card.choose_cards:
+                                if choice.requires_target():
+                                    actions.append(Action(card, card.play, {'target': target, 'choice': choice}))
+                                else:
+                                    actions.append(Action(card, card.play, {'target': None, 'choice': choice}))
+                        else:
+                            actions.append(Action(card, card.play, {'target': target}))
                 else:
-                    actions.append(Action(card, card.play, {'target': None}))
+                    target = None
+                    if card.must_choose_one:
+                        for choice in card.choose_cards:
+                            if choice.requires_target():
+                                for target in card.targets:
+                                    actions.append(Action(card, card.play, {'target': target, 'choice': choice}))
+                            else:
+                                actions.append(Action(card, card.play, {'target': target, 'choice': choice}))
+                    else:
+                        actions.append(Action(card, card.play, {'target': target}))
 
         for character in self.player.characters:
             if character.can_attack():
@@ -180,51 +248,53 @@ class HSsimulation(object):
         return actions
 
     def observe_player(self, player):
-        player_state = {}
-        if player == self.opponent:
-            # FIXME considering opponent hand empty instead of unknown
-            player_hand = []
-        else:
-            player_hand = player.hand
-
-        # pad hand with nones
+        player_state = player_to_bow(player)
         empty_token = None
 
-        player_hand = list(sorted(player_hand, key=lambda c: c.id) +
-                           [empty_token] * player.max_hand_size)[:player.max_hand_size]
-        player_state['hand'] = []
+        if player == self.opponent:
+            player_hand = ['UNK' for _ in player.hand]
+            player_hand = (player_hand + [empty_token] * player.max_hand_size)[:player.max_hand_size]
+        else:
+            player_hand = player.hand
+            player_hand = list(sorted(player_hand, key=lambda c: c.id) +
+                               [empty_token] * player.max_hand_size)[:player.max_hand_size]
+
         for card_in_hand in player_hand:
             card_bow = card_to_bow(card_in_hand)
-            player_state['hand'].append(card_bow)
+            player_state.append(card_bow)
 
         # skipping self
         # FIXME: two same cards (ex CREATED_CARD) the second gets ignored same for 3..4..5. etc
         player_board = [card for card in player.characters]
         player_board = list(sorted(player_board, key=lambda c: c.id) +
-                            [empty_token] * player.minion_slots)[:player.minion_slots]
+                            [empty_token] * player.minion_slots)[:player.minion_slots + 1]  # player is part of board
 
-        player_state['board'] = []
         for card_in_board in player_board:
             card_bow = card_to_bow(card_in_board)
-            player_state['board'].append(card_bow)
+            player_state.append(card_bow)
 
         player_mana = player.max_mana
         if player == self.opponent:
             player_mana += 1
-        player_state['mana'] = player_mana
-        return player_state
+        player_state.append(player_mana)
+        return np.hstack(player_state)
 
     def observe(self):
         player_state = self.observe_player(self.player)
-        # TODO: consider opponent state
-        # opponent_state = self.observe_player(self.opponent)
-        # return [player_state, opponent_state]  # np.array(state)
-        return player_state
+        opponent_state = self.observe_player(self.opponent)
+        return np.hstack((player_state, opponent_state))
 
     def step(self, action):
+        if self.player.choice:
+            print("SOMEONE LEFT A CHOICE OPEN; CLOSING")
+            choice = random.choice(self.player.choice.cards)
+            self.player.choice.choose(choice)
         observation = self.observe()
         if action:
             action.use()
+            if self.player.choice:
+                choice = random.choice(self.player.choice.cards)
+                self.player.choice.choose(choice)
             next_observation = self.observe()
         else:
             next_observation = observation
@@ -239,27 +309,46 @@ class HSsimulation(object):
 
 
 def main():
-    fireplace.cards.db.initialize()
-    training_set = []
+    games_finished = 0
+    nr_tuples = 0
+    file_idx = 0
+    data_dump = "training_data{}.pbz"
     while True:
         try:
-            sim1 = HSsimulation()
-            while True:
-                actions = sim1.actions()
-                if len(actions) == 1:
-                    # end turn
-                    fireplace.utils.play_turn(sim1.game)
-                    # play opponent turn
-                    fireplace.utils.play_turn(sim1.game)
-                else:
-                    choosen_action = random.choice(actions)
-                    observation, action, next_observation, terminal = sim1.step(choosen_action)
-                    if choosen_action.card_obj is not None:
-                        training_tuple = (observation, action.bow, next_observation)
-                        training_set.append(training_tuple)
-        except GameOver as e:
-            pass
+            with open(data_dump.format(file_idx), "rb") as _:
+                pass
+        except FileNotFoundError:
+            break
+        else:
+            file_idx += 1
 
+    with bz2.BZ2File(data_dump.format(file_idx), "wb") as fout:
+        fireplace.cards.db.initialize()
+        training_set = []
+        while True:
+            try:
+                sim1 = HSsimulation()
+                while True:
+                    actions = sim1.actions()
+                    if len(actions) == 1:
+                        # end turn
+                        fireplace.utils.play_turn(sim1.game)
+                        # play opponent turn
+                        fireplace.utils.play_turn(sim1.game)
+                    else:
+                        choosen_action = random.choice(actions)
+                        observation, action, next_observation, terminal = sim1.step(choosen_action)
+                        if choosen_action is not None:
+                            training_tuple = (observation, action.bow, next_observation)
+                            training_set.append(training_tuple)
+            except GameOver as e:
+                games_finished += 1
+                nr_tuples += len(training_set)
+                print(games_finished, nr_tuples)
+                pickle.dump(training_set, fout)
+                training_set = []
+            except TypeError as e:
+                print("game failed")
 
 if __name__ == "__main__":
     main()
