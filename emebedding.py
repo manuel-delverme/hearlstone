@@ -17,8 +17,11 @@ from fireplace.exceptions import GameOver
 from fireplace.player import Player
 from itertools import combinations, product, permutations
 
-with open("data/string_encoding.pkl", "rb") as fin:
-    encoded_strings, str_encoding = pickle.load(fin)
+try:
+    with open("data/string_encoding.pkl", "rb") as fin:
+        encoded_strings, str_encoding = pickle.load(fin)
+except FileNotFoundError:
+    encoded_strings, str_encoding = {}, []
 
 
 class Action(object):
@@ -59,8 +62,11 @@ def player_to_bow(player_obj):
         player_lst.append(val)
     return player_lst
 
+
 @disk_cache
-def card_to_bow(card_obj):
+def card_to_bow(card_obj, exact=False):
+    if exact:
+        return card_to_bow_lossy(card_obj)
     # TODO: check all the possible attributes
     card_dict = {
         'atk': None,
@@ -139,6 +145,22 @@ def card_to_bow(card_obj):
 
     return np.array(card_lst)
 
+
+@disk_cache
+def card_to_bow_lossy(card_obj):
+    card_lst = [-1, -1, -1]
+    try:
+        card_lst[0] = card_obj.atk
+    except AttributeError:
+        card_lst[0] = -1
+
+    try:
+        card_lst[1] = card_obj.health
+    except AttributeError:
+        card_lst[1] = -1
+
+    card_lst.append(card_obj.id)
+    return np.array(card_lst)
 
 def encode_to_numerical(k, val):
     if k == "power" and val:
@@ -343,12 +365,16 @@ def main():
                             training_set.append(training_tuple)
             except GameOver as e:
                 games_finished += 1
+                if games_finished > 10:
+                    break
                 nr_tuples += len(training_set)
                 print(games_finished, nr_tuples)
                 pickle.dump(training_set, fout)
+                fout.flush()
                 training_set = []
             except TypeError as e:
                 print("game failed")
+
 
 if __name__ == "__main__":
     main()
