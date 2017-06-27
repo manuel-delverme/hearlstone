@@ -30,10 +30,10 @@ class Action(object):
         self.usage = usage
         self.params = params
         if card_object:
-            target_id = None
+            target_card = None
             if params['target']:
-                target_id = params['target'].id
-            self.bow = [card_object.id, target_id]
+                target_card = params['target']
+            self.bow = [card_object.id, card_to_bow(target_card)]
 
     def use(self):
         self.usage(**self.params)
@@ -63,9 +63,9 @@ def player_to_bow(player_obj):
     return player_lst
 
 
-@disk_cache
+# @disk_cache
 def card_to_bow(card_obj, exact=False):
-    if exact:
+    if not exact:
         return card_to_bow_lossy(card_obj)
     # TODO: check all the possible attributes
     card_dict = {
@@ -146,9 +146,12 @@ def card_to_bow(card_obj, exact=False):
     return np.array(card_lst)
 
 
-@disk_cache
 def card_to_bow_lossy(card_obj):
     card_lst = [-1, -1, -1]
+    if card_obj is None:
+        return card_lst
+    elif card_obj == "UNK":
+        return [-1, -1, "UNK"]
     try:
         card_lst[0] = card_obj.atk
     except AttributeError:
@@ -159,8 +162,9 @@ def card_to_bow_lossy(card_obj):
     except AttributeError:
         card_lst[1] = -1
 
-    card_lst.append(card_obj.id)
+    card_lst[2] = card_obj.id
     return np.array(card_lst)
+
 
 def encode_to_numerical(k, val):
     if k == "power" and val:
@@ -365,8 +369,8 @@ def main():
                             training_set.append(training_tuple)
             except GameOver as e:
                 games_finished += 1
-                if games_finished > 10:
-                    break
+                # if games_finished > 10:
+                #     break
                 nr_tuples += len(training_set)
                 print(games_finished, nr_tuples)
                 pickle.dump(training_set, fout)
@@ -374,6 +378,9 @@ def main():
                 training_set = []
             except TypeError as e:
                 print("game failed")
+            except Exception as e:
+                print(str(e))
+                break
 
 
 if __name__ == "__main__":
