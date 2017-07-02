@@ -124,14 +124,14 @@ class HSsimulation(object):
         new_cards = {(str(card), offset + idx + 1) for idx, card in enumerate(deck2)}
         self.opponent_lookup.update(new_cards)
 
-        player1 = Player("Player1", deck1, CardClass.MAGE.default_hero)
+        player1 = Player("Agent", deck1, CardClass.MAGE.default_hero)
         player1.max_hand_size = self._MAX_CARDS_IN_HAND
-        player2 = Player("Player2", deck2, CardClass.WARRIOR.default_hero)
+        player2 = Player("Opponent", deck2, CardClass.WARRIOR.default_hero)
         player2.max_hand_size = self._MAX_CARDS_IN_HAND
 
         new_game = Game(players=(player1, player2))
         new_game.MAX_MINIONS_ON_FIELD = self._MAX_CARDS_IN_BOARD
-        new_game.start()
+        new_game.start(first_player=player1)
         return new_game
 
     def card_to_id(self, card, is_player):
@@ -148,6 +148,9 @@ class HSsimulation(object):
         return self.game.ended
 
     def reward(self):
+        if self.player.hero.health != 0 and self.opponent.hero.health == 0:
+            return 100 * (10 + 30 + (15 + 15 + 15) * 7)
+
         score = len(self.player.hand)
         score -= len(self.opponent.hand)
 
@@ -272,8 +275,11 @@ class HSsimulation(object):
     def skip_the_boring_parts(self):
         for player in self.game.players:
             # print("Can mulligan %r" % player.choice.cards)
-            mull_count = random.randint(0, len(player.choice.cards))
-            cards_to_mulligan = random.sample(player.choice.cards, mull_count)
+            if player == self.player:
+                cards_to_mulligan = [c for c in player.choice.cards if c.cost > 3]
+            else:
+                mull_count = random.randint(0, len(player.choice.cards))
+                cards_to_mulligan = random.sample(player.choice.cards, mull_count)
             player.choice.choose(*cards_to_mulligan)
             # for i in range(10):
             #     fireplace.utils.play_turn(self.game)
@@ -293,6 +299,10 @@ class HSsimulation(object):
         state = player_state
         return self.possible_states[state]
 
+    def sudden_death(self):
+        self.player.playstate = PlayState.LOSING
+        self.game.check_for_end_game()
+
 
 class Agent(object):
     _ACTIONS_DIMENSIONS = 300
@@ -309,11 +319,14 @@ class Agent(object):
         # nr_actions = len(simulation.possible_actions)
         # self.Q_table = np.zeros(shape=(nr_states, nr_actions))
         self.Q_table = shelve.open("Q_table", protocol=1, writeback=True)
+        self.simulation = None
 
     def join_game(self, simulation: HSsimulation):
         self.simulation = simulation
 
     def getQ(self, state_id, action_id=None):
+        if action_id == 0:
+            return 0
         action_id = str(action_id)
         state_id = str(state_id)
         # state_id = self.simulation.state_to_state_id(state)
@@ -327,7 +340,15 @@ class Agent(object):
             try:
                 return action_Q[action_id]
             except KeyError:
-                self.Q_table[state_id][action_id] = 0.0
+                init_q = 0.0
+                for nearby_state in range(int(state_id), int(state_id) + 100):
+                    try:
+                        approximate_q = self.Q_table[str(nearby_state)][action_id]
+                        init_q = approximate_q
+                        break
+                    except KeyError:
+                        pass
+                self.Q_table[state_id][action_id] = init_q
                 return self.Q_table[state_id][action_id]
         else:
             return action_Q
@@ -374,27 +395,33 @@ def main():
     games_played = 0
     games_won = 0
     games_finished = 0
+    wl_ratio = 0
+    wl_record = []
     old_miss = 0
     print("games_played, win %, result, abs_change, turn, q_hit_ratio")
     while True:
         change = 0
         abs_change = 0
         count = 0
+        player_actions = 0
+        player_reward = 0
         try:
             sim1 = HSsimulation(*cached_lookup_tables)
             player.join_game(sim1)
+            actor_hero = sim1.game.current_player.hero
             games_played += 1
 
             while True:
                 actions = sim1.actions()
 
-                if sim1.game.turn > 12:
-                    break
+                if sim1.game.turn > 30:
+                    sim1.sudden_death()
 
                 if len(actions) == 1:
                     # end turn
                     # sim1.game.end_turn()
                     fireplace.utils.play_turn(sim1.game)
+
                     # play opponent turn
                     fireplace.utils.play_turn(sim1.game)
                 else:
@@ -402,6 +429,8 @@ def main():
                     choosen_action = player.choose_action(observation, actions)
 
                     observation, action, next_observation, reward, terminal = sim1.step(choosen_action)
+                    player_reward += reward
+                    player_actions += 1
 
                     # print(choosen_action)
                     # print(reward)
@@ -410,21 +439,51 @@ def main():
                     change += delta
                     abs_change += abs(delta)
                     count += 1
+                    if choosen_action.card_obj is None:
+                        sim1.game.end_turn()
 
                     if terminal:
                         break
         except GameOver as e:
-            games_won += 1 if sim1.player.playstate == PlayState.WON else 0
-            games_finished += 1
-            if old_miss != player.qmiss:
-                print(games_played,
-                      0.0000000000000001 + games_won / games_finished,
-                      sim1.player.playstate,
-                      int(abs_change),
-                      sim1.game.turn,
-                      player.qhit / (player.qmiss + player.qhit),
-                      player.qmiss - old_miss,
-                      sep="\t")
+            print_row = False
+            if sim1.game.turn < 31:
+                game_result = 1 if sim1.player.playstate == PlayState.WON else 0
+                games_won += game_result
+                wl_record.append(game_result)
+                games_finished += 1
+                print_row = True
+
+                if len(wl_record) > 500:
+                    del wl_record[0]
+                    wl_ratio = wl_ratio * 2. / 3. + (sum(wl_record) / len(wl_record)) * 1. / 3.
+                else:
+                    print("SKIP")
+                    wl_ratio = games_won / games_finished
+
+            row = "\t".join(map(str, (
+                0.0000000000000001 + wl_ratio,
+                sim1.player.playstate,
+                int(abs_change),
+                sim1.game.turn,
+                player.qhit / (player.qmiss + player.qhit),
+                player.qmiss - old_miss,
+                0 if player_actions == 0 else player_reward / player_actions,
+                player_actions,
+            )))
+            with open("metrics.tsv", "a") as fout:
+                fout.write(row + "\n")
+            """
+            print(games_played,
+                  0.0000000000000001 + games_won / games_finished,
+                  sim1.player.playstate,
+                  int(abs_change),
+                  sim1.game.turn,
+                  player.qhit / (player.qmiss + player.qhit),
+                  player.qmiss - old_miss,
+                  sep="\t")
+            """
+            if print_row:
+                print(row)
             old_miss = player.qmiss
 
             # print("observation+", observation, "action+", action, "next_observation+", next_observation, "reward+",
