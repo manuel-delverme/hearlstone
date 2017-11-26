@@ -385,3 +385,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+with tf.Session() as sess:
+    sess.run(init)
+
+    for i in range(num_steps):
+        s0, a0 = get_data(batch_size)
+
+        # Run optimization op (backprop) and cost op (to get loss value)
+        _, l = sess.run([optimizer, loss], feed_dict={X: s0})
+        # Display logs per step
+        if i % display_step == 0 or i == 1:
+            print('Step %i: Minibatch Loss: %f' % (i, l))
+
+        # g = sess.run(decoder_op, feed_dict={X: batch_x})
