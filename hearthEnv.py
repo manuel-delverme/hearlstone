@@ -23,8 +23,6 @@ from gym import spaces
 from gym.utils import seeding
 
 
-
-
 class Observations(object):
     PRICE = 0
     INVESTED = 1
@@ -59,8 +57,8 @@ class HSEnv(gym.Env):
         terminal = False
 
         if action.card is None:
-            self.simulation.game.end_turn()
             try:
+                self.simulation.game.end_turn()
                 self.play_opponent_turn()
             except GameOver as e:
                 terminal = True
@@ -113,6 +111,66 @@ class HSsimulation(object):
     _DECK_SIZE = 30
     _MAX_CARDS_IN_HAND = 10
     _MAX_CARDS_IN_BOARD = 7
+    _card_dict = {
+        'atk': None,
+        # 'entourage': None,
+        'has_battlecry': None,
+
+        # character
+        'health': None,
+        'cant_be_targeted_by_opponents': None,
+        'cant_be_targeted_by_abilities': None,
+        'cant_be_targeted_by_hero_powers': None,
+        'frozen': None,
+        'num_attacks': None,
+        'race': None,
+        'cant_attack': None,
+        'taunt': None,
+        'cannot_attack_heroes': None,
+        # base something
+        'heropower_damage': None,
+        # hero
+        'armor': None,
+        'power': None,
+
+        # minion
+        'charge': None,
+        'has_inspire': None,
+        'spellpower': None,
+        'stealthed': None,
+        'always_wins_brawls': None,
+        'aura': None,
+        'divine_shield': None,
+        'enrage': None,
+        'forgetful': None,
+        'has_deathrattle': None,
+        'poisonous': None,
+        'windfury': None,
+        'silenced': None,
+
+        'cost': None,
+        'damage': None,
+        'immune': None,
+        'max_health': None,
+        'stealth': None,
+        'secret': None,
+        'overload': None,
+
+        # spell
+        'immune_to_spellpower': None,
+        'receives_double_spelldamage_bonus': None,
+
+        # enchantment
+        'incoming_damage_multiplier': None,
+
+        # weapon
+        "durability": None,
+    }
+    _skipped = {
+        # Hero power
+        'additional_activations': (None,),
+        'always_wins_brawls': (None, False),
+    }
 
     def __init__(self):
 
@@ -220,9 +278,9 @@ class HSsimulation(object):
                 if not card.is_playable():
                     continue
 
-                if card.must_choose_one:
-                    for choice in card.choose_cards:
-                        raise NotImplemented()
+                # if card.must_choose_one:
+                #     for choice in card.choose_cards:
+                #         raise NotImplemented()
 
                 elif card.requires_target():
                     for target in card.targets:
@@ -268,14 +326,13 @@ class HSsimulation(object):
         def __repr__(self):
             return "card: {}, usage: {}, vector: {}".format(self.card, self.params, None)
 
-        def __getstate__(self):
-            #  dict((k, v) for (k, v) in self.__dict__.items() if k != "usage")
-            state = {'source': None if self.card is None else self.card.id}
+        def encode(self):
+            state = {'card': None if self.card is None else self.hack.card_to_bow(self.card)}
             params_vec = {}
             for k, v in self.params.items():
-                params_vec = self.hack.card_to_bow(v)
-
+                params_vec[k] = self.hack.card_to_bow(v)
             state['params'] = params_vec
+            return state
 
     def card_to_vector(self, card):
         try:
@@ -306,7 +363,10 @@ class HSsimulation(object):
         assert len(player.hand) <= self._MAX_CARDS_IN_HAND
 
         player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_HAND
-        player_hand = np.hstack([self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]])
+        ents = [self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]]
+        for e in ents:
+            print(len(e))
+        player_hand = np.hstack(ents)
 
         # the player hero itself is not in the board
         player_board = player.characters[1:]
@@ -320,6 +380,7 @@ class HSsimulation(object):
         player_hero = self.entity_to_vec(player.characters[0])
         player_mana = player.max_mana
 
+        print(player_hand.shape, player_board.shape, player_hero.shape)
         game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
         return game_state
 
@@ -353,6 +414,30 @@ class HSsimulation(object):
 
     @staticmethod
     def encode_to_numerical(k, val):
+        if k == "power" and val:
+            val = val.data.id
+        if val is None:
+            val = -1
+        elif val is False:
+            val = 0
+        elif val is True:
+            val = 0
+        elif isinstance(val, str):
+            val = HSsimulation.str_to_vec(val)
+
+        elif isinstance(val, list):
+            if len(val) != 0:
+                raise Exception("wtf is this list?", val)
+            val = 0
+        elif isinstance(val, int):
+            pass
+        else:
+            raise Exception("wtf is this data?", val)
+        return val
+
+    @staticmethod
+    @disk_cache
+    def str_to_vec(val):
         @disk_cache
         def load_text_map():
             fireplace.cards.db.initialize()
@@ -374,35 +459,16 @@ class HSsimulation(object):
                     reverse_text_map[word] = len(text_map)
             return text_map, reverse_text_map
 
-        if k == "power" and val:
-            val = val.data.id
-        if val is None:
-            val = -1
-        elif val is False:
-            val = 0
-        elif val is True:
-            val = 0
-        elif isinstance(val, str):
-            text_map, reverse_text_map = load_text_map()
-            bag_of_words = np.zeros(len(text_map))
-            table = val.maketrans({key: " " for key in string.punctuation})
-            val = val.translate(table).lower().replace("\n", " ")
-            for word in val.split(" "):
-                try:
-                    bag_of_words[reverse_text_map[word]] += 1
-                except KeyError:
-                    pass
-            val = bag_of_words
-
-        elif isinstance(val, list):
-            if len(val) != 0:
-                raise Exception("wtf is this list?", val)
-            val = 0
-        elif isinstance(val, int):
-            pass
-        else:
-            raise Exception("wtf is this data?", val)
-        return val
+        text_map, reverse_text_map = load_text_map()
+        bag_of_words = np.zeros(len(text_map))
+        table = val.maketrans({key: " " for key in string.punctuation})
+        val = val.translate(table).lower().replace("\n", " ")
+        for word in val.split(" "):
+            try:
+                bag_of_words[reverse_text_map[word]] += 1
+            except KeyError:
+                pass
+        return bag_of_words
 
     def player_to_bow(self, entity):
         # TODO: check all the possible attributes
@@ -425,68 +491,8 @@ class HSsimulation(object):
         return player_lst
 
     def card_to_bow(self, card_obj):
+        card_dict = self._card_dict  # .copy()
         # TODO: check all the possible attributes
-        card_dict = {
-            'atk': None,
-            # 'entourage': None,
-            'has_battlecry': None,
-
-            # character
-            'health': None,
-            'cant_be_targeted_by_opponents': None,
-            'cant_be_targeted_by_abilities': None,
-            'cant_be_targeted_by_hero_powers': None,
-            'frozen': None,
-            'num_attacks': None,
-            'race': None,
-            'cant_attack': None,
-            'taunt': None,
-            'cannot_attack_heroes': None,
-            # base something
-            'heropower_damage': None,
-            # hero
-            'armor': None,
-            'power': None,
-
-            # minion
-            'charge': None,
-            'has_inspire': None,
-            'spellpower': None,
-            'stealthed': None,
-            'always_wins_brawls': None,
-            'aura': None,
-            'divine_shield': None,
-            'enrage': None,
-            'forgetful': None,
-            'has_deathrattle': None,
-            'poisonous': None,
-            'windfury': None,
-            'silenced': None,
-
-            'cost': None,
-            'damage': None,
-            'immune': None,
-            'max_health': None,
-            'stealth': None,
-            'secret': None,
-            'overload': None,
-
-            # spell
-            'immune_to_spellpower': None,
-            'receives_double_spelldamage_bonus': None,
-
-            # enchantment
-            'incoming_damage_multiplier': None,
-
-            # weapon
-            "durability": None,
-        }
-        skipped = {
-            # Hero power
-            'additional_activations': (None, ),
-            'always_wins_brawls': (None, False),
-        }
-
         for k in card_dict:
             try:
                 card_dict[k] = card_obj.__getattribute__(k)
@@ -494,18 +500,18 @@ class HSsimulation(object):
                 card_dict[k] = None
 
         # crash if skipping important data
-        for k in skipped:
+        for k in self._skipped:
             try:
                 value = card_obj.__getattribute__(k)
             except AttributeError:
                 pass
             else:
-                assert value in skipped[k]
+                assert value in self._skipped[k]
 
         try:
             card_dict['description'] = card_obj.data.description
         except AttributeError:
-            card_dict['description'] = None
+            card_dict['description'] = ''
 
         card_lst = []
         for k in sorted(card_dict.keys()):
@@ -517,7 +523,10 @@ class HSsimulation(object):
                 card_lst.extend(list(val))
             else:
                 raise TypeError()
-
+        if isinstance(card_obj, fireplace.card.Hero):
+            assert len(card_lst) == 634
+        else:
+            assert len(card_lst) == 337
         return np.array(card_lst)
 
     def entity_to_vec(self, entity):

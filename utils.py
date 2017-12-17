@@ -2,6 +2,7 @@ import pickle
 import sys
 import os
 from functools import lru_cache
+import hashlib
 
 
 def disk_cache(f):
@@ -12,7 +13,7 @@ def disk_cache(f):
         if args:
             if not os.path.exists(cache_file):
                 os.makedirs(cache_file)
-            fid = fid + "/" + "::".join(str(arg) for arg in args)
+            fid = fid + "/" + "::".join(str(arg) for arg in args).replace("/", "_")
             cache_file = "cache/{}".format(fid)
         cache_file += ".pkl"
         try:
