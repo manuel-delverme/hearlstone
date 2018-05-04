@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.5
 import bz2
-from environment import hearthstone
+from environment import hearthstone_game
 import pickle
 import random
 
@@ -22,7 +22,7 @@ def main():
     training_set = []
     with bz2.BZ2File(data_dump.format(file_idx), "wb") as fout:
         while True:
-            env = hearthstone.HS_environment()
+            env = hearthstone_game.HS_environment()
             old_s, reward, terminal, info = env.reset()
             done = False
             step = 0

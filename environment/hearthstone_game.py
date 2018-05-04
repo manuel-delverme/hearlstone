@@ -39,7 +39,7 @@ class HS_environment(gym.Env):
         self.games_finished = 0
         self._seed()
 
-    def _reset(self):
+    def reset(self):
         self.actor_hero = self.simulation.game.current_player.hero
         self.games_played += 1
         possible_actions = self.simulation.actions()
