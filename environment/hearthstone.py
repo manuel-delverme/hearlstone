@@ -29,7 +29,7 @@ class Observations(object):
     LIQUID = 2
 
 
-class HSEnv(gym.Env):
+class HS_environment(gym.Env):
     def __init__(self):
         fireplace.cards.db.initialize()
         import logging
@@ -93,7 +93,7 @@ class HSEnv(gym.Env):
 
 
 def HSenv_test():
-    env = HSEnv()
+    env = HS_environment()
     s0, reward, terminal, info = env.reset()
     done = False
     step = 0

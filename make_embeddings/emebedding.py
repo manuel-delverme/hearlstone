@@ -1,15 +1,8 @@
 #!/usr/bin/env python3.5
 import bz2
-import hearthEnv
-import tensorflow as tf
+from environment import hearthstone
 import pickle
-import fireplace
 import random
-
-import numpy as np
-
-import fireplace.logging
-from fireplace.exceptions import GameOver
 
 
 def main():
@@ -29,7 +22,7 @@ def main():
     training_set = []
     with bz2.BZ2File(data_dump.format(file_idx), "wb") as fout:
         while True:
-            env = hearthEnv.HSEnv()
+            env = hearthstone.HS_environment()
             old_s, reward, terminal, info = env.reset()
             done = False
             step = 0
