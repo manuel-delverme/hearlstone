@@ -29,7 +29,7 @@ class Observations(object):
     LIQUID = 2
 
 
-class HSEnv(gym.Env):
+class HS_environment(gym.Env):
     def __init__(self):
         fireplace.cards.db.initialize()
         import logging
@@ -39,7 +39,7 @@ class HSEnv(gym.Env):
         self.games_finished = 0
         self._seed()
 
-    def _reset(self):
+    def reset(self):
         self.actor_hero = self.simulation.game.current_player.hero
         self.games_played += 1
         possible_actions = self.simulation.actions()
@@ -93,7 +93,7 @@ class HSEnv(gym.Env):
 
 
 def HSenv_test():
-    env = HSEnv()
+    env = HS_environment()
     s0, reward, terminal, info = env.reset()
     done = False
     step = 0
