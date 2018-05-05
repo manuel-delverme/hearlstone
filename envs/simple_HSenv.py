@@ -24,16 +24,14 @@ from gym import spaces
 from gym.utils import seeding
 
 
-class Observations(object):
-    PRICE = 0
-    INVESTED = 1
-    LIQUID = 2
+class GameActions(object):
+    PASS_TURN = 0
 
 
 class simple_HSEnv(gym.Env):
     def __init__(self, skip_mulligan=False):
-        print("Initializing card database")
         fireplace.cards.db.initialized = True
+        print("Initializing card database")
         db, xml = hearthstone.cardxml.load()
         allowed_ids = ("GAME_005", "CS2_034", "CS2_102")
         for id, card in db.items():
@@ -54,9 +52,8 @@ class simple_HSEnv(gym.Env):
 
         self.games_played = 0
         self.games_finished = 0
-        self._seed()
 
-    def _reset(self):
+    def reset(self):
         self.actor_hero = self.simulation.player.hero
         self.games_played += 1
         possible_actions = self.simulation.actions()
@@ -70,7 +67,7 @@ class simple_HSEnv(gym.Env):
     def play_opponent_turn(self):
         fireplace.utils.play_turn(self.simulation.game)
 
-    def _step(self, action):
+    def step(self, action):
         terminal = False
 
         if action.card is None:
@@ -94,7 +91,7 @@ class simple_HSEnv(gym.Env):
             player_hp=self.simulation.player.hero.health,
             player_hand="\t".join(c.data.name for c in self.simulation.player.hand),
             player_board="\t \t".join(c.data.name for c in self.simulation.player.characters[1:]),
-            separator="_"*100,
+            separator="_" * 100,
             o_hp=self.simulation.opponent.hero.health,
             o_hand="\t".join(c.data.name for c in self.simulation.player.characters[1:]),
             o_board="\t \t".join(c.data.name for c in self.simulation.opponent.characters[1:]),
@@ -105,10 +102,9 @@ class simple_HSEnv(gym.Env):
         }
         return game_observation, reward, terminal, info
 
-    def _seed(self, seed=None):
+    def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
-
 
 def HSenv_test():
     env = simple_HSEnv(skip_mulligan=True)
