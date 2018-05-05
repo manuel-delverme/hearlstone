@@ -13,8 +13,22 @@ from fireplace.game import Game, PlayState, Zone
 from fireplace.card import Minion, Secret
 from fireplace.exceptions import GameOver
 from fireplace.player import Player
-from itertools import combinations, product, permutations
+from itertools import combinations, product, permutations, count
 
+
+class Action(object):
+    def __init__(self, card, card_object, usage, params, target):
+        self.card = card
+        self.card_obj = card_object
+        self.usage = usage
+        self.params = params
+        self.vector = [card, target]
+
+    def use(self):
+        self.usage(**self.params)
+
+    def __repr__(self):
+        return "card: {}, usage: {}, vector: {}".format(self.card_obj, self.params, self.vector)
 
 
 class HSsimulation(object):
@@ -110,9 +124,9 @@ class HSsimulation(object):
         new_cards = {(str(card), offset + idx + 1) for idx, card in enumerate(deck2)}
         self.opponent_lookup.update(new_cards)
 
-        player1 = Player("Agent", deck1, CardClass.MAGE.default_hero)
+        player1 = Player("Player1", deck1, CardClass.MAGE.default_hero)
         player1.max_hand_size = self._MAX_CARDS_IN_HAND
-        player2 = Player("Opponent", deck2, CardClass.WARRIOR.default_hero)
+        player2 = Player("Player2", deck2, CardClass.WARRIOR.default_hero)
         player2.max_hand_size = self._MAX_CARDS_IN_HAND
 
         new_game = Game(players=(player1, player2))
@@ -135,7 +149,7 @@ class HSsimulation(object):
 
     def reward(self):
         if self.player.hero.health != 0 and self.opponent.hero.health == 0:
-            return 100 * (10 + 30 + (15 + 15 + 15) * 7)
+            return 100*(10+30+(15+15+15)*7)
 
         score = len(self.player.hand)
         score -= len(self.opponent.hand)
@@ -296,8 +310,8 @@ class Agent(object):
     def __init__(self):
         # self.simulation = simulation
         self.epsilon = 0.3
-        self.learning_rate = 0.1
-        self.gamma = 0.80
+        self.learning_rate = 0.99
+        self.gamma = 0.99
 
         self.qmiss = 1
         self.qhit = 0
@@ -311,8 +325,6 @@ class Agent(object):
         self.simulation = simulation
 
     def getQ(self, state_id, action_id=None):
-        if action_id == 0:
-            return 0
         action_id = str(action_id)
         state_id = str(state_id)
         # state_id = self.simulation.state_to_state_id(state)
@@ -326,15 +338,13 @@ class Agent(object):
             try:
                 return action_Q[action_id]
             except KeyError:
-                init_q = 0.0
                 for nearby_state in range(int(state_id), int(state_id) + 100):
                     try:
                         approximate_q = self.Q_table[str(nearby_state)][action_id]
-                        init_q = approximate_q
-                        break
+                        return approximate_q
                     except KeyError:
                         pass
-                self.Q_table[state_id][action_id] = init_q
+                self.Q_table[state_id][action_id] = 0.0
                 return self.Q_table[state_id][action_id]
         else:
             return action_Q
@@ -381,8 +391,6 @@ def main():
     games_played = 0
     games_won = 0
     games_finished = 0
-    wl_ratio = 0
-    wl_record = []
     old_miss = 0
     print("games_played, win %, result, abs_change, turn, q_hit_ratio")
     while True:
@@ -400,16 +408,19 @@ def main():
             while True:
                 actions = sim1.actions()
 
-                if sim1.game.turn > 30:
+                if sim1.game.turn > 15:
                     sim1.sudden_death()
 
                 if len(actions) == 1:
                     # end turn
                     # sim1.game.end_turn()
+                    assert actor_hero == sim1.game.current_player.hero
                     fireplace.utils.play_turn(sim1.game)
+                    assert actor_hero != sim1.game.current_player.hero
 
                     # play opponent turn
                     fireplace.utils.play_turn(sim1.game)
+                    assert actor_hero == sim1.game.current_player.hero
                 else:
                     observation = sim1.observe()
                     choosen_action = player.choose_action(observation, actions)
@@ -425,36 +436,26 @@ def main():
                     change += delta
                     abs_change += abs(delta)
                     count += 1
-                    if choosen_action.card_obj is None:
-                        sim1.game.end_turn()
 
                     if terminal:
                         break
         except GameOver as e:
             print_row = False
-            if sim1.game.turn < 31:
-                game_result = 1 if sim1.player.playstate == PlayState.WON else 0
-                games_won += game_result
-                wl_record.append(game_result)
+            if sim1.game.turn != 17:
+                games_won += 1 if sim1.player.playstate == PlayState.WON else 0
                 games_finished += 1
                 print_row = True
+            elif games_finished == 0:
+                games_finished = 1
 
-                if len(wl_record) > 500:
-                    del wl_record[0]
-                    wl_ratio = wl_ratio * 2. / 3. + (sum(wl_record) / len(wl_record)) * 1. / 3.
-                else:
-                    print("SKIP")
-                    wl_ratio = games_won / games_finished
-
-            sim1.player.epsilon = min(0.5, player.qmiss / (player.qmiss + player.qhit))
             row = "\t".join(map(str, (
-                0.0000000000000001 + wl_ratio,
+                0.0000000000000001 + games_won / games_finished,
                 sim1.player.playstate,
                 int(abs_change),
                 sim1.game.turn,
                 player.qhit / (player.qmiss + player.qhit),
                 player.qmiss - old_miss,
-                0 if player_actions == 0 else player_reward / player_actions,
+                0 if player_actions == 0 else player_reward/player_actions,
                 player_actions,
             )))
             with open("metrics.tsv", "a") as fout:
@@ -469,8 +470,7 @@ def main():
                   player.qmiss - old_miss,
                   sep="\t")
             """
-            if print_row:
-                print(row)
+            if print_row: print(row)
             old_miss = player.qmiss
 
             # print("observation+", observation, "action+", action, "next_observation+", next_observation, "reward+",
