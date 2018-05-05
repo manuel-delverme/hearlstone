@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.5
 import copy
-from environment import hearthstone_game
+import envs.simple_HSenv
 import networks
 import collections
 import mcts
@@ -22,7 +22,8 @@ class Action(object):
 
 
 def play_against_yourself(environment, player_policy):
-    pass
+    new_experiences = []
+    return new_experiences
 
 
 def arena_fight(environment, player_policy, opponent_policy):
@@ -35,7 +36,7 @@ def main():
     NUMBER_EPISODES = 100
     UPDATE_THRESHOLD = 0.55
 
-    environment = hearthstone_game.HS_environment()
+    environment = envs.simple_HSenv.simple_HSEnv()
     player_neural_network = networks.NeuralNetwork(state_size=6, action_size=3*3),
     player_policy = mcts.MCTS(environment, player_neural_network)
 
@@ -46,6 +47,7 @@ def main():
             player_policy.reset()
             new_experiences = play_against_yourself(environment, player_policy)
             training_samples.extend(new_experiences)
+
 
         opponent_neural_netwrok = copy.deepcopy(player_neural_network)
         opponent_policy = mcts.MCTS(environment, opponent_neural_netwrok)

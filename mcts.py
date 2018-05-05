@@ -480,3 +480,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+class MCTS(object):
+    def __init__(self, environment, player_neural_network):
+        return None
+
+    def reset(self):
+        pass
