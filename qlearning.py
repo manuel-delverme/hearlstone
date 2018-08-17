@@ -16,20 +16,6 @@ from fireplace.player import Player
 from itertools import combinations, product, permutations
 
 
-class Action(object):
-    def __init__(self, card, card_object, usage, params, target):
-        self.card = card
-        self.card_obj = card_object
-        self.usage = usage
-        self.params = params
-        self.vector = [card, target]
-
-    def use(self):
-        self.usage(**self.params)
-
-    def __repr__(self):
-        return "card: {}, usage: {}, vector: {}".format(self.card_obj, self.params, self.vector)
-
 
 class HSsimulation(object):
     _DECK_SIZE = 15
@@ -310,8 +296,8 @@ class Agent(object):
     def __init__(self):
         # self.simulation = simulation
         self.epsilon = 0.3
-        self.learning_rate = 0.99
-        self.gamma = 0.99
+        self.learning_rate = 0.1
+        self.gamma = 0.80
 
         self.qmiss = 1
         self.qhit = 0
@@ -460,6 +446,7 @@ def main():
                     print("SKIP")
                     wl_ratio = games_won / games_finished
 
+            sim1.player.epsilon = min(0.5, player.qmiss / (player.qmiss + player.qhit))
             row = "\t".join(map(str, (
                 0.0000000000000001 + wl_ratio,
                 sim1.player.playstate,

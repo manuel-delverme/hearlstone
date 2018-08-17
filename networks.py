@@ -1,4 +1,5 @@
 import warnings
+
 class NeuralNetwork(object):
     def __init__(self, state_size, action_size):
         warnings.warn("nn-init method not implemented")
