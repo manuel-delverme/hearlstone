@@ -1,4 +1,6 @@
 #!/usr/bin/env python3.5
+from utils import disk_cache
+import utils
 import string
 from collections import defaultdict
 import shelve
@@ -7,8 +9,6 @@ import fireplace
 import random
 
 from fireplace import game
-from hearthstone.enums import CardClass, CardType
-import numpy as np
 
 import fireplace.logging
 from fireplace.game import Game, PlayState, Zone
@@ -17,11 +17,15 @@ from fireplace.exceptions import GameOver
 from fireplace.player import Player
 from itertools import combinations, product, permutations
 
+import logging
+
+import zerorpc
+
 import gym
-from utils import disk_cache
 from gym import spaces
 from gym.utils import seeding
 
+logger = logging.getLogger(__name__)
 
 class Observations(object):
     PRICE = 0
@@ -31,61 +35,48 @@ class Observations(object):
 
 class HS_environment(gym.Env):
     def __init__(self):
-        fireplace.cards.db.initialize()
+        # fireplace.cards.db.initialize()
         import logging
         logging.getLogger("fireplace").setLevel(logging.ERROR)
-        self.simulation = HSsimulation()
         self.games_played = 0
         self.games_finished = 0
+        self.simulation = HS_client()
         self._seed()
 
     def reset(self):
-        self.actor_hero = self.simulation.game.current_player.hero
         self.games_played += 1
-        possible_actions = self.simulation.actions()
-        game_observation = self.simulation.observe()
-        reward = self.simulation.reward()
-
-        return game_observation, reward, False, {
-            'possible_actions': possible_actions
-        }
+        game_observation, reward, terminal, info = self.simulation.reset()
+        return game_observation, reward, False, info
 
     def play_opponent_turn(self):
-        fireplace.utils.play_turn(self.simulation.game)
+        self.simulation.play_random_turn()
 
-    def _step(self, action):
-        terminal = False
+    def step(self, action):
+        action = utils.to_tuples(action)
+        # terminal = False
+        action_dict = {k: v for k, v in action}
+        game_over = False
 
-        if action.card is None:
-            try:
-                self.simulation.game.end_turn()
+        try:
+            if action_dict['card'] is None:
+                self.simulation.end_turn()
                 self.play_opponent_turn()
-            except GameOver as e:
-                terminal = True
-        else:
-            try:
-                observation, reward, terminal = self.simulation.step(action)
-            except GameOver as e:
-                terminal = True
+                o, r, t, info = self.simulation.observe_gamestate()
+            else:
+                o, r, t, info = self.simulation.step(action)
+        except GameOver  as e:
+            game_over = True
+        except zerorpc.exceptions.RemoteError as e:
+            if e.args[0] == 'GameOver':
+                game_over = True
+            else:
+                raise e
 
-        possible_actions = self.simulation.actions()
-        game_observation = self.simulation.observe()
-        reward = self.simulation.reward()
-        stats = ""
-        stats += "-" * 100
-        stats += "\nYOU:{player_hp}\n{player_hand}\n{player_board}\nboard:{o_board}\nENEMY:{o_hp}\thand:{o_hand}".format(
-            player_hp=self.simulation.player.hero.health,
-            player_hand="\t".join(c.data.name for c in self.simulation.player.hand),
-            player_board="\t".join(c.data.name for c in self.simulation.player.characters[1:]),
-            o_hp=self.simulation.opponent.hero.health,
-            o_hand="\t".join(c.data.name for c in self.simulation.player.characters[1:]),
-            o_board="\t".join(c.data.name for c in self.simulation.opponent.characters[1:]),
-        )
-        info = {
-            'possible_actions': possible_actions,
-            'stats': stats + "\n" + "*" * 100 + "\n" * 3
-        }
-        return game_observation, reward, terminal, info
+        if game_over:
+            o, r, t, info = self.simulation.observe_gamestate()
+
+        info['stats'] = self.simulation.get_ascii_board()
+        return o, r, t, info
 
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -104,214 +95,20 @@ def HSenv_test():
             random_act = random.choice(possible_actions)
             s, r, done, info = env.step(random_act)
             print(info['stats'])
-            # print("step", step, s, r, done, random_act)
+            print("step", step, r, done)
+            input()
 
-
-class HSsimulation(object):
-    _DECK_SIZE = 30
-    _MAX_CARDS_IN_HAND = 10
-    _MAX_CARDS_IN_BOARD = 7
-    _card_dict = {
-        'atk': None,
-        # 'entourage': None,
-        'has_battlecry': None,
-
-        # character
-        'health': None,
-        'cant_be_targeted_by_opponents': None,
-        'cant_be_targeted_by_abilities': None,
-        'cant_be_targeted_by_hero_powers': None,
-        'frozen': None,
-        'num_attacks': None,
-        'race': None,
-        'cant_attack': None,
-        'taunt': None,
-        'cannot_attack_heroes': None,
-        # base something
-        'heropower_damage': None,
-        # hero
-        'armor': None,
-        'power': None,
-
-        # minion
-        'charge': None,
-        'has_inspire': None,
-        'spellpower': None,
-        'stealthed': None,
-        'always_wins_brawls': None,
-        'aura': None,
-        'divine_shield': None,
-        'enrage': None,
-        'forgetful': None,
-        'has_deathrattle': None,
-        'poisonous': None,
-        'windfury': None,
-        'silenced': None,
-
-        'cost': None,
-        'damage': None,
-        'immune': None,
-        'max_health': None,
-        'stealth': None,
-        'secret': None,
-        'overload': None,
-
-        # spell
-        'immune_to_spellpower': None,
-        'receives_double_spelldamage_bonus': None,
-
-        # enchantment
-        'incoming_damage_multiplier': None,
-
-        # weapon
-        "durability": None,
-    }
-    _skipped = {
-        # Hero power
-        'additional_activations': (None,),
-        'always_wins_brawls': (None, False),
-    }
-
+class HS_client(object):
     def __init__(self):
+        self._client = zerorpc.Client()
+        print("connecting..")
+        self._client.connect("tcp://127.0.0.1:31337")
+        print("done")
 
-        deck1, deck2 = self.generate_decks(self._DECK_SIZE)
-        self.player1 = Player("Agent", deck1, CardClass.MAGE.default_hero)
-        self.player1.max_hand_size = self._MAX_CARDS_IN_HAND
-
-        self.player2 = Player("Opponent", deck2, CardClass.WARRIOR.default_hero)
-        self.player2.max_hand_size = self._MAX_CARDS_IN_HAND
-
-        while True:
-            try:
-                new_game = Game(players=(self.player1, self.player2))
-                new_game.MAX_MINIONS_ON_FIELD = self._MAX_CARDS_IN_BOARD
-                new_game.start()
-
-                self.player = new_game.players[0]
-                self.opponent = new_game.players[1]
-
-                for player in new_game.players:
-                    # TODO: offer mulligan as an action
-                    cards_to_mulligan = self.mulligan_heuristic(player)
-                    player.choice.choose(*cards_to_mulligan)
-
-            except IndexError as e:
-                print("init failed", e)
-            else:
-                self.game = new_game
-                break
-            self.game.logger.propagate = False
-
-    @staticmethod
-    def mulligan_heuristic(player):
-        return [c for c in player.choice.cards if c.cost > 3]
-
-    @staticmethod
-    @disk_cache
-    def generate_decks(deck_size, player1_class=CardClass.MAGE, player2_class=CardClass.WARRIOR):
-        while True:
-            draft1 = fireplace.utils.random_draft(player1_class)
-            deck1 = list(card for card in draft1 if not fireplace.cards.db[card].discover)
-
-            draft2 = fireplace.utils.random_draft(player2_class)
-            deck2 = list(card for card in draft2 if not fireplace.cards.db[card].discover)
-
-            if len(deck1) == deck_size and len(deck2) == deck_size:
-                break
-        return deck1, deck2
-
-    def terminal(self):
-        return self.game.ended
-
-    def reward(self):
-        if self.player.hero.health != 0 and self.opponent.hero.health == 0:
-            return 100 * (10 + 30 + (15 + 15 + 15) * 7)
-        elif self.player.hero.health == 0 and self.opponent.hero.health != 0:
-            return - (100 * (10 + 30 + (15 + 15 + 15) * 7))
-        elif self.player.hero.health == 0 and self.opponent.hero.health == 0:
-            return 0
-
-        reward = len(self.player.hand) / self.player.max_hand_size
-        reward -= len(self.opponent.hand) / self.opponent.max_hand_size
-
-        reward += self.player.hero.health / self.player.hero._max_health
-        reward -= self.opponent.hero.health / self.opponent.hero._max_health
-
-        # for entity in self.game.entities:
-        #     if isinstance(entity, Minion):
-        #         if entity.controller == self.player:
-        #             sign = +1
-        #         else:
-        #             sign = -1
-        #         reward += sign * entity.atk / 12
-        #         reward += sign * entity.health / 12
-        #     elif isinstance(entity, Secret) and entity.zone == Zone.SECRET:
-        #         if entity.controller == self.player:
-        #             sign = +1
-        #         else:
-        #             sign = -1
-        #         reward += sign * entity.cost * 2
-        return reward
-
-    def actions(self):
-        actions = []
-        # no_target = None
-        if self.player.choice:
-            for card in self.player.choice.cards:
-                # if not card.is_playable():
-                #     continue
-                if card.requires_target():
-                    for target in card.targets:
-                        actions.append(self.Action(card, self.player.choice.choose, {
-                            # 'target': target,
-                            'card': card,
-                        }, self))
-                else:
-                    actions.append(self.Action(card, self.player.choice.choose, {
-                        # 'target': None,
-                        'card': card
-                    }, self))
-        else:
-            no_action = self.Action(None, lambda: None, {}, self)
-
-            for card in self.player.hand:
-                if not card.is_playable():
-                    continue
-
-                # if card.must_choose_one:
-                #     for choice in card.choose_cards:
-                #         raise NotImplemented()
-
-                elif card.requires_target():
-                    for target in card.targets:
-                        actions.append(self.Action(card, card.play, {'target': target}, self))
-                else:
-                    actions.append(self.Action(card, card.play, {'target': None}, self))
-
-            for character in self.player.characters:
-                if character.can_attack():
-                    for enemy_char in character.targets:
-                        actions.append(self.Action(character, character.attack, {'target': enemy_char}, self))
-            actions += [no_action]
-            # for action in actions:
-            #     action.vector = (self.card_to_bow(action.card), self.card_to_bow(action.params))
-        assert len(actions) > 0
-        return actions
-
-    def all_actions(self):
-        actions = []
-
-        for card in self.player.hand:
-            if card.requires_target():
-                for target in card.targets:
-                    actions.append(lambda: card.play(target=target))
-            else:
-                actions.append(lambda: card.play(target=None))
-
-        for character in self.player.characters:
-            for enemy_char in character.targets:
-                actions.append(lambda: character.attack(enemy_char))
-        return actions
+    def __getattr__(self, name):
+        logger.info("didn't find {}, using RPC".format(name))
+        attr = getattr(self._client, name)
+        return attr
 
     class Action(object):
         def __init__(self, card, usage, params, hack):
@@ -334,205 +131,6 @@ class HSsimulation(object):
             state['params'] = params_vec
             return state
 
-    def card_to_vector(self, card):
-        try:
-            SPELL_TYPE = 5
-            WEAPON_TYPE = 7
-            if card.type == SPELL_TYPE:
-                features = [card.cost, 0, 0]
-            elif card.type == WEAPON_TYPE:
-                features = [card.cost, card.durability, card.atk]
-            else:
-                features = [card.cost, card.health, card.atk]
-        except Exception as e:
-            import ipdb
-            ipdb.set_trace()
-            print("warning", e)
-        return features
-
-    def observe_player(self, player):
-        # if player == self.opponent:
-        #     # print("Opponent")
-        #     pass
-
-        # TODO: consider all the possible permutations of the player's hand
-        # FIXME: two same cards (ex CREATED_CARD) the second gets ignored same for 3..4..5. etc
-
-        # reduce variance by sorting
-        # fill with nones
-        assert len(player.hand) <= self._MAX_CARDS_IN_HAND
-
-        player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_HAND
-        ents = [self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]]
-        for e in ents:
-            print(len(e))
-        player_hand = np.hstack(ents)
-
-        # the player hero itself is not in the board
-        player_board = player.characters[1:]
-
-        assert len(player.hand) <= self._MAX_CARDS_IN_HAND
-
-        player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_BOARD
-        assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
-        player_board = np.hstack(self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
-
-        player_hero = self.entity_to_vec(player.characters[0])
-        player_mana = player.max_mana
-
-        print(player_hand.shape, player_board.shape, player_hero.shape)
-        game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
-        return game_state
-
-    def observe(self):
-        observation = self.observe_player(self.player)
-        observation = np.hstack((observation, self.observe_player(self.opponent)))
-        return observation
-
-    def step(self, action):
-        action.use()
-        observation = self.observe()
-        reward = self.reward()
-        terminal = self.terminal()
-        return observation, reward, terminal
-
-    def action_to_action_id(self, action):
-        if isinstance(action, Action):
-            action = action.vector
-        return self.possible_actions[tuple(action)]
-
-    def state_to_state_id(self, state):
-        player_state, opponent_state = state
-        # TODO: consider opponent state!
-        # state = len(self.possible_states) * player_state + opponent_state
-        state = player_state
-        return self.possible_states[state]
-
-    def sudden_death(self):
-        self.player.playstate = PlayState.LOSING
-        self.game.check_for_end_game()
-
-    @staticmethod
-    def encode_to_numerical(k, val):
-        if k == "power" and val:
-            val = val.data.id
-        if val is None:
-            val = -1
-        elif val is False:
-            val = 0
-        elif val is True:
-            val = 0
-        elif isinstance(val, str):
-            val = HSsimulation.str_to_vec(val)
-
-        elif isinstance(val, list):
-            if len(val) != 0:
-                raise Exception("wtf is this list?", val)
-            val = 0
-        elif isinstance(val, int):
-            pass
-        else:
-            raise Exception("wtf is this data?", val)
-        return val
-
-    @staticmethod
-    @disk_cache
-    def str_to_vec(val):
-        @disk_cache
-        def load_text_map():
-            fireplace.cards.db.initialize()
-            descs = set()
-            for card_id, card_obj in fireplace.cards.db.items():
-                descs.add(card_obj.description.replace("\n", " "))
-            wf = defaultdict(int)
-            for d in descs:
-                table = d.maketrans({key: " " for key in string.punctuation})
-                d = d.translate(table).lower()
-                for word in d.split(" "):
-                    if word != "":
-                        wf[word] += 1
-            text_map = []
-            reverse_text_map = {}
-            for word in sorted(wf, key=lambda x: wf[x], reverse=True):
-                if wf[word] > 4:
-                    text_map.append(word)
-                    reverse_text_map[word] = len(text_map)
-            return text_map, reverse_text_map
-
-        text_map, reverse_text_map = load_text_map()
-        bag_of_words = np.zeros(len(text_map))
-        table = val.maketrans({key: " " for key in string.punctuation})
-        val = val.translate(table).lower().replace("\n", " ")
-        for word in val.split(" "):
-            try:
-                bag_of_words[reverse_text_map[word]] += 1
-            except KeyError:
-                pass
-        return bag_of_words
-
-    def player_to_bow(self, entity):
-        # TODO: check all the possible attributes
-        player_dict = {
-            'combo': None,
-            'fatigue_counter': None,
-            'healing_as_damage': None,
-            'healing_double': None,
-            'shadowform': None,
-            'times_hero_power_used_this_game': None,
-        }
-        player_lst = []
-        for k in sorted(player_dict.keys()):
-            try:
-                val = player_obj.__getattribute__(k)
-            except AttributeError:
-                val = None
-            val = encode_to_numerical(k, val)
-            player_lst.append(val)
-        return player_lst
-
-    def card_to_bow(self, card_obj):
-        card_dict = self._card_dict  # .copy()
-        # TODO: check all the possible attributes
-        for k in card_dict:
-            try:
-                card_dict[k] = card_obj.__getattribute__(k)
-            except AttributeError:
-                card_dict[k] = None
-
-        # crash if skipping important data
-        for k in self._skipped:
-            try:
-                value = card_obj.__getattribute__(k)
-            except AttributeError:
-                pass
-            else:
-                assert value in self._skipped[k]
-
-        try:
-            card_dict['description'] = card_obj.data.description
-        except AttributeError:
-            card_dict['description'] = ''
-
-        card_lst = []
-        for k in sorted(card_dict.keys()):
-            val = card_dict[k]
-            val = self.encode_to_numerical(k, val)
-            if isinstance(val, int):
-                card_lst.append(val)
-            elif isinstance(val, np.ndarray):
-                card_lst.extend(list(val))
-            else:
-                raise TypeError()
-        if isinstance(card_obj, fireplace.card.Hero):
-            assert len(card_lst) == 634
-        else:
-            assert len(card_lst) == 337
-        return np.array(card_lst)
-
-    def entity_to_vec(self, entity):
-        return self.card_to_bow(entity)
-
-
 class Agent(object):
     _ACTIONS_DIMENSIONS = 300
 
@@ -550,7 +148,7 @@ class Agent(object):
         self.Q_table = shelve.open("Q_table", protocol=1, writeback=True)
         self.simulation = None
 
-    def join_game(self, simulation: HSsimulation):
+    def join_game(self, simulation: HS_client):
         self.simulation = simulation
 
     def getQ(self, state_id, action_id=None):
@@ -611,6 +209,7 @@ class Agent(object):
         new_q = old_q + change
         self.setQ(state, action_id, new_q)
         return change
+
 
 
 if __name__ == "__main__":

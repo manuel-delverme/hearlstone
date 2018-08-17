@@ -1,9 +1,11 @@
 #!/usr/bin/env python3.5
+import random
 import copy
 from environment import hearthstone_game
 import networks
 import collections
 import mcts
+import warnings
 
 
 class Action(object):
@@ -21,12 +23,26 @@ class Action(object):
         return "card: {}, usage: {}, vector: {}".format(self.card_obj, self.params, self.vector)
 
 
-def play_against_yourself(environment, player_policy):
-    pass
+def play_one_game_against_yourself(environment, player_policy):
+    gameover = False
+    state = environment.reset()
+    while not gameover:
+        action = player_policy.pick_action(state)
+        environment.step(action)
+    warnings.warn("self-play method not implemented")
+    return []
 
 
-def arena_fight(environment, player_policy, opponent_policy):
-    pass
+def arena_fight(environment, player_policy, opponent_policy, nr_games=100):
+    warnings.warn("arena-fight method not implemented")
+
+    win_ratio = .4 + random.random() / 10
+    loss_ratio = .4 + random.random() / 10
+
+    player_wins, player_losses = int(win_ratio * nr_games), int(loss_ratio * nr_games)
+    draws = nr_games - (player_wins + player_losses)
+
+    return player_wins, player_losses, draws
 
 
 def main():
@@ -36,15 +52,16 @@ def main():
     UPDATE_THRESHOLD = 0.55
 
     environment = hearthstone_game.HS_environment()
-    player_neural_network = networks.NeuralNetwork(state_size=6, action_size=3*3),
+    player_neural_network = networks.NeuralNetwork(state_size=6, action_size=3*3)
     player_policy = mcts.MCTS(environment, player_neural_network)
 
     training_samples = collections.deque(maxlen=TRAINING_LEN)
 
     for iteration_number in range(NUM_ITER):
+        # import ipdb; ipdb.set_trace()
         for eps in range(NUMBER_EPISODES):
             player_policy.reset()
-            new_experiences = play_against_yourself(environment, player_policy)
+            new_experiences = play_one_game_against_yourself(environment, player_policy)
             training_samples.extend(new_experiences)
 
         opponent_neural_netwrok = copy.deepcopy(player_neural_network)

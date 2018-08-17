@@ -4,6 +4,13 @@ import os
 from functools import lru_cache
 import hashlib
 
+def to_tuples(list_of_lists):
+    tuple_of_tuples = []
+    for item in list_of_lists:
+        if isinstance(item, list):
+            item = to_tuples(item)
+        tuple_of_tuples.append(item)
+    return  tuple(tuple_of_tuples)
 
 def disk_cache(f):
     @lru_cache(maxsize=1024)
