@@ -8,10 +8,13 @@ import fireplace.cards
 from fireplace.player import Player
 from fireplace.game import Game, PlayState, Zone
 
+class IllegalMove(Exception):
+    pass
+
 class HSsimulation(object):
     _DECK_SIZE = 30
-    _MAX_CARDS_IN_HAND = 10
-    _MAX_CARDS_IN_BOARD = 7
+    _MAX_CARDS_IN_HAND = 6
+    _MAX_CARDS_IN_BOARD = 3
     _card_dict = {
         'atk': None,
         # 'entourage': None,
@@ -80,6 +83,16 @@ class HSsimulation(object):
         fireplace.cards.db.initialize()
         self.reset()
 
+    @classmethod
+    def get_nr_possible_actions(cls):
+        # 2 is the player's char and the heropower
+        nr_sources = cls._MAX_CARDS_IN_HAND + cls._MAX_CARDS_IN_BOARD + 2
+
+        # 2 is the opponent's char and NO_TARGET
+        nr_targets = cls._MAX_CARDS_IN_BOARD + 2
+        return nr_sources * nr_targets
+
+
     @staticmethod
     def mulligan_heuristic(player):
         return [c for c in player.choice.cards if c.cost > 3]
@@ -132,55 +145,60 @@ class HSsimulation(object):
         return reward
 
     def actions(self):
-        actions = []
-        # no_target = None
+        """
+            returns the available actions for this game state
+            and caches the values for decoding
+        """
+
         if self.player.choice:
-            for card in self.player.choice.cards:
-                # if not card.is_playable():
-                #     continue
-                if card.requires_target():
-                    for target in card.targets:
-                        actions.append(self.Action(card, self.player.choice.choose, {
-                            # 'target': target,
-                            'card': card,
-                        }, self))
-                else:
-                    actions.append(self.Action(card, self.player.choice.choose, {
-                        # 'target': None,
-                        'card': card
-                    }, self))
-        else:
-            no_action = self.Action(None, lambda: None, {}, self)
+            raise NotImplementedError("choice not supported")
+            # for card in self.player.choice.cards: etc.
 
-            for card in self.player.hand:
-                if not card.is_playable():
-                    continue
+        possible_actions = {}
 
-                # if card.must_choose_one:
-                #     for choice in card.choose_cards:
-                #         raise NotImplemented()
+        possible_actions['pass'] = self.Action(None, lambda: None, {})
 
-                elif card.requires_target():
-                    for target in card.targets:
-                        actions.append(self.Action(card, card.play, {'target': target}, self))
-                else:
-                    actions.append(self.Action(card, card.play, {'target': None}, self))
+        # check players hand for possible actions
+        for hand_pos_idx, card in enumerate(self.player.hand):
+            if not card.is_playable():
+                continue
 
-            for character in self.player.characters:
-                if character.can_attack():
-                    for enemy_char in character.targets:
-                        actions.append(self.Action(character, character.attack, {'target': enemy_char}, self))
-            actions += [no_action]
-            # for action in actions:
-            #     action.vector = (self.card_to_bow(action.card), self.card_to_bow(action.params))
-        assert len(actions) > 0
+            action_name = "play_hand_{}".format(hand_pos_idx)
+
+            if card.requires_target():
+                for target_idx, target in enumerate(card.targets):
+                    action_id = "{}_on_board_{}".format(action_name, target_idx)
+                    action_obj = self.Action(card, card.play, {'target': target})
+                    possible_actions[action_id] =  action_obj
+            else:
+                possible_actions[action_name] = self.Action(card, card.play, {'target': None})
+
+        # check hero power
+        hero_power = self.player.hero.power
+        if hero_power.is_playable() and hero_power.is_usable():
+            action_name = 'hero_power'
+            if not hero_power.requires_target():
+                possible_actions[action_name] = self.Action(hero_power, hero_power.use, {})
+            else:
+                for target_idx, target in enumerate(hero_power.targets):
+                    action_id = "{}_on_board_{}".format(action_name, target_idx)
+                    action_obj = self.Action(hero_power, hero_power.use,
+                            {'target': target})
+
+                    possible_actions[action_id] =  action_obj
+
+        # weapon attack
+        if self.player.hero.can_attack():
+            action_name = "hero_attacks"
+            for enemy_char in self.player.hero.targets:
+                action_id = "{}_board_{}".format(action_name, target_idx)
+                possible_actions[action_id] = self.Action(self.player.hero, self.player.hero.attack, {'target': enemy_char})
+
         self.action_table.clear()
-        possible_actions = []
-        for action in actions:
-            serialized_action = action.encode()
-            self.action_table[serialized_action] = action
-            possible_actions.append(serialized_action)
-        return tuple(possible_actions)
+        for action_id, action in possible_actions.items():
+            self.action_table[action_id] = action
+        print(possible_actions)
+        return tuple(possible_actions.keys())
 
     def all_actions(self):
         actions = []
@@ -198,25 +216,16 @@ class HSsimulation(object):
         return actions
 
     class Action(object):
-        def __init__(self, card, usage, params, hack):
+        def __init__(self, card, usage, params):
             self.card = card
             self.usage = usage
             self.params = params
-            self.hack = hack
 
         def use(self):
             self.usage(**self.params)
 
         def __repr__(self):
             return "card: {}, usage: {}, vector: {}".format(self.card, self.params, None)
-
-        def encode(self):
-            state = {'card': None if self.card is None else self.hack.card_to_bow(self.card)}
-            params_vec = {}
-            for k, v in self.params.items():
-                params_vec[k] = self.hack.card_to_bow(v)
-            state['params'] = tuple(sorted(params_vec.items()))
-            return tuple(sorted(state.items()))
 
     def card_to_vector(self, card):
         try:
@@ -276,8 +285,12 @@ class HSsimulation(object):
         return observation
 
     def step(self, action):
-        action = utils.to_tuples(action)
+        if self.game.ended:
+            raise IllegalMove
+
+        # action = utils.to_tuples(action)
         action_obj = self.action_table[action]
+        print("[USING]", action_obj)
         action_obj.use()
         return self.observe_gamestate()
 
@@ -329,11 +342,6 @@ class HSsimulation(object):
         return game_observation, reward, self.terminal(), {
             'possible_actions': possible_actions
         }
-
-    def action_to_action_id(self, action):
-        if isinstance(action, Action):
-            action = action.vector
-        return self.possible_actions[tuple(action)]
 
     def state_to_state_id(self, state):
         player_state, opponent_state = state

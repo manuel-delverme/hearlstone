@@ -1,7 +1,9 @@
 #!/usr/bin/env python3.5
+import tqdm
 import random
 import copy
-import envs.simple_HSenv
+import environment
+import environment.hearthstone_game
 import networks
 import collections
 import mcts
@@ -9,13 +11,14 @@ import warnings
 
 
 def play_one_game_against_yourself(environment, player_policy):
-    gameover = False
-    state = environment.reset()
-    while not gameover:
-        action = player_policy.pick_action(state)
-        environment.step(action)
-    warnings.warn("self-play method not implemented")
-    return []
+    terminal = False
+    state, reward, terminal, info = environment.reset()
+    experiences = []
+    while not terminal:
+        action = player_policy.pick_action(state, info['possible_actions'])
+        state, reward, terminal, info = environment.step(action)
+        experiences.append((state, reward, terminal))
+    return experiences
 
 def arena_fight(environment, player_policy, opponent_policy, nr_games=1000):
     state, possible_actions = environment.reset()
@@ -38,27 +41,35 @@ def arena_fight(environment, player_policy, opponent_policy, nr_games=1000):
 def main():
     TRAINING_LEN = 10000
     NUM_ITER = 100
+    BATCH_SIZE = 8
     NUMBER_EPISODES = 100
     UPDATE_THRESHOLD = 0.55
 
-    environment = hearthstone_game.HS_environment()
-    player_neural_network = networks.NeuralNetwork(state_size=6, action_size=3*3)
-    player_policy = mcts.MCTS(environment, player_neural_network)
+    hs_game = environment.hearthstone_game.HS_environment()
+    obs, reward, terminal, info = hs_game.reset()
+
+    nr_possible_actions = hs_game.get_nr_possible_actions()
+
+    player_neural_network = networks.NeuralNetwork(
+            state_size=len(obs), action_size=nr_possible_actions)
+
+    player_policy = mcts.MCTS(hs_game, player_neural_network)
 
     training_samples = collections.deque(maxlen=TRAINING_LEN)
 
-    for iteration_number in range(NUM_ITER):
+
+    for iteration_number in tqdm.tqdm(range(NUM_ITER), desc='iter'):
         # import ipdb; ipdb.set_trace()
-        for eps in range(NUMBER_EPISODES):
+        for eps in tqdm.tqdm(range(NUMBER_EPISODES), 'experience', leave=False):
             player_policy.reset()
-            new_experiences = play_one_game_against_yourself(environment, player_policy)
+            new_experiences = play_one_game_against_yourself(hs_game, player_policy)
             training_samples.extend(new_experiences)
 
         opponent_neural_netwrok = copy.deepcopy(player_neural_network)
-        opponent_policy = mcts.MCTS(environment, opponent_neural_netwrok)
+        opponent_policy = mcts.MCTS(hs_game, opponent_neural_netwrok)
 
         player_neural_network.train(training_samples)
-        win_ratio = arena_fight(environment, player_policy, opponent_policy)
+        win_ratio = arena_fight(hs_game, player_policy, opponent_policy)
 
         if win_ratio < UPDATE_THRESHOLD:
             player_neural_network = opponent_neural_netwrok
