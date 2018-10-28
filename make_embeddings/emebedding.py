@@ -1,23 +1,16 @@
 #!/usr/bin/env python3.5
-import shutil
 import torch.optim
 
 import os
-import torch
 import torch.utils.data
 import torch.autograd
 import torch
-import glob
 import tqdm
 import bz2
-import simple_env
-import tensorflow as tf
+from tests import simple_env
 import pickle
-import fireplace
 import random
 import numpy as np
-import fireplace.logging
-from fireplace.exceptions import GameOver
 import torch.utils.data
 import argparse
 
@@ -213,7 +206,7 @@ class Autoencoder(torch.nn.Module):
 def train_state_embedding():
     args = parser_args()
     nr_epochs = 5
-    # env = envs.simple_HSenv.simple_HSEnv(skip_mulligan=True)
+    # env = envs.simple_HSenv.VanillaHS(skip_mulligan=True)
     # model = AE(obs_dim=12728, config=cfg)
     model = Autoencoder()
     # nr_games = trainingset_length(

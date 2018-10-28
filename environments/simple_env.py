@@ -2,25 +2,19 @@ import hearthstone
 import string
 from collections import defaultdict
 import shelve
-import pickle
 from environments import base_env
 import fireplace
 import random
 
-from fireplace import game
 from hearthstone.enums import CardClass, CardType
 import numpy as np
 
 import fireplace.logging
-from fireplace.game import Game, PlayState, Zone
-from fireplace.card import Minion, Secret
+from fireplace.game import Game, PlayState
 from fireplace.exceptions import GameOver
 from fireplace.player import Player
-from itertools import combinations, product, permutations
 
-import gym
-from utils import disk_cache
-from gym import spaces
+from shared.utils import disk_cache
 from gym.utils import seeding
 
 

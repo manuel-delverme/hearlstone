@@ -67,7 +67,7 @@ def main():
     opponent = HeuristicAgent()
 
     from environments import simple_env
-    import utils
+    from shared import utils
     env = simple_env.SimpleHSEnv(skip_mulligan=True)
     scoreboard = utils.arena_fight(env, agent, opponent, nr_games=1000)
     print('winning ratio', scoreboard)
