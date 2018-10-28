@@ -1,9 +1,7 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 
 
 class Agent(ABC):
-    def __init__(self):
-        pass
-
+    @abstractmethod
     def choose(self, state, possible_actions):
         raise NotImplemented

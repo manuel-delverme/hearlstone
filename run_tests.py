@@ -1,2 +1,2 @@
-import environment.hearthstone_game
-environment.hearthstone_game.HSenv_test()
+import environments.hearthstone_game
+environments.hearthstone_game.HSenv_test()
