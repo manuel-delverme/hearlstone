@@ -1,0 +1,5 @@
+main.training_len = 10000
+main.num_iter = 100
+main.batch_size = 8
+main.number_episodes = 100
+main.update_threshold = 0.55

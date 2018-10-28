@@ -1,2 +1,2 @@
-import environment.game_server
-environment.game_server.main()
+import environments.game_server
+environments.game_server.main()
