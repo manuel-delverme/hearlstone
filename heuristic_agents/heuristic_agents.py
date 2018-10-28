@@ -39,7 +39,9 @@ class HeuristicAgent(agents.base_agent.Agent):
                     elif atk_dies and not def_dies:
                         values[action] -= float('inf')
                     elif not atk_dies and def_dies:
-                        values[action] = target.cost
+                        overkill = target.health / attacker.atk
+                        if overkill > 2 and not is_hero:
+                            values[action] = target.cost
                     elif not atk_dies and not def_dies:
                         values[action] += attacker.atk / target.health
             else:
