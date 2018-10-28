@@ -1,29 +1,13 @@
 #!/usr/bin/env python3.5
-from utils import disk_cache
-import utils
-import string
-from collections import defaultdict
-import shelve
-import pickle
-import fireplace
 import random
 
-from fireplace import game
-
-import fireplace.logging
-from fireplace.game import Game, PlayState, Zone
-from fireplace.card import Minion, Secret
 from fireplace.exceptions import GameOver
-from fireplace.player import Player
-from itertools import combinations, product, permutations
 
 import logging
 
 import zerorpc
 
 import gym
-from gym import spaces
-from gym.utils import seeding
 
 logger = logging.getLogger(__name__)
 

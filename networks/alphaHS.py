@@ -1,6 +1,6 @@
 import warnings
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 
 class NeuralNetwork(object):
     def __init__(self, state_size, action_size, model_file=None):

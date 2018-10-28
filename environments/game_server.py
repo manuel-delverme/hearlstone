@@ -1,12 +1,12 @@
 import zerorpc
 import logging
-import utils
 import string
-from hearthstone.enums import CardClass, CardType
-from utils import disk_cache
+from hearthstone.enums import CardClass
+from shared.utils import disk_cache
 import fireplace.cards
 from fireplace.player import Player
-from fireplace.game import Game, PlayState, Zone
+from fireplace.game import Game, PlayState
+
 
 class IllegalMove(Exception):
     pass
