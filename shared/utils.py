@@ -12,6 +12,7 @@ from agents import base_agent
 import random
 
 from agents.base_agent import Agent
+from hearthstone.enums import CardClass, CardType
 
 
 def to_tuples(list_of_lists):
@@ -47,10 +48,10 @@ def disk_cache(f):
 
 
 def arena_fight(
-    environment: base_env.BaseEnv,
-    player_policy: Agent,
-    opponent_policy: Agent,
-    nr_games: int = 100,
+  environment: base_env.BaseEnv,
+  player_policy: Agent,
+  opponent_policy: Agent,
+  nr_games: int = 100,
 ):
   player_order = [player_policy, opponent_policy]  # type: List[Agent]
   random.shuffle(player_order)
@@ -66,15 +67,18 @@ def arena_fight(
     state, info = environment.reset()
     possible_actions = info['possible_actions']
     while not terminal:
+
       action = active_player.choose(state, possible_actions)
       state, reward, terminal, info = environment.step(action)
+      print(environment.render(mode='ASCII'))
       possible_actions = info['possible_actions']
 
-      if (action == environment.GameActions.PASS_TURN
-          or (hasattr(action, 'card') and action.card is None)
-          or len(possible_actions) == 0):
+      if action == environment.GameActions.PASS_TURN or (
+        hasattr(action, 'card') and action.card is None):
         active_player, passive_player = passive_player, active_player
+
     game_value = environment.game_value
+
     if game_value == 1:
       scoreboard['won'] += 1
     elif game_value == -1:
@@ -88,3 +92,31 @@ def arena_fight(
   win_ratio = float(scoreboard['won']) / sum(scoreboard.values())
   return win_ratio
 
+
+def random_draft(card_class: CardClass, exclude=set(), deck_length=30, max_mana=30):
+  from fireplace import cards
+
+  deck = []
+  collection = []
+  for card_id, card_obj in cards.db.items():
+    if card_obj.description != '':
+      continue
+    if card_id in exclude:
+      continue
+    if not card_obj.collectible:
+      continue
+    # Heroes are collectible...
+    if card_obj.type == CardType.HERO:
+      continue
+    if card_obj.card_class and card_obj.card_class not in (
+      card_class, CardClass.NEUTRAL):
+      continue
+    if card_obj.cost > max_mana:
+      continue
+    collection.append(card_obj)
+
+  while len(deck) < deck_length:
+    card = random.choice(collection)
+    if deck.count(card.id) < card.max_count_in_deck:
+      deck.append(card.id)
+  return deck

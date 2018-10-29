@@ -3,5 +3,5 @@ from abc import ABC, abstractmethod
 
 class Agent(ABC):
     @abstractmethod
-    def choose(self, state, possible_actions):
+    def choose(self, observation, possible_actions):
         raise NotImplemented

@@ -108,5 +108,5 @@ class DQNAgent(agents.base_agent.Agent):
             if frame_idx % 200 == 0:
                 shared.plot(frame_idx, all_rewards, losses)
 
-    def choose(self, state, possible_actions):
+    def choose(self, observation, possible_actions):
         pass
