@@ -1,6 +1,7 @@
 import hearthstone
 import string
 from collections import defaultdict
+from shared import utils
 import shelve
 import fireplace
 import random
@@ -13,17 +14,17 @@ import fireplace.logging
 from fireplace.game import Game, PlayState
 from fireplace.exceptions import GameOver
 from fireplace.player import Player
-
-import gym
-from shared.utils import disk_cache
 from gym.utils import seeding
+
+from environments import base_env
+from agents.heuristic import hand_coded
 
 
 class GameActions(object):
   PASS_TURN = 0
 
 
-class VanillaHS(gym.Env):
+class VanillaHS(base_env.BaseEnv):
   def __init__(self, max_cards_in_game=2, skip_mulligan=False):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -56,7 +57,15 @@ class VanillaHS(gym.Env):
     self.games_played = 0
     self.games_finished = 0
     self.info = None
-    self.actor_hero = ...
+    self.actor_hero = None
+
+  @property
+  def action_space(self):
+    return self.simulation._MAX_CARDS_IN_HAND * (self.simulation._MAX_CARDS_IN_BOARD + 1)
+
+  @property def cards_in_hand(self):
+    return self.simulation._MAX_CARDS_IN_HAND
+
 
   def render(self, mode='human'):
     if self.last_info is not None:
@@ -96,16 +105,16 @@ class VanillaHS(gym.Env):
     stats = ""
     stats += "-" * 100
     stats += "\nYOU:{player_hp}\n[{player_hand}]\n{player_board}\n{separator}\nboard:{o_board}\nENEMY:{o_hp}\n[{o_hand}]".format(
-        player_hp=self.simulation.player.hero.health,
-        player_hand="\t".join(c.data.name for c in self.simulation.player.hand),
-        player_board="\t \t".join(
-            c.data.name for c in self.simulation.player.characters[1:]),
-        separator="_" * 100,
-        o_hp=self.simulation.opponent.hero.health,
-        o_hand="\t".join(
-            c.data.name for c in self.simulation.player.characters[1:]),
-        o_board="\t \t".join(
-            c.data.name for c in self.simulation.opponent.characters[1:]),
+      player_hp=self.simulation.player.hero.health,
+      player_hand="\t".join(c.data.name for c in self.simulation.player.hand),
+      player_board="\t \t".join(
+        c.data.name for c in self.simulation.player.characters[1:]),
+      separator="_" * 100,
+      o_hp=self.simulation.opponent.hero.health,
+      o_hand="\t".join(
+        c.data.name for c in self.simulation.player.characters[1:]),
+      o_board="\t \t".join(
+        c.data.name for c in self.simulation.opponent.characters[1:]),
     )
     info = {
       'possible_actions': possible_actions,
@@ -118,6 +127,35 @@ class VanillaHS(gym.Env):
     self.np_random, seed = seeding.np_random(seed)
     return [seed]
 
+
+class TradingHS(VanillaHS):
+
+  def __init__(self):
+    self.heuristic_agent = hand_coded.HeuristicAgent()
+    super().__init__()
+
+
+  def reset(self):
+    o, r, t, info  = super().reset()
+    self.fast_forward_game(o, info)
+
+  def fast_forward_game(self, o, info):
+    while True:
+      possible_actions = info['possible_actions']
+      non_trade_actions = []
+      for action in possible_actions:
+        if action.params['target'] is None:
+          non_trade_actions.append(action)
+
+      if len(non_trade_actions) == 0:
+        return
+
+      action = self.heuristic_agent.choose(o, non_trade_actions)
+      o, r, t, info = super(TradingHS, self).step(action)
+
+  def step(self, action):
+    o, r, t, info = super(TradingHS, self).step(action)
+    self.fast_forward_game(o, info)
 
 def HSenv_test():
   env = VanillaHS(skip_mulligan=True)
@@ -236,8 +274,8 @@ class HSsimulation(object):
   def generate_decks(deck_size, player1_class=CardClass.MAGE,
       player2_class=CardClass.WARRIOR):
     while True:
-      deck1 = random_draft(player1_class, max_mana=5)
-      deck2 = random_draft(player2_class, max_mana=5)
+      deck1 = utils.random_draft(player1_class, max_mana=5)
+      deck2 = utils.random_draft(player2_class, max_mana=5)
       if len(deck1) == deck_size and len(deck2) == deck_size:
         break
     return deck1, deck2
@@ -450,9 +488,9 @@ class HSsimulation(object):
     return val
 
   @staticmethod
-  @disk_cache
+  @utils.disk_cache
   def str_to_vec(val):
-    @disk_cache
+    @utils.disk_cache
     def load_text_map():
       fireplace.cards.db.initialize()
       descs = set()
@@ -628,39 +666,6 @@ class Agent(object):
     new_q = old_q + change
     self.setQ(state, action_id, new_q)
     return change
-
-
-def random_draft(card_class: CardClass, exclude=set(), deck_length=30,
-    max_mana=30):
-  from fireplace import cards
-
-  deck = []
-  collection = []
-  hero = card_class.default_hero
-
-  for card_id, card_obj in cards.db.items():
-    if card_obj.description != '':
-      continue
-    if card_id in exclude:
-      continue
-    if not card_obj.collectible:
-      continue
-    if card_obj.type == CardType.HERO:
-      # Heroes are collectible...
-      continue
-    if card_obj.card_class and card_obj.card_class not in (
-    card_class, CardClass.NEUTRAL):
-      continue
-    if card_obj.cost > max_mana:
-      continue
-    collection.append(card_obj)
-
-  while len(deck) < deck_length:
-    card = random.choice(collection)
-    if deck.count(card.id) < card.max_count_in_deck:
-      deck.append(card.id)
-
-  return deck
 
 
 if __name__ == "__main__":
