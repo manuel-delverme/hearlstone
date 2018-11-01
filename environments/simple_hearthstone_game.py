@@ -47,13 +47,15 @@ class VanillaHS(base_env.BaseEnv):
 
     # HSsimulation._MAX_CARDS_IN_HAND = 2
     HSsimulation._MAX_CARDS_IN_BOARD = max_cards_in_game
-    self.simulation = HSsimulation(skip_mulligan=skip_mulligan)
+    self.skip_mulligan = skip_mulligan
+    self.reinit_game()
 
+  def reinit_game(self):
+    self.simulation = HSsimulation(skip_mulligan=self.skip_mulligan)
     for player in (self.simulation.player1, self.simulation.player2):
       last_card = player.hand[-1]
       if last_card.id == "GAME_005":  # "The Coin"
         last_card.discard()
-
     self.games_played = 0
     self.games_finished = 0
     self.info = None
@@ -76,7 +78,9 @@ class VanillaHS(base_env.BaseEnv):
       return self.last_info['stats']
 
   def reset(self):
+    self.reinit_game()
     self.actor_hero = self.simulation.player.hero
+
     self.games_played += 1
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()

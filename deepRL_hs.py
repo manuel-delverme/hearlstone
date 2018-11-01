@@ -18,7 +18,7 @@ def main():
     hs_game.action_space,
     gamma=0.99
   )
-  player.train(hs_game)
+  player.train(hs_game, num_frames=1000)
   scoreboard = utils.arena_fight(hs_game, player, opponent, nr_games=1000)
   print(scoreboard)
 
