@@ -20,13 +20,15 @@ Variable = lambda *args, **kwargs: autograd.Variable(
 class DQN(nn.Module):
     def __init__(self, num_inputs, num_actions):
         super(DQN, self).__init__()
+        self.num_inputs = num_inputs
+        self.num_actions = num_actions
 
         self.layers = nn.Sequential(
-            nn.Linear(env.observation_space.shape[0], 128),
+            nn.Linear(self.num_inputs, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(128, env.action_space.n)
+            nn.Linear(128, self.num_actions)
         )
 
     def forward(self, x):
@@ -38,7 +40,7 @@ class DQN(nn.Module):
             q_value = self.forward(state)
             action = q_value.max(1)[1].data[0]
         else:
-            action = random.randrange(env.action_space.n)
+            action = random.randrange(self.num_actions)
         return action
 
 

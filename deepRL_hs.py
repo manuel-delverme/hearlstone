@@ -15,16 +15,13 @@ def main():
 
   player = agents.learning.dqn.DQNAgent(
     hs_game.observation_space,
-    hs_game.observation_space,
+    hs_game.action_space,
     gamma=0.99
   )
-
+  player.train(hs_game)
   scoreboard = utils.arena_fight(hs_game, player, opponent, nr_games=1000)
   print(scoreboard)
 
-
-def train_dqn():
-  return agents.heuristic.random_agent.RandomAgent()
 
 if __name__ == "__main__":
   main()

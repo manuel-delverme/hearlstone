@@ -59,13 +59,17 @@ class VanillaHS(base_env.BaseEnv):
     self.info = None
     self.actor_hero = None
 
+  def game_value(self):
+    raise NotImplementedError
+
   @property
   def action_space(self):
-    return self.simulation._MAX_CARDS_IN_HAND * (self.simulation._MAX_CARDS_IN_BOARD + 1)
+    return self.simulation._MAX_CARDS_IN_HAND * (
+        self.simulation._MAX_CARDS_IN_BOARD + 1)
 
-  @property def cards_in_hand(self):
+  @property
+  def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
-
 
   def render(self, mode='human'):
     if self.last_info is not None:
@@ -77,9 +81,9 @@ class VanillaHS(base_env.BaseEnv):
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
     reward = self.simulation.reward()
-    return game_observation, reward, False, {
-      'possible_actions': possible_actions
-    }
+    info = {'possible_actions': possible_actions}
+    self.last_info = info
+    return game_observation, reward, False, self.last_info
 
   def play_opponent_turn(self):
     fireplace.utils.play_turn(self.simulation.game)
@@ -129,22 +133,43 @@ class VanillaHS(base_env.BaseEnv):
 
 
 class TradingHS(VanillaHS):
-
   def __init__(self):
     self.heuristic_agent = hand_coded.HeuristicAgent()
-    super().__init__()
 
+    super().__init__()
+    self.action_to_ref = []
+    for source_id in range(self.simulation._MAX_CARDS_IN_BOARD):
+      for target_id in range(self.simulation._MAX_CARDS_IN_BOARD):
+        self.action_to_ref.append((source_id, target_id))
+      self.action_to_ref.append((source_id, 'HERO'))
+
+  def game_value(self):
+    raise NotImplementedError
+
+  @property
+  def action_space(self):
+    return len(self.action_to_ref)
+
+  @property
+  def observation_space(self):
+    # player board, opponent board, 3 stats per card, 2 heroes
+    return self.simulation._MAX_CARDS_IN_BOARD * 2 * 3 + 2
 
   def reset(self):
-    o, r, t, info  = super().reset()
-    self.fast_forward_game(o, info)
+    o, r, t, info = super().reset()
+    new_transition = self.fast_forward_game(o, info)
+
+    if new_transition is not None:
+      return new_transition
+    else:
+      return o, r, t, info
 
   def fast_forward_game(self, o, info):
     while True:
       possible_actions = info['possible_actions']
       non_trade_actions = []
       for action in possible_actions:
-        if action.params['target'] is None:
+        if not hasattr(action, 'target'):
           non_trade_actions.append(action)
 
       if len(non_trade_actions) == 0:
@@ -152,10 +177,22 @@ class TradingHS(VanillaHS):
 
       action = self.heuristic_agent.choose(o, non_trade_actions)
       o, r, t, info = super(TradingHS, self).step(action)
+      return o, r, t, info
 
   def step(self, action):
+    source, target = self.action_to_ref[action]
+    self.last_info
+    self.simulation.game.board[source]
+    self.simulation.game.board[source]
     o, r, t, info = super(TradingHS, self).step(action)
-    self.fast_forward_game(o, info)
+
+    new_transition = self.fast_forward_game(o, info)
+
+    if new_transition is not None:
+      return new_transition
+    else:
+      return o, r, t, info
+
 
 def HSenv_test():
   env = VanillaHS(skip_mulligan=True)
@@ -272,7 +309,7 @@ class HSsimulation(object):
 
   @staticmethod
   def generate_decks(deck_size, player1_class=CardClass.MAGE,
-      player2_class=CardClass.WARRIOR):
+    player2_class=CardClass.WARRIOR):
     while True:
       deck1 = utils.random_draft(player1_class, max_mana=5)
       deck2 = utils.random_draft(player2_class, max_mana=5)
@@ -425,9 +462,9 @@ class HSsimulation(object):
     player_board = list(sorted(player_board, key=lambda x: x.id)) + [
       None] * self._MAX_CARDS_IN_BOARD
     assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(
-        player_board[self._MAX_CARDS_IN_BOARD:])
+      player_board[self._MAX_CARDS_IN_BOARD:])
     player_board = np.hstack(
-        self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
+      self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
 
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
@@ -653,7 +690,7 @@ class Agent(object):
         self.qhit += 1
       # choose one of the best actions
       best_action = random.choice(
-          [a for q, a in zip(q, possible_actions) if q == maxQ])
+        [a for q, a in zip(q, possible_actions) if q == maxQ])
     return best_action
 
   def learn_from_reaction(self, state, action, reward, next_state):
@@ -662,7 +699,7 @@ class Agent(object):
 
     old_q = self.getQ(state_id, action_id)
     change = self.learning_rate * (
-          reward + self.gamma * np.max(self.getQ(next_state)) - old_q)
+      reward + self.gamma * np.max(self.getQ(next_state)) - old_q)
     new_q = old_q + change
     self.setQ(state, action_id, new_q)
     return change

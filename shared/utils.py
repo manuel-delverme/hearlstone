@@ -6,7 +6,6 @@ import os
 from functools import lru_cache
 import hashlib
 from typing import List
-from environments import simple_env
 
 from agents import base_agent
 import random

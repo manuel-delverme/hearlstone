@@ -14,7 +14,7 @@ from fireplace.game import Game, PlayState
 from fireplace.exceptions import GameOver
 from fireplace.player import Player
 
-from shared.utils import disk_cache
+from shared import utils
 from gym.utils import seeding
 
 
@@ -23,6 +23,21 @@ class GameActions(object):
 
 
 class SimpleHSEnv(base_env.BaseEnv):
+    def render(self, mode='human'):
+      raise NotImplementedError
+
+    @property
+    def cards_in_hand(self):
+      raise NotImplementedError
+
+    @property
+    def observation_space(self):
+      raise NotImplementedError
+
+    @property
+    def action_space(self):
+      raise NotImplementedError
+
     def __init__(self, skip_mulligan=False):
         fireplace.cards.db.initialized = True
         print("Initializing card database")
@@ -457,9 +472,9 @@ class HSsimulation(object):
         return val
 
     @staticmethod
-    @disk_cache
+    @utils.disk_cache
     def str_to_vec(val):
-        @disk_cache
+        @utils.disk_cache
         def load_text_map():
             fireplace.cards.db.initialize()
             descs = set()
