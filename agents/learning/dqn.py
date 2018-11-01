@@ -12,7 +12,9 @@ import agents.base_agent
 
 from agents.learning import shared
 
-USE_CUDA = torch.cuda.is_available()
+# TODO: re-enable
+# USE_CUDA = torch.cuda.is_available()
+USE_CUDA = False
 Variable = lambda *args, **kwargs: autograd.Variable(
     *args, **kwargs).cuda() if USE_CUDA else autograd.Variable(*args, **kwargs)
 
@@ -34,13 +36,15 @@ class DQN(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-    def act(self, state, epsilon):
+    def act(self, state, possible_actions, epsilon):
         if random.random() > epsilon:
             state = Variable(torch.FloatTensor(state).unsqueeze(0), volatile=True)
-            q_value = self.forward(state)
-            action = q_value.max(1)[1].data[0]
+            q_value = self.forward(state).data.numpy()
+            # action = q_value.max(1)[1].data[0]
+            best_action = np.argmax(q_value[:, possible_actions])
+            action = possible_actions[best_action]
         else:
-            action = random.randrange(self.num_actions)
+            action, = random.sample(possible_actions, 1)
         return action
 
 
@@ -87,19 +91,20 @@ class DQNAgent(agents.base_agent.Agent):
         all_rewards = []
         episode_reward = 0
 
-        state = env.reset()
+        observation, reward, terminal, info = env.reset()
         for frame_idx in range(1, num_frames + 1):
             epsilon = shared.epsilon_by_frame(frame_idx)
-            action = self.model.act(state, epsilon)
+            possible_actions = info['possible_actions']
+            action = self.model.act(observation, possible_actions, epsilon)
 
             next_state, reward, done, _ = env.step(action)
-            self.replay_buffer.push(state, action, reward, next_state, done)
+            self.replay_buffer.push(observation, action, reward, next_state, done)
 
-            state = next_state
+            observation = next_state
             episode_reward += reward
 
             if done:
-                state = env.reset()
+                observation, reward, terminal, info = env.reset()
                 all_rewards.append(episode_reward)
                 episode_reward = 0
 

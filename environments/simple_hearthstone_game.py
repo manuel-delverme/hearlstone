@@ -7,7 +7,7 @@ import fireplace
 import random
 import logging
 
-from hearthstone.enums import CardClass, CardType
+from hearthstone.enums import CardClass, CardType, Zone
 import numpy as np
 
 import fireplace.logging
@@ -136,12 +136,15 @@ class TradingHS(VanillaHS):
   def __init__(self):
     self.heuristic_agent = hand_coded.HeuristicAgent()
 
-    super().__init__()
+    super().__init__(skip_mulligan=True)
+
     self.action_to_ref = []
-    for source_id in range(self.simulation._MAX_CARDS_IN_BOARD):
-      for target_id in range(self.simulation._MAX_CARDS_IN_BOARD):
+    for source_id in range(self.simulation._MAX_CARDS_IN_BOARD + 1):
+      for target_id in range(self.simulation._MAX_CARDS_IN_BOARD + 1):
         self.action_to_ref.append((source_id, target_id))
-      self.action_to_ref.append((source_id, 'HERO'))
+      # Enemy HERO is always 0.
+      self.action_to_ref.append((source_id, 0))
+    self.action_to_ref.append((None, None))
 
   def game_value(self):
     raise NotImplementedError
@@ -156,6 +159,10 @@ class TradingHS(VanillaHS):
     return self.simulation._MAX_CARDS_IN_BOARD * 2 * 3 + 2
 
   def reset(self):
+    transition = self._reset()
+    return self.filter_transition(transition)
+
+  def _reset(self):
     o, r, t, info = super().reset()
     new_transition = self.fast_forward_game(o, info)
 
@@ -165,25 +172,44 @@ class TradingHS(VanillaHS):
       return o, r, t, info
 
   def fast_forward_game(self, o, info):
-    while True:
-      possible_actions = info['possible_actions']
-      non_trade_actions = []
-      for action in possible_actions:
-        if not hasattr(action, 'target'):
-          non_trade_actions.append(action)
+    non_trade_actions = self.get_non_trade_actions(info)
+    if len(non_trade_actions) == 0:
+      return
 
-      if len(non_trade_actions) == 0:
-        return
-
-      action = self.heuristic_agent.choose(o, non_trade_actions)
-      o, r, t, info = super(TradingHS, self).step(action)
+    action = self.heuristic_agent.choose(o, non_trade_actions)
+    o, r, t, info = super(TradingHS, self).step(action)
+    # TODO: what about the rewards?
+    new_transition = self.fast_forward_game(o, info)
+    if new_transition is not None:
+      return new_transition
+    else:
       return o, r, t, info
 
+  def get_non_trade_actions(self, info):
+    possible_actions = info['possible_actions']
+    non_trade_actions = []
+    for action in possible_actions:
+      if action.card is None:
+        continue
+      if action.params['target'] is None:
+        non_trade_actions.append(action)
+    return non_trade_actions
+
+  def gather_state(self):
+    pass
+
   def step(self, action):
-    source, target = self.action_to_ref[action]
-    self.last_info
-    self.simulation.game.board[source]
-    self.simulation.game.board[source]
+    transition = self._step(action)
+    return self.filter_transition(transition)
+
+  def _step(self, action):
+    # source, target = self.action_to_ref[action]
+    for possible_action in self.last_info['possible_actions']:
+      if action == self.action_to_id(possible_action):
+        action = possible_action
+        break
+    else:
+      raise ValueError
     o, r, t, info = super(TradingHS, self).step(action)
 
     new_transition = self.fast_forward_game(o, info)
@@ -192,6 +218,44 @@ class TradingHS(VanillaHS):
       return new_transition
     else:
       return o, r, t, info
+
+  def filter_transition(self, transition):
+    o, r, t, info = transition
+    info = info.copy()
+    possible_actions = info['possible_actions']
+    encoded_actions = []
+    for possible_action in possible_actions:
+      action_id = self.action_to_id(possible_action)
+      encoded_actions.append(action_id)
+    info['possible_actions'] = encoded_actions
+    return o, r, t, info
+
+  def id_to_action(self, encoded_action):
+    possible_actions = self.last_info['possible_actions']
+    src, tar = self.action_to_ref[encoded_action]
+    for possible_action in possible_actions:
+      card = possible_action.card
+      if hasattr(card, 'target'):
+        if card.target.position_in_board == tar:
+          return possible_action
+      elif tar is None:
+        if src == card.position_in_board:
+          return possible_action
+
+  def action_to_id(self, possible_action):
+    card = possible_action.card
+    if card is None:
+      card_idx = None
+      target_idx = None
+    else:
+      card_idx = card.zone_position
+      target = possible_action.params['target']
+      if target is not None:
+        target_idx = target.zone_position
+
+    # TODO: reverse lookup cache
+    action_id = self.action_to_ref.index((card_idx, target_idx))
+    return action_id
 
 
 def HSenv_test():

@@ -17,11 +17,11 @@ class HeuristicAgent(agents.base_agent.Agent):
         for action in possible_actions:
             if action.card is not None:
                 actions.append(action)
-                target = action.params['target']
-                if target is None:
+                if 'target' not in action.params or action.params['target'] is None:
                     # play card
                     values[action] += action.card.cost
                 else:
+                    target = action.params['target']
                     attacker = action.card
 
                     atk_dies = attacker.health <= target.atk
