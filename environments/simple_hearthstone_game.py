@@ -61,7 +61,6 @@ class VanillaHS(base_env.BaseEnv):
     self.info = None
     self.actor_hero = None
 
-  @property
   def game_value(self):
     player = self.simulation.player
     if player.playstate == PlayState.WON:
@@ -84,7 +83,8 @@ class VanillaHS(base_env.BaseEnv):
     elif player.splaystate == PlayState.CONCEDED:
       raise ValueError
     else:
-      raise ValueError
+      raise ValueError("{} not a valid playstate to eval game_value".format(
+        self.simulation.player.playstate))
 
   @property
   def action_space(self):
@@ -106,7 +106,9 @@ class VanillaHS(base_env.BaseEnv):
     self.games_played += 1
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
-    reward = self.simulation.reward()
+    reward = self.simulation.reward(
+      reward_schema='health'
+    )
     info = {'possible_actions': possible_actions}
     self.last_info = info
     return game_observation, reward, False, self.last_info
@@ -162,7 +164,10 @@ class TradingHS(VanillaHS):
   def __init__(self):
     self.heuristic_agent = hand_coded.HeuristicAgent()
 
-    super().__init__(skip_mulligan=True)
+    super().__init__(
+      skip_mulligan=True,
+      max_cards_in_game=1,
+    )
 
     self.action_to_ref = []
 
@@ -178,8 +183,8 @@ class TradingHS(VanillaHS):
 
   @property
   def observation_space(self):
-    # player board, opponent board, 3 stats per card, 2 heroes
-    return self.simulation._MAX_CARDS_IN_BOARD * 2 * 3 + 2
+    # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
+    return ((self.simulation._MAX_CARDS_IN_BOARD + 1) * 2) * 2
 
   def reset(self):
     transition = self._reset()
@@ -201,6 +206,7 @@ class TradingHS(VanillaHS):
 
     action = self.heuristic_agent.choose(o, non_trade_actions)
     o, r, t, info = super(TradingHS, self).step(action)
+    # TODO: what about the rewards?
     new_transition = self.fast_forward_game(o, info)
     if new_transition is not None:
       return new_transition
@@ -231,17 +237,13 @@ class TradingHS(VanillaHS):
         action = possible_action
         break
     else:
-      raise ValueError
-    observation, _, terminal, info = super(TradingHS, self).step(action)
+      raise ValueError(
+        'action {}, not found in possible actions'.format(action))
+    observation, reward, terminal, info = super(TradingHS, self).step(action)
 
     new_transition = self.fast_forward_game(observation, info)
     if new_transition is not None:
-      observation, _, terminal, info = new_transition
-
-    if terminal:
-      reward = self.game_value
-    else:
-      reward = 0.0
+      return new_transition
     return observation, reward, terminal, info
 
   def filter_transition(self, transition):
@@ -409,19 +411,30 @@ class HSsimulation(object):
   def terminal(self):
     return self.game.ended
 
-  def reward(self):
-    if self.player.hero.health != 0 and self.opponent.hero.health == 0:
-      return 100 * (10 + 30 + (15 + 15 + 15) * 7)
-    elif self.player.hero.health == 0 and self.opponent.hero.health != 0:
-      return - (100 * (10 + 30 + (15 + 15 + 15) * 7))
-    elif self.player.hero.health == 0 and self.opponent.hero.health == 0:
-      return 0
+  def reward(self, reward_schema='default'):
+    if reward_schema == 'default':
+      if self.player.playstate in (PlayState.WINNING, PlayState.WON):
+        reward = 1.0
+      elif self.player.playstate in (PlayState.LOSING, PlayState.LOST):
+        reward = -1.0
+      else:
+        reward = 0.0
+    elif reward_schema == 'health':
+      reward = self.player.hero.health - self.opponent.hero.health
 
-    reward = len(self.player.hand) / self.player.max_hand_size
-    reward -= len(self.opponent.hand) / self.opponent.max_hand_size
+    elif reward_schema == 'hand_crafted':
+      if self.player.hero.health != 0 and self.opponent.hero.health == 0:
+        return 100.0 * (10 + 30 + (15 + 15 + 15) * 7)
+      elif self.player.hero.health == 0 and self.opponent.hero.health != 0:
+        return - (100.0 * (10 + 30 + (15 + 15 + 15) * 7))
+      elif self.player.hero.health == 0 and self.opponent.hero.health == 0:
+        return 0.0
 
-    reward += self.player.hero.health / self.player.hero._max_health
-    reward -= self.opponent.hero.health / self.opponent.hero._max_health
+      reward = len(self.player.hand) / self.player.max_hand_size
+      reward -= len(self.opponent.hand) / self.opponent.max_hand_size
+
+      reward += self.player.hero.health / self.player.hero._max_health
+      reward -= self.opponent.hero.health / self.opponent.hero._max_health
 
     return reward
 
@@ -559,7 +572,7 @@ class HSsimulation(object):
     player_mana = player.max_mana
 
     # game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
-    game_state = np.hstack((player_board, player_hero, player_mana))
+    game_state = np.hstack((player_board, player_hero))  # , player_mana))
     return game_state
 
   def observe(self):

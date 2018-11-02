@@ -11,8 +11,8 @@ import torch.nn.functional as F
 import agents.base_agent
 
 from agents.learning import shared
+import tqdm
 
-# TODO: re-enable
 # USE_CUDA = torch.cuda.is_available()
 USE_CUDA = False
 Variable = lambda *args, **kwargs: autograd.Variable(
@@ -39,7 +39,7 @@ class DQN(nn.Module):
   def act(self, state, possible_actions, epsilon):
     if random.random() > epsilon:
       state = Variable(torch.FloatTensor(state).unsqueeze(0), volatile=True)
-      q_value = self.forward(state).data.numpy()
+      q_value = self.forward(state).cpu().data.numpy()
       # action = q_value.max(1)[1].data[0]
       best_action = np.argmax(q_value[:, possible_actions])
       action = possible_actions[best_action]
@@ -49,7 +49,12 @@ class DQN(nn.Module):
 
 
 class DQNAgent(agents.base_agent.Agent):
-  def __init__(self, num_inputs, num_actions, gamma):
+  def __init__(self,
+    num_inputs,
+    num_actions,
+    gamma,
+    model_path="./checkpoint.pth.tar",
+  ):
     # model = DQN(env.observation_space.shape[0], env.action_space.n)
     self.model = DQN(num_inputs, num_actions)
     if USE_CUDA:
@@ -57,6 +62,7 @@ class DQNAgent(agents.base_agent.Agent):
     self.optimizer = optim.Adam(self.model.parameters())
     self.replay_buffer = shared.ReplayBuffer(1000)
     self.gamma = gamma
+    self.model_path = model_path
 
   def compute_td_loss(self, batch_size):
     state, action, reward, next_state, done = self.replay_buffer.sample(
@@ -89,24 +95,43 @@ class DQNAgent(agents.base_agent.Agent):
     num_frames=10000,
     batch_size=32,
     gamma=0.99,
+    eval_every=100,
   ):
     losses = []
     all_rewards = []
     episode_reward = 0
+    render_run = False
+    scoreboard = {
+      'won': 0,
+      'lost': 0,
+      'draw': 0
+    }
+    try:
+      self.model.load_state_dict(torch.load(self.model_path))
+    except FileNotFoundError:
+      pass
 
     observation, reward, terminal, info = env.reset()
-    for frame_idx in range(1, num_frames + 1):
+    for frame_idx in tqdm.tqdm(range(1, num_frames + 1)):
       epsilon = shared.epsilon_by_frame(frame_idx)
       possible_actions = info['possible_actions']
       action = self.model.act(observation, possible_actions, epsilon)
 
-      next_state, reward, done, _ = env.step(action)
+      next_state, reward, done, info = env.step(action)
       self.replay_buffer.push(observation, action, reward, next_state, done)
 
       observation = next_state
       episode_reward += reward
 
       if done:
+        game_value = env.game_value()
+        if game_value == 1:
+          scoreboard['won'] += 1
+        elif game_value == -1:
+          scoreboard['lost'] += 1
+        elif game_value == 0:
+          scoreboard['draw'] += 1
+
         observation, reward, terminal, info = env.reset()
         all_rewards.append(episode_reward)
         episode_reward = 0
@@ -115,8 +140,15 @@ class DQNAgent(agents.base_agent.Agent):
         loss = self.compute_td_loss(batch_size)
         losses.append(loss.data[0])
 
-      if frame_idx % 200 == 0:
-        shared.plot(frame_idx, all_rewards, losses)
+      if frame_idx % eval_every == 0:
+        win_ratio = float(scoreboard['won']) / sum(scoreboard.values())
+        shared.plot(frame_idx, all_rewards, losses, win_ratio)
+        scoreboard = {
+          'won': 0,
+          'lost': 0,
+          'draw': 0
+        }
+    torch.save(self.model.state_dict(), self.model_path)
 
   def choose(self, observation, possible_actions):
     return self.model.act(observation, possible_actions, 0)

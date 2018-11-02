@@ -31,6 +31,6 @@ def epsilon_by_frame(
     return epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1. * frame_idx / epsilon_decay)
 
 
-def plot(frame_idx, rewards, losses):
+def plot(frame_idx, rewards, losses, win_ratio):
     # TODO: tensorboard this
-    print('frame {}. reward: {}'.format(frame_idx, np.mean(rewards[-10:])))
+    print('frame {}, win%: {}'.format(frame_idx, win_ratio))
