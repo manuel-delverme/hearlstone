@@ -106,7 +106,10 @@ class DQNAgent(agents.base_agent.Agent):
       'lost': 0,
       'draw': 0
     }
-    self.model.load_state_dict(torch.load(self.model_path))
+    try:
+      self.model.load_state_dict(torch.load(self.model_path))
+    except FileNotFoundError:
+      pass
 
     observation, reward, terminal, info = env.reset()
     for frame_idx in tqdm.tqdm(range(1, num_frames + 1)):
