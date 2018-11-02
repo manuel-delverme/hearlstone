@@ -62,21 +62,22 @@ def arena_fight(
     'draw': 0
   }
   for nr_game in tqdm.tqdm(range(nr_games)):
-    terminal = False
-    state, info = environment.reset()
+    state, reward, terminal, info = environment.reset()
+    assert reward == 0.0
+    assert not terminal
+
     possible_actions = info['possible_actions']
     while not terminal:
 
       action = active_player.choose(state, possible_actions)
       state, reward, terminal, info = environment.step(action)
-      print(environment.render(mode='ASCII'))
       possible_actions = info['possible_actions']
 
       if action == environment.GameActions.PASS_TURN or (
         hasattr(action, 'card') and action.card is None):
         active_player, passive_player = passive_player, active_player
 
-    game_value = environment.game_value
+    game_value = environment.game_value()
 
     if game_value == 1:
       scoreboard['won'] += 1
