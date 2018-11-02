@@ -61,13 +61,35 @@ class VanillaHS(base_env.BaseEnv):
     self.info = None
     self.actor_hero = None
 
+  @property
   def game_value(self):
-    raise NotImplementedError
+    player = self.simulation.player
+    if player.playstate == PlayState.WON:
+      return +1.0
+    elif player.playstate == PlayState.LOST:
+      return -1.0
+    elif player.splaystate == PlayState.TIED:
+      # return 0.0
+      raise ValueError
+    elif player.playstate == PlayState.INVALID:
+      raise ValueError
+    elif player.splaystate == PlayState.PLAYING:
+      raise ValueError
+    elif player.splaystate == PlayState.WINNING:
+      raise ValueError
+    elif player.splaystate == PlayState.LOSING:
+      raise ValueError
+    elif player.splaystate == PlayState.DISCONNECTED:
+      raise ValueError
+    elif player.splaystate == PlayState.CONCEDED:
+      raise ValueError
+    else:
+      raise ValueError
 
   @property
   def action_space(self):
     return self.simulation._MAX_CARDS_IN_HAND * (
-        self.simulation._MAX_CARDS_IN_BOARD + 1)
+      self.simulation._MAX_CARDS_IN_BOARD + 1)
 
   @property
   def cards_in_hand(self):
@@ -143,15 +165,12 @@ class TradingHS(VanillaHS):
     super().__init__(skip_mulligan=True)
 
     self.action_to_ref = []
-    for source_id in range(self.simulation._MAX_CARDS_IN_BOARD + 1):
+
+    # the hero cannot attack for now, there are no weapons so start from 1
+    for source_id in range(1, self.simulation._MAX_CARDS_IN_BOARD + 1):
       for target_id in range(self.simulation._MAX_CARDS_IN_BOARD + 1):
         self.action_to_ref.append((source_id, target_id))
-      # Enemy HERO is always 0.
-      self.action_to_ref.append((source_id, 0))
     self.action_to_ref.append((None, None))
-
-  def game_value(self):
-    raise NotImplementedError
 
   @property
   def action_space(self):
@@ -167,13 +186,13 @@ class TradingHS(VanillaHS):
     return self.filter_transition(transition)
 
   def _reset(self):
-    o, r, t, info = super().reset()
-    new_transition = self.fast_forward_game(o, info)
+    observation, _, terminal, info = super().reset()
+    new_transition = self.fast_forward_game(observation, info)
 
     if new_transition is not None:
-      return new_transition
-    else:
-      return o, r, t, info
+      observation, _, terminal, info = new_transition
+    reward = 0.0
+    return observation, reward, terminal, info
 
   def fast_forward_game(self, o, info):
     non_trade_actions = self.get_non_trade_actions(info)
@@ -182,7 +201,6 @@ class TradingHS(VanillaHS):
 
     action = self.heuristic_agent.choose(o, non_trade_actions)
     o, r, t, info = super(TradingHS, self).step(action)
-    # TODO: what about the rewards?
     new_transition = self.fast_forward_game(o, info)
     if new_transition is not None:
       return new_transition
@@ -214,14 +232,17 @@ class TradingHS(VanillaHS):
         break
     else:
       raise ValueError
-    o, r, t, info = super(TradingHS, self).step(action)
+    observation, _, terminal, info = super(TradingHS, self).step(action)
 
-    new_transition = self.fast_forward_game(o, info)
-
+    new_transition = self.fast_forward_game(observation, info)
     if new_transition is not None:
-      return new_transition
+      observation, _, terminal, info = new_transition
+
+    if terminal:
+      reward = self.game_value
     else:
-      return o, r, t, info
+      reward = 0.0
+    return observation, reward, terminal, info
 
   def filter_transition(self, transition):
     o, r, t, info = transition

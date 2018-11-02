@@ -123,29 +123,6 @@ class SimpleHSEnv(base_env.BaseEnv):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    @property
-    def game_value(self):
-        player = self.simulation.player
-        if player.playstate == PlayState.WON:
-            return +1
-        elif player.playstate == PlayState.LOST:
-            return -1
-        elif player.splaystate == PlayState.TIED:
-            return 0
-        elif player.playstate == PlayState.INVALID:
-            raise ValueError
-        elif player.splaystate == PlayState.PLAYING:
-            raise ValueError
-        elif player.splaystate == PlayState.WINNING:
-            raise ValueError
-        elif player.splaystate == PlayState.LOSING:
-            raise ValueError
-        elif player.splaystate == PlayState.DISCONNECTED:
-            raise ValueError
-        elif player.splaystate == PlayState.CONCEDED:
-            raise ValueError
-        else:
-            raise ValueError
 
 
 

@@ -62,14 +62,16 @@ def arena_fight(
     'draw': 0
   }
   for nr_game in tqdm.tqdm(range(nr_games)):
-    terminal = False
-    state, info = environment.reset()
+    state, reward, terminal, info = environment.reset()
+    assert not terminal
+    assert reward == 0.0
     possible_actions = info['possible_actions']
-    while not terminal:
 
+    while not terminal:
       action = active_player.choose(state, possible_actions)
       state, reward, terminal, info = environment.step(action)
-      print(environment.render(mode='ASCII'))
+      if nr_game < 10:
+        print(environment.render(mode='ASCII'))
       possible_actions = info['possible_actions']
 
       if action == environment.GameActions.PASS_TURN or (
@@ -77,7 +79,6 @@ def arena_fight(
         active_player, passive_player = passive_player, active_player
 
     game_value = environment.game_value
-
     if game_value == 1:
       scoreboard['won'] += 1
     elif game_value == -1:
@@ -92,7 +93,7 @@ def arena_fight(
   return win_ratio
 
 
-def random_draft(card_class: CardClass, exclude=set(), deck_length=30, max_mana=30):
+def random_draft(card_class: CardClass, exclude=tuple(), deck_length=30, max_mana=30):
   from fireplace import cards
 
   deck = []

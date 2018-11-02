@@ -119,4 +119,4 @@ class DQNAgent(agents.base_agent.Agent):
         shared.plot(frame_idx, all_rewards, losses)
 
   def choose(self, observation, possible_actions):
-    raise NotImplementedError
+    return self.model.act(observation, possible_actions, 0)
