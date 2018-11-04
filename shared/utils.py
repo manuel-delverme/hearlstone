@@ -69,9 +69,8 @@ def arena_fight(
     possible_actions = info['possible_actions']
 
     while not terminal:
-      action = active_player.choose(state, possible_actions)
+      action = active_player.choose(state, info)
       state, reward, terminal, info = environment.step(action)
-      possible_actions = info['possible_actions']
 
       if action == environment.GameActions.PASS_TURN or (
         hasattr(action, 'card') and action.card is None):

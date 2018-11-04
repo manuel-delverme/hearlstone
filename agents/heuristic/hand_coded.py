@@ -7,7 +7,8 @@ class HeuristicAgent(agents.base_agent.Agent):
     def __init__(self):
         super().__init__()
 
-    def choose(self, observation, possible_actions):
+    def choose(self, observation, info):
+        possible_actions = info['original_info']['possible_actions']
         if len(possible_actions) == 1:
             return possible_actions[0]
 

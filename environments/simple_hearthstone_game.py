@@ -181,7 +181,7 @@ class TradingHS(VanillaHS):
 
     super().__init__(
       skip_mulligan=True,
-      max_cards_in_game=1,
+      max_cards_in_game=2,
     )
 
     self.action_to_ref = []
@@ -219,7 +219,9 @@ class TradingHS(VanillaHS):
     if len(non_trade_actions) == 0:
       return
 
-    action = self.heuristic_agent.choose(o, non_trade_actions)
+    info['original_info'] = info
+    info['original_info']['possible_actions'] = non_trade_actions
+    action = self.heuristic_agent.choose(o, info)
     o, r, t, info = super(TradingHS, self).step(action)
     # TODO: what about the rewards?
     new_transition = self.fast_forward_game(o, info)
@@ -242,18 +244,13 @@ class TradingHS(VanillaHS):
     pass
 
   def step(self, action):
-    transition = self._step(action)
-    return self.filter_transition(transition)
+    o, r, t, info = self._step(action)
+    o, r, t, info = self.filter_transition((o, r, t, info))
+    return o, r, t, info
 
   def _step(self, action):
     # source, target = self.action_to_ref[action]
-    for possible_action in self.last_info['possible_actions']:
-      if action == self.action_to_id(possible_action):
-        action = possible_action
-        break
-    else:
-      raise ValueError(
-        'action {}, not found in possible actions'.format(action))
+    action = self.maybe_id_to_action(action)
     observation, reward, terminal, info = super(TradingHS, self).step(action)
 
     new_transition = self.fast_forward_game(observation, info)
@@ -263,6 +260,19 @@ class TradingHS(VanillaHS):
     self.last_info = info
     return observation, reward, terminal, info
 
+  def maybe_id_to_action(self, action):
+    # TODO: this is bad, two different behaviour are merged here int and
+    # action object
+    if isinstance(action, int):
+      for possible_action in self.last_info['possible_actions']:
+        if action == self.action_to_id(possible_action):
+          action = possible_action
+          break
+      else:
+        raise ValueError(
+          'action {}, not found in possible actions'.format(action))
+    return action
+
   def filter_transition(self, transition):
     o, r, t, info = transition
     info = info.copy()
@@ -271,6 +281,7 @@ class TradingHS(VanillaHS):
     for possible_action in possible_actions:
       action_id = self.action_to_id(possible_action)
       encoded_actions.append(action_id)
+    info['original_info'] = original_info = info.copy()
     info['possible_actions'] = encoded_actions
     return o, r, t, info
 

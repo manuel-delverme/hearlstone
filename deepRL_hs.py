@@ -22,8 +22,8 @@ def main():
   )
   player.train(
     hs_game,
-    num_frames=100000,
-    eval_every=2000
+    num_frames=10000,
+    eval_every=1000
   )
   scoreboard = utils.arena_fight(hs_game, player, opponent, nr_games=100)
   print(scoreboard)

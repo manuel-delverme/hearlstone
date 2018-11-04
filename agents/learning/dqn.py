@@ -26,11 +26,11 @@ class DQN(nn.Module):
     self.num_actions = num_actions
 
     self.layers = nn.Sequential(
-      nn.Linear(self.num_inputs + 1, 1),
-      # nn.ReLU(),
+      nn.Linear(self.num_inputs + 1, 128),
+      nn.ReLU(),
       # nn.Linear(128, 128),
       # nn.ReLU(),
-      # nn.Linear(128, 1)
+      nn.Linear(128, 1)
     )
 
   def forward(self, x):
@@ -44,7 +44,8 @@ class DQN(nn.Module):
         network_inputs.append(network_input)
 
       network_inputs = np.array(network_inputs)
-      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0), volatile=True)
+      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0),
+                               volatile=True)
       q_values = self.forward(network_input).cpu().data.numpy()
 
       best_action = np.argmax(q_values)
@@ -87,7 +88,8 @@ class DQNAgent(agents.base_agent.Agent):
     next_actions = np.ones((batch_size, 1)) * 2
 
     next_state = np.concatenate((next_state, next_actions), axis=1)
-    next_state = Variable(torch.FloatTensor(np.float32(next_state)), volatile=True)
+    next_state = Variable(torch.FloatTensor(np.float32(next_state)),
+                          volatile=True)
     next_q_values = self.model(next_state)
 
     # q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
@@ -106,10 +108,10 @@ class DQNAgent(agents.base_agent.Agent):
 
   def train(
     self, env,
-    num_frames=10000,
+    num_frames,
+    eval_every,
     batch_size=32,
     gamma=0.99,
-    eval_every=100,
   ):
     losses = []
     all_rewards = []
@@ -120,7 +122,7 @@ class DQNAgent(agents.base_agent.Agent):
       'lost': 0,
       'draw': 0
     }
-    action_stats = [0, 0, 0, ]
+    action_stats = [0, ] * env.action_space
     try:
       self.model.load_state_dict(torch.load(self.model_path))
     except FileNotFoundError:
@@ -136,7 +138,8 @@ class DQNAgent(agents.base_agent.Agent):
       action_stats[action] += 1
 
       # print(info['possible_actions'], '\n', info['stats'])
-      self.replay_buffer.push(observation, action, reward, next_state, done, info['possible_actions'])
+      self.replay_buffer.push(observation, action, reward, next_state, done,
+                              info['possible_actions'])
 
       observation = next_state
       episode_reward += reward
@@ -159,9 +162,12 @@ class DQNAgent(agents.base_agent.Agent):
         losses.append(loss.data[0])
 
       if frame_idx % eval_every == 0:
-
         win_ratio = float(scoreboard['won']) / sum(scoreboard.values())
         shared.plot(frame_idx, all_rewards, losses, win_ratio, action_stats, epsilon)
+
+        # for param in self.model.parameters():
+        #   print(param.data)
+
         losses.clear()
         action_stats = [0] * len(action_stats)
         scoreboard = {
@@ -171,5 +177,7 @@ class DQNAgent(agents.base_agent.Agent):
         }
     torch.save(self.model.state_dict(), self.model_path)
 
-  def choose(self, observation, possible_actions):
-    return self.model.act(observation, possible_actions, 0)
+  def choose(self, observation, info):
+    possible_actions = info['possible_actions']
+    action = self.model.act(observation, possible_actions, 0)
+    return action
