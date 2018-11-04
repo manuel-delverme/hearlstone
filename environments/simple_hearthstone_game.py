@@ -181,7 +181,7 @@ class TradingHS(VanillaHS):
 
     super().__init__(
       skip_mulligan=True,
-      max_cards_in_game=2,
+      max_cards_in_game=7,
     )
 
     self.action_to_ref = []
