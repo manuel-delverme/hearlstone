@@ -1,27 +1,41 @@
-import hearthstone
+import logging
+import random
+import shelve
 import string
 from collections import defaultdict
-from shared import utils
-import shelve
+
 import fireplace
-import random
-import logging
-
-from hearthstone.enums import CardClass, CardType, Zone
-import numpy as np
-
 import fireplace.logging
-from fireplace.game import Game, PlayState
+import hearthstone
+import numpy as np
 from fireplace.exceptions import GameOver
+from fireplace.game import Game, PlayState
 from fireplace.player import Player
 from gym.utils import seeding
+from hearthstone.enums import CardClass
 
-from environments import base_env
 from agents.heuristic import hand_coded
+from environments import base_env
+from shared import utils
+
+from contextlib import contextmanager
+import sys
+import os
 
 
 class GameActions(object):
   PASS_TURN = 0
+
+
+@contextmanager
+def suppress_stdout():
+  with open(os.devnull, "w") as devnull:
+    old_stdout = sys.stdout
+    sys.stdout = devnull
+    try:
+      yield
+    finally:
+      sys.stdout = old_stdout
 
 
 class VanillaHS(base_env.BaseEnv):
@@ -114,7 +128,8 @@ class VanillaHS(base_env.BaseEnv):
     return game_observation, reward, False, self.last_info
 
   def play_opponent_turn(self):
-    fireplace.utils.play_turn(self.simulation.game)
+    with suppress_stdout():
+      fireplace.utils.play_turn(self.simulation.game)
 
   def step(self, action):
     terminal = False
@@ -243,7 +258,9 @@ class TradingHS(VanillaHS):
 
     new_transition = self.fast_forward_game(observation, info)
     if new_transition is not None:
-      return new_transition
+      observation, reward, terminal, info = new_transition
+
+    self.last_info = info
     return observation, reward, terminal, info
 
   def filter_transition(self, transition):

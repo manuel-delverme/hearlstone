@@ -5,13 +5,15 @@ import agents.base_agent
 import environments
 import environments.simple_hearthstone_game
 import agents.heuristic.random_agent
+import agents.heuristic.hand_coded
 import agents.learning.dqn
 
 
 @gin.configurable
 def main():
   hs_game = environments.simple_hearthstone_game.TradingHS()
-  opponent = agents.heuristic.random_agent.RandomAgent()
+  # opponent = agents.heuristic.random_agent.RandomAgent()
+  opponent = agents.heuristic.hand_coded.HeuristicAgent()
 
   player = agents.learning.dqn.DQNAgent(
     hs_game.observation_space,
