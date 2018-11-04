@@ -1,4 +1,6 @@
-import math, random
+import math
+import random
+import collections
 
 import gym
 import numpy as np
@@ -26,32 +28,41 @@ class DQN(nn.Module):
     self.num_actions = num_actions
 
     self.layers = nn.Sequential(
-      nn.Linear(self.num_inputs + 1, 128),
+      nn.Linear(self.num_inputs + self.num_actions, 128),
       nn.ReLU(),
-      # nn.Linear(128, 128),
-      # nn.ReLU(),
+      nn.Linear(128, 128),
+      nn.ReLU(),
+
+      # 1 is the Q(s, a) value
       nn.Linear(128, 1)
     )
 
   def forward(self, x):
     return self.layers(x)
 
-  def act(self, state, possible_actions, epsilon):
+  def act(self, states, possible_actions_for_state, epsilon):
     if random.random() > epsilon:
-      network_inputs = []
-      for possible_action in possible_actions:
-        network_input = np.append(state, possible_action)
-        network_inputs.append(network_input)
+      best_actions = []
+      for idx, possible_actions in enumerate(possible_actions_for_state):
+        possible_actions = np.array(possible_actions)
+        state = states[idx, np.newaxis].repeat(possible_actions.shape[0],
+                                               axis=0)
+        state_action_pairs = np.concatenate((state, possible_actions), axis=1)
 
-      network_inputs = np.array(network_inputs)
-      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0),
-                               volatile=True)
-      q_values = self.forward(network_input).cpu().data.numpy()
+        state_action_pairs = Variable(torch.FloatTensor(state_action_pairs), volatile=True)
+        q_values = self.forward(state_action_pairs).cpu().data.numpy()
+        best_action_idx, = np.argmax(q_values, axis=0)
 
-      best_action = np.argmax(q_values)
-      action = possible_actions[best_action]
+        # best_action, = possible_actions[best_action_idx]
+        # TODO: this is an HACK, that relies on the order to avoid finding out how to restore the original card position
+        best_action = possible_actions_for_state[0][best_action_idx]
+        best_actions.append(best_action)
+      # action, = random.sample(best_actions, 1)
+      action = best_actions[0]
+      action = tuple(action)
     else:
-      action, = random.sample(possible_actions, 1)
+      # they are all the same
+      action, = random.sample(possible_actions_for_state[0], 1)
     return action
 
 
@@ -67,7 +78,7 @@ class DQNAgent(agents.base_agent.Agent):
     # if USE_CUDA:
     #  self.model = self.model.cuda()
     self.optimizer = optim.Adam(self.model.parameters())
-    self.replay_buffer = shared.ReplayBuffer(1000)
+    self.replay_buffer = shared.ReplayBuffer(10000)
     self.gamma = gamma
     self.model_path = model_path
 
@@ -85,7 +96,7 @@ class DQNAgent(agents.base_agent.Agent):
     q_values = self.model(state)
     # TODO: fixme, this is just wrong, the assumption is that 1 action then pass
     # it holds for trading game, but nothing else
-    next_actions = np.ones((batch_size, 1)) * 2
+    next_actions = np.ones_like(action) * -1
 
     next_state = np.concatenate((next_state, next_actions), axis=1)
     next_state = Variable(torch.FloatTensor(np.float32(next_state)),
@@ -122,7 +133,7 @@ class DQNAgent(agents.base_agent.Agent):
       'lost': 0,
       'draw': 0
     }
-    action_stats = [0, ] * env.action_space
+    action_stats = collections.defaultdict(int)
     try:
       self.model.load_state_dict(torch.load(self.model_path))
     except FileNotFoundError:
@@ -137,7 +148,6 @@ class DQNAgent(agents.base_agent.Agent):
       next_state, reward, done, info = env.step(action)
       action_stats[action] += 1
 
-      # print(info['possible_actions'], '\n', info['stats'])
       self.replay_buffer.push(observation, action, reward, next_state, done,
                               info['possible_actions'])
 
@@ -169,7 +179,7 @@ class DQNAgent(agents.base_agent.Agent):
         #   print(param.data)
 
         losses.clear()
-        action_stats = [0] * len(action_stats)
+        action_stats.clear()
         scoreboard = {
           'won': 0,
           'lost': 0,

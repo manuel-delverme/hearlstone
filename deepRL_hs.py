@@ -3,7 +3,7 @@ from shared import utils
 import agents.base_agent
 
 import environments
-import environments.simple_hearthstone_game
+import environments.simple_hs
 import agents.heuristic.random_agent
 import agents.heuristic.hand_coded
 import agents.learning.dqn
@@ -11,7 +11,7 @@ import agents.learning.dqn
 
 @gin.configurable
 def main():
-  hs_game = environments.simple_hearthstone_game.TradingHS()
+  hs_game = environments.simple_hs.TradingHS()
   # opponent = agents.heuristic.random_agent.RandomAgent()
   opponent = agents.heuristic.hand_coded.HeuristicAgent()
 
