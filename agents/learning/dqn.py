@@ -1,4 +1,5 @@
 import math
+import tensorboardX
 import random
 import collections
 
@@ -30,18 +31,20 @@ class DQN(nn.Module):
     self.layers = nn.Sequential(
       nn.Linear(self.num_inputs + self.num_actions, 128),
       nn.ReLU(),
-      nn.Linear(128, 128),
-      nn.ReLU(),
+      # nn.Linear(128, 128),
+      # nn.ReLU(),
 
       # 1 is the Q(s, a) value
       nn.Linear(128, 1),
+      # nn.Linear(self.num_inputs + self.num_actions, 1),
       nn.Tanh()
     )
 
   def forward(self, x):
     return self.layers(x)
 
-  def act(self, state, possible_actions, epsilon):
+  def act(self, state, info, epsilon):
+    possible_actions = info['possible_actions']
     if random.random() > epsilon:
       network_inputs = []
       for possible_action in possible_actions:
@@ -61,12 +64,8 @@ class DQN(nn.Module):
 
 
 class DQNAgent(agents.base_agent.Agent):
-  def __init__(self,
-    num_inputs,
-    num_actions,
-    gamma,
-    model_path="checkpoint.pth.tar",
-  ):
+  def __init__(self, num_inputs, num_actions, gamma,
+    model_path="checkpoint.pth.tar", ):
     # model = DQN(env.observation_space.shape[0], env.action_space.n)
     self.model = DQN(num_inputs, num_actions)
     # if USE_CUDA:
@@ -76,7 +75,7 @@ class DQNAgent(agents.base_agent.Agent):
     self.gamma = gamma
     self.model_path = model_path
     self.batch_size = 32
-
+    self.summary_writer = tensorboardX.SummaryWriter()
 
   def load_model(self, model_path=None):
     if not model_path:
@@ -118,67 +117,36 @@ class DQNAgent(agents.base_agent.Agent):
 
     return loss
 
-  def train(self, env, num_frames, eval_every, opponent=None):
-    losses = []
-    all_rewards = []
-    episode_reward = 0
-    render_run = False
-    scoreboard = {
-      'won': 0,
-      'lost': 0,
-      'draw': 0
-    }
-    end_turns = []
+  def train(self, env, game_steps):
     observation, reward, terminal, info = env.reset()
-    for frame_idx in tqdm.tqdm(range(1, num_frames + 1)):
-      epsilon = shared.epsilon_by_frame(frame_idx, epsilon_decay=num_frames/6)
-      possible_actions = info['possible_actions']
-      action = self.model.act(observation, possible_actions, epsilon)
+    epsilon_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
 
-      next_state, reward, done, info = env.step(action)
-      self.learn_from_experience(observation, action, reward, next_state, done, info['possible_actions'])
+    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule)):
 
+      action = self.model.act(observation, info, epsilon)
+      next_observation, reward, done, info = env.step(action)
+      self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
 
-      observation = next_state
-      episode_reward += reward
-
+      observation = next_observation
       if done:
         game_value = env.game_value()
-        end_turns.append(env.simulation.game.turn)
-        if game_value == 1:
-          scoreboard['won'] += 1
-        elif game_value == -1:
-          scoreboard['lost'] += 1
-        elif game_value == 0:
-          scoreboard['draw'] += 1
-
+        self.summary_writer.add_scalar('dqn/end_turn', env.simulation.game.turn, step_nr)
+        self.summary_writer.add_scalar('dqn/game_value', game_value, step_nr)
+        assert reward in (-1.0, 0.0, 1.0)
         observation, reward, terminal, info = env.reset()
-        all_rewards.append(episode_reward)
-        episode_reward = 0
+      else:
+        assert reward == 0.0
 
-
-      if frame_idx % eval_every == 0:
-        win_ratio = float(scoreboard['won']) / sum(scoreboard.values())
-        shared.plot(frame_idx, all_rewards, losses, win_ratio, {}, epsilon, end_turns)
-
-        # for param in self.model.parameters():
-        #   print(param.data)
-
-        end_turns.clear()
-        losses.clear()
-        scoreboard = {
-          'won': 0,
-          'lost': 0,
-          'draw': 0
-        }
     torch.save(self.model.state_dict(), self.model_path)
+    self.summary_writer.close()
 
   def choose(self, observation, info):
     possible_actions = info['possible_actions']
     action = self.model.act(observation, possible_actions, 0)
     return action
 
-  def learn_from_experience(self, observation, action, reward, next_state, done, possible_actions):
-    self.replay_buffer.push(observation, action, reward, next_state, done, possible_actions)
+  def learn_from_experience(self, observation, action, reward, next_state, done, info, step_nr):
+    self.replay_buffer.push(observation, action, reward, next_state, done, info)
     if len(self.replay_buffer) > self.batch_size:
       loss = self.compute_td_loss(self.batch_size)
+      self.summary_writer.add_scalar('dqn/loss', loss, step_nr)

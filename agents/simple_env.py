@@ -65,7 +65,7 @@ class SimpleHSEnv(base_env.BaseEnv):
         self.games_played += 1
         return retr
 
-    def play_opponent_turn(self):
+    def play_opponent_action(self):
         fireplace.utils.play_turn(self.simulation.game)
 
     def _reset(self):
@@ -90,7 +90,7 @@ class SimpleHSEnv(base_env.BaseEnv):
         if action.card is None:
             try:
                 self.simulation.game.end_turn()
-                self.play_opponent_turn()
+                self.play_opponent_action()
             except GameOver as e:
                 terminal = True
         else:

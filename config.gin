@@ -1,5 +1,5 @@
-main.training_len = 10000
-main.num_iter = 100
-main.batch_size = 8
-main.number_episodes = 100
-main.update_threshold = 0.55
+train.train_steps = 10000
+train.num_iter = 100
+train.batch_size = 8
+train.number_episodes = 100
+train.update_threshold = 0.55

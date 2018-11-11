@@ -23,7 +23,7 @@ class BaseEnv(gym.Env, ABC):
     raise NotImplemented
 
   @abstractmethod
-  def play_opponent_turn(self):
+  def play_opponent_action(self):
     raise NotImplemented
 
   @abstractmethod

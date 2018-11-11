@@ -20,13 +20,14 @@ class ReplayBuffer(object):
         return len(self.buffer)
 
 
-def epsilon_by_frame(
-        frame_idx,
+def epsilon_schedule(
         epsilon_start=1.0,
         epsilon_final=0.01,
         epsilon_decay=200,
 ):
-    return epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1. * frame_idx / epsilon_decay)
+  step_nr = 0
+  while True:
+    yield epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1. * step_nr / epsilon_decay)
 
 
 def plot(frame_idx, rewards, losses, win_ratio, action_stats, epsilon, end_turns):
