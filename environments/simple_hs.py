@@ -120,17 +120,26 @@ class VanillaHS(base_env.BaseEnv):
 
     self.games_played += 1
     possible_actions = self.simulation.actions()
-    game_observations = self.simulation.observe()
+    game_observation = self.simulation.observe()
     reward = self.simulation.reward(
       reward_schema='health'
     )
     info = {'possible_actions': possible_actions}
     self.last_info = info
-    return game_observations, reward, False, self.last_info
+    return game_observation, reward, False, self.last_info
 
   def play_opponent_turn(self):
-    with suppress_stdout():
-      fireplace.utils.play_turn(self.simulation.game)
+    if self.opponent is None:
+      with suppress_stdout():
+        fireplace.utils.play_turn(self.simulation.game)
+    else:
+      terminal = False
+      while not terminal:
+        action = self.opponent.choose(state, info)
+        state, reward, terminal, info = self.step(action)
+
+        if action == self.GameActions.PASS_TURN or (hasattr(action, 'card') and action.card is None):
+          break
 
   def step(self, action):
     terminal = False
@@ -179,6 +188,7 @@ class VanillaHS(base_env.BaseEnv):
 class TradingHS(VanillaHS):
   def __init__(self):
     self.heuristic_agent = hand_coded.HeuristicAgent()
+    self.opponent = hand_coded.HeuristicAgent()
 
     super().__init__(
       skip_mulligan=True,
@@ -209,13 +219,13 @@ class TradingHS(VanillaHS):
     return filtered_transition
 
   def _reset(self):
-    observations, _, terminal, info = super().reset()
-    new_transition = self.fast_forward_game(observations, info)
+    observation, _, terminal, info = super().reset()
+    new_transition = self.fast_forward_game(observation, info)
 
     if new_transition is not None:
-      observations, _, terminal, info = new_transition
+      observation, _, terminal, info = new_transition
     reward = 0.0
-    return observations, reward, terminal, info
+    return observation, reward, terminal, info
 
   def fast_forward_game(self, o, info):
     non_trade_actions = self.get_non_trade_actions(info)
@@ -248,14 +258,14 @@ class TradingHS(VanillaHS):
 
   def step(self, action):
     # source, target = self.action_to_ref[action]
-    assert type(action) in (int, tuple)
-    action = self.restore_action_object(action, shift=0)
-
+    #assert type(action) in (int, tuple)
     o, r, t, info = self._step(action)
     o, r, t, info = self.filter_transition((o, r, t, info))
     return o, r, t, info
 
   def _step(self, action):
+    # source, target = self.action_to_ref[action]
+    action = self.maybe_id_to_action(action)
     observation, reward, terminal, info = super(TradingHS, self).step(action)
 
     new_transition = self.fast_forward_game(observation, info)
@@ -265,13 +275,12 @@ class TradingHS(VanillaHS):
     self.last_info = info
     return observation, reward, terminal, info
 
-  def restore_action_object(self, action, shift) -> int:
+  def maybe_id_to_action(self, action):
     # TODO: this is bad, two different behaviour are merged here int and
     # action object
     if isinstance(action, tuple):
-      # TODO: use idx to avoid the for loop
       for possible_action in self.last_info['possible_actions']:
-        if action == self.action_to_id(possible_action, shift):
+        if action == self.action_to_id(possible_action):
           action = possible_action
           break
       else:
@@ -283,15 +292,12 @@ class TradingHS(VanillaHS):
     o, r, t, info = transition
     info = info.copy()
     possible_actions = info['possible_actions']
-    encoded_actions_symm = []
-    for shift in range(o.shape[0]):
-      encoded_actions = []
-      for possible_action in possible_actions:
-        action_id = self.action_to_id(possible_action, shift)
-        encoded_actions.append(action_id)
-      encoded_actions_symm.append(encoded_actions)
+    encoded_actions = []
+    for possible_action in possible_actions:
+      action_id = self.action_to_id(possible_action)
+      encoded_actions.append(action_id)
     info['original_info'] = info.copy()
-    info['possible_actions'] = encoded_actions_symm
+    info['possible_actions'] = encoded_actions
     return o, r, t, info
 
   def id_to_action(self, encoded_action):
@@ -306,7 +312,7 @@ class TradingHS(VanillaHS):
         if src == card.position_in_board:
           return possible_action
 
-  def action_to_id(self, possible_action, shift):
+  def action_to_id(self, possible_action):
     card = possible_action.card
     if card is None:
       card_idx = -1
@@ -318,23 +324,13 @@ class TradingHS(VanillaHS):
         target_idx = -1
       else:
         target_idx = target.zone_position
-      card_idx, target_idx = self.shift_card_id(shift, card_idx, target_idx)
 
     # TODO: reverse lookup cache
     # action_id = self.action_to_ref.index((card_idx, target_idx))
     return card_idx, target_idx
 
-  def shift_card_id(self, shift, source_idx, target_idx):
-    if target_idx == 0 or source_idx == 0:
-      return source_idx, target_idx
-    else:
-      def shift_on_board(idx):
-        if idx:
-          idx = idx - 1 + shift
-          idx = idx % self.simulation._MAX_CARDS_IN_BOARD
-          return idx + 1
-      return shift_on_board(source_idx), shift_on_board(target_idx)
-
+  def set_opponent(self, opponent):
+    self.opponent = opponent
 
 
 def HSenv_test():
@@ -359,7 +355,6 @@ class HSsimulation(object):
     'atk': None,
     # character
     'health': None,
-
   }
   _skipped = {
     'damage': None,
@@ -415,7 +410,7 @@ class HSsimulation(object):
     'silenced': None,
   }
 
-  def __init__(self, skip_mulligan=False, cheating_opponent=True):
+  def __init__(self, skip_mulligan=False, cheating_opponent=False):
 
     deck1, deck2 = self.generate_decks(self._DECK_SIZE)
     self.player1 = Player("Agent", deck1, CardClass.MAGE.default_hero)
@@ -616,37 +611,27 @@ class HSsimulation(object):
 
     # the player hero itself is not in the board
     player_board = player.characters[1:]
+
     assert len(player.hand) <= self._MAX_CARDS_IN_HAND
-    player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_BOARD
-    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
-    player_board = np.hstack(self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
 
+    player_board = list(sorted(player_board, key=lambda x: x.id)) + [
+      None] * self._MAX_CARDS_IN_BOARD
+    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(
+      player_board[self._MAX_CARDS_IN_BOARD:])
+    player_board = np.hstack(
+      self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
 
-    entity_size = len(self.entity_to_vec(None))
-    symmetric_player_boards = []
-    shifted_board = player_board
-    for shift in range(self._MAX_CARDS_IN_BOARD):
-      shifted_board = np.roll(shifted_board, entity_size)
-      symmetric_player_boards.append(shifted_board)
-    symmetric_player_boards = np.array(symmetric_player_boards)
-
-    player_hero = self.entity_to_vec(player.characters[0]).reshape(1, -1)
+    player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
 
-    heroes = player_hero.repeat(symmetric_player_boards.shape[0], axis=0)
-    game_states = np.hstack((symmetric_player_boards, heroes))  # , player_mana))
     # game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
-    return game_states
+    game_state = np.hstack((player_board, player_hero))  # , player_mana))
+    return game_state
 
   def observe(self):
-    observations = []
-    player_obs = self.observe_player(self.player)
-    opponent_obs = self.observe_player(self.opponent)
-    observation_symmetries = itertools.product(player_obs, opponent_obs)
-    for ob in observation_symmetries:
-      observation = np.hstack(ob)
-      observations.append(observation)
-    return np.array(observations)
+    observation = self.observe_player(self.player)
+    observation = np.hstack((observation, self.observe_player(self.opponent)))
+    return observation
 
   def step(self, action):
     action.use()

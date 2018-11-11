@@ -34,35 +34,29 @@ class DQN(nn.Module):
       nn.ReLU(),
 
       # 1 is the Q(s, a) value
-      nn.Linear(128, 1)
+      nn.Linear(128, 1),
+      nn.Tanh()
     )
 
   def forward(self, x):
     return self.layers(x)
 
-  def act(self, states, possible_actions_for_state, epsilon):
+  def act(self, state, possible_actions, epsilon):
     if random.random() > epsilon:
-      best_actions = []
-      for idx, possible_actions in enumerate(possible_actions_for_state):
-        possible_actions = np.array(possible_actions)
-        state = states[idx, np.newaxis].repeat(possible_actions.shape[0],
-                                               axis=0)
-        state_action_pairs = np.concatenate((state, possible_actions), axis=1)
+      network_inputs = []
+      for possible_action in possible_actions:
+        network_input = np.append(state, possible_action)
+        network_inputs.append(network_input)
 
-        state_action_pairs = Variable(torch.FloatTensor(state_action_pairs), volatile=True)
-        q_values = self.forward(state_action_pairs).cpu().data.numpy()
-        best_action_idx, = np.argmax(q_values, axis=0)
+      network_inputs = np.array(network_inputs)
+      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0),
+                               volatile=True)
+      q_values = self.forward(network_input).cpu().data.numpy()
 
-        # best_action, = possible_actions[best_action_idx]
-        # TODO: this is an HACK, that relies on the order to avoid finding out how to restore the original card position
-        best_action = possible_actions_for_state[0][best_action_idx]
-        best_actions.append(best_action)
-      # action, = random.sample(best_actions, 1)
-      action = best_actions[0]
-      action = tuple(action)
+      best_action = np.argmax(q_values)
+      action = possible_actions[best_action]
     else:
-      # they are all the same
-      action, = random.sample(possible_actions_for_state[0], 1)
+      action, = random.sample(possible_actions, 1)
     return action
 
 
@@ -71,7 +65,7 @@ class DQNAgent(agents.base_agent.Agent):
     num_inputs,
     num_actions,
     gamma,
-    model_path="./checkpoint.pth.tar",
+    model_path="checkpoint.pth.tar",
   ):
     # model = DQN(env.observation_space.shape[0], env.action_space.n)
     self.model = DQN(num_inputs, num_actions)
@@ -81,6 +75,11 @@ class DQNAgent(agents.base_agent.Agent):
     self.replay_buffer = shared.ReplayBuffer(10000)
     self.gamma = gamma
     self.model_path = model_path
+
+  def load_model(self, model_path=None):
+    if not model_path:
+      model_path = self.model_path
+    self.model.load_state_dict(torch.load(model_path))
 
   def compute_td_loss(self, batch_size):
     state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(
@@ -122,7 +121,7 @@ class DQNAgent(agents.base_agent.Agent):
     num_frames,
     eval_every,
     batch_size=32,
-    gamma=0.99,
+    opponent=None,
   ):
     losses = []
     all_rewards = []
@@ -134,14 +133,10 @@ class DQNAgent(agents.base_agent.Agent):
       'draw': 0
     }
     action_stats = collections.defaultdict(int)
-    try:
-      self.model.load_state_dict(torch.load(self.model_path))
-    except FileNotFoundError:
-      pass
 
     observation, reward, terminal, info = env.reset()
     for frame_idx in tqdm.tqdm(range(1, num_frames + 1)):
-      epsilon = shared.epsilon_by_frame(frame_idx)
+      epsilon = shared.epsilon_by_frame(frame_idx, epsilon_decay=num_frames/6)
       possible_actions = info['possible_actions']
       action = self.model.act(observation, possible_actions, epsilon)
 
