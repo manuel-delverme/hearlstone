@@ -129,6 +129,11 @@ class VanillaHS(base_env.BaseEnv):
     return game_observation, reward, False, self.last_info
 
   def play_opponent_turn(self):
+    info = {
+      'possible_actions': self.simulation.actions()
+    }
+
+    state = self.simulation.observe()
     if self.opponent is None:
       with suppress_stdout():
         fireplace.utils.play_turn(self.simulation.game)
@@ -137,8 +142,8 @@ class VanillaHS(base_env.BaseEnv):
       while not terminal:
         action = self.opponent.choose(state, info)
         state, reward, terminal, info = self.step(action)
-
-        if action == self.GameActions.PASS_TURN or (hasattr(action, 'card') and action.card is None):
+        raise Exception("some bug")
+        if action == (1, 1): # + or -
           break
 
   def step(self, action):
@@ -328,6 +333,28 @@ class TradingHS(VanillaHS):
     # TODO: reverse lookup cache
     # action_id = self.action_to_ref.index((card_idx, target_idx))
     return card_idx, target_idx
+
+  def play_opponent_turn(self):
+    info = {
+      'possible_actions': self.simulation.actions()
+    }
+    state = self.simulation.observe()
+    transition = (state, 0.0, False, info)
+    new_transition = self.fast_forward_game(state, info)
+    if new_transition is None:
+      new_transition = transition
+    state, reward, terminal, info = self.filter_transition(new_transition)
+    if self.opponent is None:
+      with suppress_stdout():
+        fireplace.utils.play_turn(self.simulation.game)
+    else:
+      terminal = False
+      while not terminal:
+        action = self.opponent.choose(state, info)
+        state, reward, terminal, info = self.step(action)
+
+        if action == (1, 1):
+          break
 
   def set_opponent(self, opponent):
     self.opponent = opponent

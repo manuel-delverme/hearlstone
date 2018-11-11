@@ -75,6 +75,8 @@ class DQNAgent(agents.base_agent.Agent):
     self.replay_buffer = shared.ReplayBuffer(10000)
     self.gamma = gamma
     self.model_path = model_path
+    self.batch_size = 32
+
 
   def load_model(self, model_path=None):
     if not model_path:
@@ -116,13 +118,7 @@ class DQNAgent(agents.base_agent.Agent):
 
     return loss
 
-  def train(
-    self, env,
-    num_frames,
-    eval_every,
-    batch_size=32,
-    opponent=None,
-  ):
+  def train(self, env, num_frames, eval_every, opponent=None):
     losses = []
     all_rewards = []
     episode_reward = 0
@@ -132,8 +128,7 @@ class DQNAgent(agents.base_agent.Agent):
       'lost': 0,
       'draw': 0
     }
-    action_stats = collections.defaultdict(int)
-
+    end_turns = []
     observation, reward, terminal, info = env.reset()
     for frame_idx in tqdm.tqdm(range(1, num_frames + 1)):
       epsilon = shared.epsilon_by_frame(frame_idx, epsilon_decay=num_frames/6)
@@ -141,16 +136,15 @@ class DQNAgent(agents.base_agent.Agent):
       action = self.model.act(observation, possible_actions, epsilon)
 
       next_state, reward, done, info = env.step(action)
-      action_stats[action] += 1
+      self.learn_from_experience(observation, action, reward, next_state, done, info['possible_actions'])
 
-      self.replay_buffer.push(observation, action, reward, next_state, done,
-                              info['possible_actions'])
 
       observation = next_state
       episode_reward += reward
 
       if done:
         game_value = env.game_value()
+        end_turns.append(env.simulation.game.turn)
         if game_value == 1:
           scoreboard['won'] += 1
         elif game_value == -1:
@@ -162,19 +156,16 @@ class DQNAgent(agents.base_agent.Agent):
         all_rewards.append(episode_reward)
         episode_reward = 0
 
-      if len(self.replay_buffer) > batch_size:
-        loss = self.compute_td_loss(batch_size)
-        losses.append(loss.data[0])
 
       if frame_idx % eval_every == 0:
         win_ratio = float(scoreboard['won']) / sum(scoreboard.values())
-        shared.plot(frame_idx, all_rewards, losses, win_ratio, action_stats, epsilon)
+        shared.plot(frame_idx, all_rewards, losses, win_ratio, {}, epsilon, end_turns)
 
         # for param in self.model.parameters():
         #   print(param.data)
 
+        end_turns.clear()
         losses.clear()
-        action_stats.clear()
         scoreboard = {
           'won': 0,
           'lost': 0,
@@ -186,3 +177,8 @@ class DQNAgent(agents.base_agent.Agent):
     possible_actions = info['possible_actions']
     action = self.model.act(observation, possible_actions, 0)
     return action
+
+  def learn_from_experience(self, observation, action, reward, next_state, done, possible_actions):
+    self.replay_buffer.push(observation, action, reward, next_state, done, possible_actions)
+    if len(self.replay_buffer) > self.batch_size:
+      loss = self.compute_td_loss(self.batch_size)
