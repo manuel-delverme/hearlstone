@@ -12,6 +12,7 @@ import torch.optim as optim
 import torch.autograd as autograd
 import torch.nn.functional as F
 import agents.base_agent
+from typing import Tuple, List
 
 from agents.learning import shared
 import tqdm
@@ -43,8 +44,13 @@ class DQN(nn.Module):
   def forward(self, x):
     return self.layers(x)
 
-  def act(self, state, info, epsilon):
-    possible_actions = info['possible_actions']
+  def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float):
+    assert isinstance(state, np.ndarray)
+    assert isinstance(possible_actions, list)
+    assert isinstance(possible_actions[0], tuple)
+    assert isinstance(possible_actions[0][0], int)
+    assert isinstance(epsilon, float)
+
     if random.random() > epsilon:
       network_inputs = []
       for possible_action in possible_actions:
@@ -65,7 +71,7 @@ class DQN(nn.Module):
 
 class DQNAgent(agents.base_agent.Agent):
   def __init__(self, num_inputs, num_actions, gamma,
-    model_path="checkpoint.pth.tar", ):
+    model_path="checkpoints/checkpoint.pth.tar", ):
     # model = DQN(env.observation_space.shape[0], env.action_space.n)
     self.model = DQN(num_inputs, num_actions)
     # if USE_CUDA:
@@ -78,7 +84,7 @@ class DQNAgent(agents.base_agent.Agent):
     self.summary_writer = tensorboardX.SummaryWriter()
 
   def load_model(self, model_path=None):
-    if not model_path:
+    if model_path is None:
       model_path = self.model_path
     self.model.load_state_dict(torch.load(model_path))
 
@@ -121,11 +127,14 @@ class DQNAgent(agents.base_agent.Agent):
     observation, reward, terminal, info = env.reset()
     epsilon_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
 
-    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule)):
+    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule), total=game_steps):
 
-      action = self.model.act(observation, info, epsilon)
+      action = self.model.act(observation, info['possible_actions'], epsilon)
       next_observation, reward, done, info = env.step(action)
       self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
+
+      self.summary_writer.add_scalar('dqn/opponent_hp', env.simulation.opponent.hero.health, step_nr)
+      self.summary_writer.add_scalar('dqn/self_hp', env.simulation.player.hero.health, step_nr)
 
       observation = next_observation
       if done:
@@ -142,10 +151,11 @@ class DQNAgent(agents.base_agent.Agent):
 
   def choose(self, observation, info):
     possible_actions = info['possible_actions']
-    action = self.model.act(observation, possible_actions, 0)
+    action = self.model.act(observation, possible_actions, 0.0)
     return action
 
-  def learn_from_experience(self, observation, action, reward, next_state, done, info, step_nr):
+  def learn_from_experience(self, observation, action, reward, next_state, done,
+    info, step_nr):
     self.replay_buffer.push(observation, action, reward, next_state, done, info)
     if len(self.replay_buffer) > self.batch_size:
       loss = self.compute_td_loss(self.batch_size)

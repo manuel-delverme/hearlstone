@@ -31,8 +31,7 @@ def suppress_stdout():
 
 
 class VanillaHS(base_env.BaseEnv):
-  def __init__(self, max_cards_in_game=2, skip_mulligan=False,
-    sparse_reward=False):
+  def __init__(self, max_cards_in_game=2, skip_mulligan=False, cheating_opponent=False):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
     in front of each player.
@@ -54,9 +53,10 @@ class VanillaHS(base_env.BaseEnv):
 
     simulator.HSsimulation._MAX_CARDS_IN_BOARD = max_cards_in_game
     self.skip_mulligan = skip_mulligan
-    self.sparse_reward = sparse_reward
-    self.reinit_game()
     self.lookup_action_id_to_obj = {}
+    self.cheating_opponent = cheating_opponent
+
+    self.reinit_game()
 
   @property
   def action_space(self):
@@ -105,7 +105,10 @@ class VanillaHS(base_env.BaseEnv):
     return source_idx, target_idx
 
   def reinit_game(self):
-    self.simulation = simulator.HSsimulation(skip_mulligan=self.skip_mulligan)
+    self.simulation = simulator.HSsimulation(
+      skip_mulligan=self.skip_mulligan,
+      cheating_opponent=self.cheating_opponent,
+    )
     for player in (self.simulation.player1, self.simulation.player2):
       last_card = player.hand[-1]
       if last_card.id == "GAME_005":  # "The Coin"

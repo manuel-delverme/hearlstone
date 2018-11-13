@@ -9,8 +9,8 @@ class TradingHS(simple_hs.VanillaHS):
     self.minion_player_agent = hand_coded.HeuristicAgent()
     super().__init__(
       skip_mulligan=True,
+      cheating_opponent=True,
       max_cards_in_game=7,
-      sparse_reward=True,
     )
 
   def reset(self):

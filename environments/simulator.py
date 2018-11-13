@@ -98,8 +98,9 @@ class HSsimulation(object):
         cards_to_mulligan = self.mulligan_heuristic(self.player2)
         self.player2.choice.choose(*cards_to_mulligan)
         if cheating_opponent:
-          self.player2.hero.armor = 100
-          self.player2.max_mana = 4
+          self.player2.hero._max_health = 100
+          self.player2.max_mana = 10
+          self.player1.hero._max_health = 1
 
       except IndexError as e:
         print("init failed", e)

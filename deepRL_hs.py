@@ -12,7 +12,7 @@ import agents.learning.dqn
 
 # @gin.configurable
 def train(
-  train_steps=100000,
+  train_steps=10000,
   test_games=1000,
   gamma=0.99,
 ):
