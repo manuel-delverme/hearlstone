@@ -138,8 +138,9 @@ class DQNAgent(agents.base_agent.Agent):
       next_observation, reward, done, info = env.step(action)
       self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
 
-      self.summary_writer.add_scalar('game_stats/opponent_hp', env.simulation.opponent.hero.health, step_nr)
-      self.summary_writer.add_scalar('game_stats/self_hp', env.simulation.player.hero.health, step_nr)
+      # self.summary_writer.add_scalar('game_stats/opponent_hp', env.simulation.opponent.hero.health, step_nr)
+      # self.summary_writer.add_scalar('game_stats/self_hp', env.simulation.player.hero.health, step_nr)
+      self.summary_writer.add_scalar('game_stats/diff_hp', env.simulation.player.hero.health - env.simulation.opponent.hero.health, step_nr)
 
       observation = next_observation
       if done:

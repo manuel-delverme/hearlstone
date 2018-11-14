@@ -8,6 +8,7 @@ from shared import utils
 import string
 from collections import defaultdict
 
+
 class HSsimulation(object):
   _DECK_SIZE = 30
   _MAX_CARDS_IN_HAND = 10
@@ -114,6 +115,7 @@ class HSsimulation(object):
     return [c for c in player.choice.cards if c.cost > 3]
 
   @staticmethod
+  @functools.lru_cache()
   def generate_decks(deck_size, player1_class=CardClass.MAGE,
     player2_class=CardClass.WARRIOR):
     while True:
@@ -135,15 +137,17 @@ class HSsimulation(object):
         #     continue
         if card.requires_target():
           for target in card.targets:
-            actions.append(self.Action(card, self.game.current_player.choice.choose, {
-              # 'target': target,
-              'card': card,
-            }, self))
+            actions.append(
+              self.Action(card, self.game.current_player.choice.choose, {
+                # 'target': target,
+                'card': card,
+              }, self))
         else:
-          actions.append(self.Action(card, self.game.current_player.choice.choose, {
-            # 'target': None,
-            'card': card
-          }, self))
+          actions.append(
+            self.Action(card, self.game.current_player.choice.choose, {
+              # 'target': None,
+              'card': card
+            }, self))
     else:
       no_action = self.Action(None, lambda: None, {}, self)
 
@@ -166,7 +170,8 @@ class HSsimulation(object):
         if character.can_attack():
           for enemy_char in character.targets:
             actions.append(
-              self.Action(character, character.attack, {'target': enemy_char}, self))
+              self.Action(character, character.attack, {'target': enemy_char},
+                          self))
       actions += [no_action]
       # for action in actions:
       #     action.vector = (self.card_to_bow(action.card), self.card_to_bow(action.params))
@@ -248,10 +253,13 @@ class HSsimulation(object):
 
     assert len(player.hand) <= self._MAX_CARDS_IN_HAND
 
-    player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_BOARD
-    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
+    player_board = list(sorted(player_board, key=lambda x: x.id)) + [
+      None] * self._MAX_CARDS_IN_BOARD
+    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(
+      player_board[self._MAX_CARDS_IN_BOARD:])
 
-    player_board = np.hstack(self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
+    player_board = np.hstack(
+      self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
 
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
@@ -495,5 +503,3 @@ class Agent(object):
     new_q = old_q + change
     self.setQ(state, action_id, new_q)
     return change
-
-
