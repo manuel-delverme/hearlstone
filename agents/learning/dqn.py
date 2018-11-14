@@ -17,7 +17,7 @@ from typing import Tuple, List
 from agents.learning import shared
 import tqdm
 
-# USE_CUDA = torch.cuda.is_available()
+USE_CUDA = torch.cuda.is_available()
 USE_CUDA = False
 Variable = lambda *args, **kwargs: autograd.Variable(
   *args, **kwargs).cuda() if USE_CUDA else autograd.Variable(*args, **kwargs)
@@ -38,7 +38,7 @@ class DQN(nn.Module):
       # 1 is the Q(s, a) value
       nn.Linear(128, 1),
       # nn.Linear(self.num_inputs + self.num_actions, 1),
-      nn.Tanh()
+      # nn.Tanh()
     )
 
   def forward(self, x):
@@ -71,14 +71,20 @@ class DQN(nn.Module):
 
 class DQNAgent(agents.base_agent.Agent):
   def __init__(self, num_inputs, num_actions, gamma,
+    should_flip_board=False,
     model_path="checkpoints/checkpoint.pth.tar", ):
+
     # model = DQN(env.observation_space.shape[0], env.action_space.n)
     self.model = DQN(num_inputs, num_actions)
-    # if USE_CUDA:
-    #  self.model = self.model.cuda()
-    self.optimizer = optim.Adam(self.model.parameters())
+    if USE_CUDA:
+     self.model = self.model.cuda()
+    self.optimizer = optim.Adam(
+      self.model.parameters(),
+      lr=1e-3,
+    )
     self.replay_buffer = shared.ReplayBuffer(10000)
     self.gamma = gamma
+    self.should_flip_board = should_flip_board
     self.model_path = model_path
     self.batch_size = 32
     self.summary_writer = tensorboardX.SummaryWriter()
@@ -87,6 +93,7 @@ class DQNAgent(agents.base_agent.Agent):
     if model_path is None:
       model_path = self.model_path
     self.model.load_state_dict(torch.load(model_path))
+    print('loaded', model_path)
 
   def compute_td_loss(self, batch_size):
     state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(
@@ -109,7 +116,6 @@ class DQNAgent(agents.base_agent.Agent):
                           volatile=True)
     next_q_values = self.model(next_state)
 
-    # q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
     q_values = q_values.squeeze()
     next_q_values = next_q_values.squeeze()
 
@@ -133,24 +139,27 @@ class DQNAgent(agents.base_agent.Agent):
       next_observation, reward, done, info = env.step(action)
       self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
 
-      self.summary_writer.add_scalar('dqn/opponent_hp', env.simulation.opponent.hero.health, step_nr)
-      self.summary_writer.add_scalar('dqn/self_hp', env.simulation.player.hero.health, step_nr)
+      self.summary_writer.add_scalar('game_stats/opponent_hp', env.simulation.opponent.hero.health, step_nr)
+      self.summary_writer.add_scalar('game_stats/self_hp', env.simulation.player.hero.health, step_nr)
 
       observation = next_observation
       if done:
         game_value = env.game_value()
-        self.summary_writer.add_scalar('dqn/end_turn', env.simulation.game.turn, step_nr)
-        self.summary_writer.add_scalar('dqn/game_value', game_value, step_nr)
+        self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
+        self.summary_writer.add_scalar('game_stats/game_value', game_value, step_nr)
         assert reward in (-1.0, 0.0, 1.0)
         observation, reward, terminal, info = env.reset()
       else:
         assert reward == 0.0
 
     torch.save(self.model.state_dict(), self.model_path)
-    self.summary_writer.close()
 
   def choose(self, observation, info):
     possible_actions = info['possible_actions']
+    board_size = observation.shape[1]
+    board_center = board_size // 2
+    if self.should_flip_board:
+      observation = np.concatenate(observation[board_center:], observation[board_center:], axis=1)
     action = self.model.act(observation, possible_actions, 0.0)
     return action
 
@@ -160,3 +169,6 @@ class DQNAgent(agents.base_agent.Agent):
     if len(self.replay_buffer) > self.batch_size:
       loss = self.compute_td_loss(self.batch_size)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
+
+  def __del__(self):
+    self.summary_writer.close()

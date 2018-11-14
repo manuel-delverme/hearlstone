@@ -1,16 +1,17 @@
-from environments import simple_hs
+from environments import vanilla_hs
 from typing import Tuple, List
 from agents.heuristic import hand_coded
 from environments import simulator
+from copy import deepcopy
 
 
-class TradingHS(simple_hs.VanillaHS):
+class TradingHS(vanilla_hs.VanillaHS):
   def __init__(self):
     self.minion_player_agent = hand_coded.HeuristicAgent()
     super().__init__(
       skip_mulligan=True,
-      cheating_opponent=True,
-      max_cards_in_game=7,
+      cheating_opponent=False,
+      max_cards_in_game=1,
     )
 
   def reset(self):
@@ -26,14 +27,17 @@ class TradingHS(simple_hs.VanillaHS):
     return self.gather_transition()
 
   def fast_forward_game(self, o, info):
+    if self.simulation.game.ended:
+      return
     non_trade_actions_obj, non_trade_actions_enc =self.gather_play_from_hand_acts(info)
     if len(non_trade_actions_obj) == 0:
       return
 
-    restricted_info = info.copy()
     # restrict the agent to non-trade actions
-    restricted_info['original_info']['possible_actions'] = non_trade_actions_obj
-    restricted_info['possible_actions'] = non_trade_actions_enc
+    restricted_info = {
+      'original_info': {'possible_actions': non_trade_actions_obj},
+      'possible_actions': non_trade_actions_enc,
+    }
 
     action = self.minion_player_agent.choose(o, restricted_info)
     o, r, t, info = super(TradingHS, self).step(action)
@@ -59,10 +63,12 @@ class TradingHS(simple_hs.VanillaHS):
     return non_trade_actions_obj, non_trade_actions_enc
 
   def play_opponent_turn(self):
+    assert self.simulation.game.current_player.controller.name == 'Opponent'
     while self.simulation.game.current_player.controller.name == 'Opponent':
       self.play_opponent_action()
 
   def play_opponent_action(self):
+    assert self.simulation.game.current_player.controller.name == 'Opponent'
     observation, _, _, info = self.gather_transition()
     self.fast_forward_game(observation, info)
 
@@ -71,6 +77,7 @@ class TradingHS(simple_hs.VanillaHS):
     action = self.opponent.choose(observation, info)
     self.step(action)
 
+    observation, _, _, info = self.gather_transition()
     self.fast_forward_game(observation, info)
 
     trans = self.gather_transition()

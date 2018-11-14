@@ -1,4 +1,5 @@
 from fireplace.game import Game, PlayState
+import functools
 import numpy as np
 import shelve
 from fireplace.player import Player
@@ -128,25 +129,25 @@ class HSsimulation(object):
   def actions(self):
     actions = []
     # no_target = None
-    if self.player.choice:
-      for card in self.player.choice.cards:
+    if self.game.current_player.choice:
+      for card in self.game.current_player.choice.cards:
         # if not card.is_playable():
         #     continue
         if card.requires_target():
           for target in card.targets:
-            actions.append(self.Action(card, self.player.choice.choose, {
+            actions.append(self.Action(card, self.game.current_player.choice.choose, {
               # 'target': target,
               'card': card,
             }, self))
         else:
-          actions.append(self.Action(card, self.player.choice.choose, {
+          actions.append(self.Action(card, self.game.current_player.choice.choose, {
             # 'target': None,
             'card': card
           }, self))
     else:
       no_action = self.Action(None, lambda: None, {}, self)
 
-      for card in self.player.hand:
+      for card in self.game.current_player.hand:
         if not card.is_playable():
           continue
 
@@ -161,12 +162,11 @@ class HSsimulation(object):
         else:
           actions.append(self.Action(card, card.play, {'target': None}, self))
 
-      for character in self.player.characters:
+      for character in self.game.current_player.characters:
         if character.can_attack():
           for enemy_char in character.targets:
             actions.append(
-              self.Action(character, character.attack, {'target': enemy_char},
-                          self))
+              self.Action(character, character.attack, {'target': enemy_char}, self))
       actions += [no_action]
       # for action in actions:
       #     action.vector = (self.card_to_bow(action.card), self.card_to_bow(action.params))
@@ -260,10 +260,16 @@ class HSsimulation(object):
     game_state = np.hstack((player_board, player_hero))  # , player_mana))
     return game_state
 
-  def observe(self, opponent=False):
-    # TODO: encode the player's hand, right now the observation doesnt include your own hand
-    observation = self.observe_player(self.player)
-    observation = np.hstack((observation, self.observe_player(self.opponent)))
+  def observe(self):
+    # TODO: encode the player's hand, right now the observation doesnt
+    # include your own hand
+    if self.game.current_player == self.player:
+      passive_player = self.player
+    else:
+      passive_player = self.opponent
+
+    observation = self.observe_player(self.game.current_player)
+    observation = np.hstack((observation, self.observe_player(passive_player)))
     return observation
 
   def step(self, action):
@@ -366,6 +372,7 @@ class HSsimulation(object):
       player_lst.append(val)
     return player_lst
 
+  @functools.lru_cache(maxsize=20000)
   def card_to_bow(self, card_obj):
     assert card_obj is None or card_obj.data.description == ""
 

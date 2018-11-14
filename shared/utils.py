@@ -1,4 +1,7 @@
 import pickle
+from contextlib import contextmanager
+import sys
+import os
 import tqdm
 from environments import base_env
 import sys
@@ -66,14 +69,12 @@ def arena_fight(
     assert reward == 0.0
     assert not terminal
 
-    possible_actions = info['possible_actions']
-
     while not terminal:
       action = active_player.choose(state, info)
+      environment.render()
       state, reward, terminal, info = environment.step(action)
 
-      if action == environment.GameActions.PASS_TURN or (
-        hasattr(action, 'card') and action.card is None):
+      if action == environment.GameActions.PASS_TURN:
         active_player, passive_player = passive_player, active_player
 
     game_value = environment.game_value()
@@ -119,3 +120,15 @@ def random_draft(card_class: CardClass, exclude=tuple(), deck_length=30, max_man
     if deck.count(card.id) < card.max_count_in_deck:
       deck.append(card.id)
   return deck
+
+@contextmanager
+def suppress_stdout():
+  with open(os.devnull, "w") as devnull:
+    old_stdout = sys.stdout
+    sys.stdout = devnull
+    try:
+      yield
+    finally:
+      sys.stdout = old_stdout
+
+

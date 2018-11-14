@@ -8,36 +8,20 @@ from fireplace.game import Game, PlayState
 
 from environments import simulator
 from environments import base_env
+from shared import utils
 
-from contextlib import contextmanager
-import sys
-import os
 from typing import Tuple, List
 
 
-class GameActions(object):
-  PASS_TURN = 0
-
-
-@contextmanager
-def suppress_stdout():
-  with open(os.devnull, "w") as devnull:
-    old_stdout = sys.stdout
-    sys.stdout = devnull
-    try:
-      yield
-    finally:
-      sys.stdout = old_stdout
-
-
 class VanillaHS(base_env.BaseEnv):
-  def __init__(self, max_cards_in_game=2, skip_mulligan=False, cheating_opponent=False):
+  class GameActions(object):
+    PASS_TURN = (-1, -1)
+
+  def __init__(self, max_cards_in_game=2, skip_mulligan=False,
+    cheating_opponent=False):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
     in front of each player.
-
-    Args:
-      skip_mulligan:
     """
     fireplace.cards.db.initialized = True
     print("Initializing card database")
@@ -71,7 +55,6 @@ class VanillaHS(base_env.BaseEnv):
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
     assert isinstance(actions[0], simulator.HSsimulation.Action)
-
     self.lookup_action_id_to_obj.clear()
     encoded_actions = []
     for action in actions:
@@ -181,6 +164,7 @@ class VanillaHS(base_env.BaseEnv):
     if self.simulation.game.ended:
       reward = self.game_value()
     else:
+      # reward = -0.01
       reward = 0.0
     return reward
 
@@ -189,7 +173,7 @@ class VanillaHS(base_env.BaseEnv):
 
   def play_opponent_turn(self):
     if self.opponent is None:
-      with suppress_stdout():
+      with utils.suppress_stdout():
         fireplace.utils.play_turn(self.simulation.game)
     else:
       raise NotImplementedError
@@ -202,25 +186,18 @@ class VanillaHS(base_env.BaseEnv):
     action = self.opponent.choose(observation, info)
     self.step(action)
 
-  def step(self, action: Tuple[int, int]):
-    action = self.decode_action(action)
+  def step(self, encoded_action: Tuple[int, int]):
+    action = self.decode_action(encoded_action)
     assert isinstance(action, simulator.HSsimulation.Action)
-
-    terminal = False
-
-    if self.is_end_turn(action):
-      try:
+    try:
+      if encoded_action == self.GameActions.PASS_TURN:
         self.simulation.game.end_turn()
-        self.play_opponent_turn()
-      except GameOver as e:
-        terminal = True
-    else:
-      try:
+        if self.simulation.game.current_player.controller.name == 'Opponent':
+          self.play_opponent_turn()
+      else:
         self.simulation.step(action)
-      except GameOver as e:
-        terminal = True
-
-    assert self.simulation.game.ended == terminal
+    except GameOver as e:
+      assert self.simulation.game.ended
 
     transition = self.gather_transition()
     return transition
@@ -235,7 +212,3 @@ class VanillaHS(base_env.BaseEnv):
       'original_info': {'possible_actions': possible_actions},
     }
     return game_observation, reward, terminal, info
-
-  @staticmethod
-  def is_end_turn(action):
-    return action.card is None

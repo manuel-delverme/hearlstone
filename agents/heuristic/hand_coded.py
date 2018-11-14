@@ -3,6 +3,29 @@ import numpy as np
 import collections
 
 
+class PassingAgent(agents.base_agent.Agent):
+  def __init__(self):
+    super().__init__()
+
+  def choose(self, observation: np.array, info: dict):
+    possible_actions = info['original_info']['possible_actions']
+
+    if len(possible_actions) == 1:
+      selected_action = possible_actions[0]
+    else:
+      for action in possible_actions:
+        if action.card is None:
+          selected_action = action
+
+    for enc_action, action_obj in zip(info['possible_actions'],
+                                      info['original_info'][
+                                        'possible_actions']):
+      if action_obj == selected_action:
+        return enc_action
+    else:
+      raise Exception
+
+
 class HeuristicAgent(agents.base_agent.Agent):
   def __init__(self):
     super().__init__()
@@ -55,7 +78,7 @@ class HeuristicAgent(agents.base_agent.Agent):
       else:
         selected_action = actions[0]
 
-    for enc_action, action_obj in zip(info['possible_actions'], info['original_info']['possible_actions']):
+    for enc_action, action_obj in zip(info['possible_actions'], info['original_info'][ 'possible_actions']):
       if action_obj == selected_action:
         return enc_action
     else:
