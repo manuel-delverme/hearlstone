@@ -1,72 +1,19 @@
-import math
 import tensorboardX
-import random
-import collections
-
-import gym
 import numpy as np
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
-import torch.autograd as autograd
-import torch.nn.functional as F
 import agents.base_agent
-from typing import Tuple, List
 
 from agents.learning import shared
+from agents.learning.models import dqn
+from agents.learning.models import dueling_dqn
 import tqdm
 
 USE_CUDA = torch.cuda.is_available()
 USE_CUDA = False
-Variable = lambda *args, **kwargs: autograd.Variable(
-  *args, **kwargs).cuda() if USE_CUDA else autograd.Variable(*args, **kwargs)
-
-
-class DQN(nn.Module):
-  def __init__(self, num_inputs, num_actions):
-    super(DQN, self).__init__()
-    self.num_inputs = num_inputs
-    self.num_actions = num_actions
-
-    self.layers = nn.Sequential(
-      nn.Linear(self.num_inputs + self.num_actions, 128),
-      nn.ReLU(),
-      # nn.Linear(128, 128),
-      # nn.ReLU(),
-
-      # 1 is the Q(s, a) value
-      nn.Linear(128, 1),
-      # nn.Linear(self.num_inputs + self.num_actions, 1),
-      # nn.Tanh()
-    )
-
-  def forward(self, x):
-    return self.layers(x)
-
-  def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float):
-    assert isinstance(state, np.ndarray)
-    assert isinstance(possible_actions, list)
-    assert isinstance(possible_actions[0], tuple)
-    assert isinstance(possible_actions[0][0], int)
-    assert isinstance(epsilon, float)
-
-    if random.random() > epsilon:
-      network_inputs = []
-      for possible_action in possible_actions:
-        network_input = np.append(state, possible_action)
-        network_inputs.append(network_input)
-
-      network_inputs = np.array(network_inputs)
-      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0),
-                               volatile=True)
-      q_values = self.forward(network_input).cpu().data.numpy()
-
-      best_action = np.argmax(q_values)
-      action = possible_actions[best_action]
-    else:
-      action, = random.sample(possible_actions, 1)
-    return action
+Variable = lambda *args, **kwargs: autograd.Variable(*args, **kwargs).cuda() if USE_CUDA else autograd.Variable(*args, **kwargs)
+import torch.autograd as autograd
 
 
 class DQNAgent(agents.base_agent.Agent):
@@ -74,10 +21,11 @@ class DQNAgent(agents.base_agent.Agent):
     should_flip_board=False,
     model_path="checkpoints/checkpoint.pth.tar", ):
 
-    # model = DQN(env.observation_space.shape[0], env.action_space.n)
-    self.model = DQN(num_inputs, num_actions)
+    self.model = dqn.DQN(num_inputs, num_actions)
+    # self.model = dueling_dqn.DuelingDQN(num_inputs, num_actions)
+    self.model.build_network()
     if USE_CUDA:
-     self.model = self.model.cuda()
+      self.model = self.model.cuda()
     self.optimizer = optim.Adam(
       self.model.parameters(),
       lr=1e-3,
@@ -96,7 +44,8 @@ class DQNAgent(agents.base_agent.Agent):
     print('loaded', model_path)
 
   def compute_td_loss(self, batch_size):
-    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(batch_size)
+    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(
+      batch_size)
 
     state = np.concatenate((state, action), axis=1)
     state = Variable(torch.FloatTensor(np.float32(state)))
@@ -132,21 +81,27 @@ class DQNAgent(agents.base_agent.Agent):
     observation, reward, terminal, info = env.reset()
     epsilon_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
 
-    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule), total=game_steps):
+    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule),
+                                      total=game_steps):
 
       action = self.model.act(observation, info['possible_actions'], epsilon)
       next_observation, reward, done, info = env.step(action)
-      self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
+      self.learn_from_experience(observation, action, reward, next_observation,
+                                 done, info, step_nr)
 
       # self.summary_writer.add_scalar('game_stats/opponent_hp', env.simulation.opponent.hero.health, step_nr)
       # self.summary_writer.add_scalar('game_stats/self_hp', env.simulation.player.hero.health, step_nr)
-      self.summary_writer.add_scalar('game_stats/diff_hp', env.simulation.player.hero.health - env.simulation.opponent.hero.health, step_nr)
+      self.summary_writer.add_scalar('game_stats/diff_hp',
+                                     env.simulation.player.hero.health - env.simulation.opponent.hero.health,
+                                     step_nr)
 
       observation = next_observation
       if done:
         game_value = env.game_value()
-        self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
-        self.summary_writer.add_scalar('game_stats/game_value', game_value, step_nr)
+        self.summary_writer.add_scalar('game_stats/end_turn',
+                                       env.simulation.game.turn, step_nr)
+        self.summary_writer.add_scalar('game_stats/game_value', game_value,
+                                       step_nr)
         assert reward in (-1.0, 0.0, 1.0)
         observation, reward, terminal, info = env.reset()
       else:
@@ -159,7 +114,8 @@ class DQNAgent(agents.base_agent.Agent):
     board_size = observation.shape[1]
     board_center = board_size // 2
     if self.should_flip_board:
-      observation = np.concatenate(observation[board_center:], observation[board_center:], axis=1)
+      observation = np.concatenate(observation[board_center:],
+                                   observation[board_center:], axis=1)
     action = self.model.act(observation, possible_actions, 0.0)
     return action
 
