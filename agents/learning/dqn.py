@@ -96,8 +96,7 @@ class DQNAgent(agents.base_agent.Agent):
     print('loaded', model_path)
 
   def compute_td_loss(self, batch_size):
-    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(
-      batch_size)
+    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(batch_size)
 
     state = np.concatenate((state, action), axis=1)
     state = Variable(torch.FloatTensor(np.float32(state)))

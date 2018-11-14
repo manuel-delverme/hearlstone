@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 
 import fireplace
 import fireplace.logging
@@ -17,7 +18,7 @@ class VanillaHS(base_env.BaseEnv):
   class GameActions(object):
     PASS_TURN = (-1, -1)
 
-  def __init__(self, max_cards_in_game=2, skip_mulligan=False,
+  def __init__(self, max_cards_in_board=2, skip_mulligan=False,
     cheating_opponent=False):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -35,7 +36,8 @@ class VanillaHS(base_env.BaseEnv):
 
     logging.getLogger("fireplace").setLevel(logging.ERROR)
 
-    simulator.HSsimulation._MAX_CARDS_IN_BOARD = max_cards_in_game
+    simulator.HSsimulation._MAX_CARDS_IN_BOARD = max_cards_in_board
+    self.max_cards_in_board = max_cards_in_board
     self.skip_mulligan = skip_mulligan
     self.lookup_action_id_to_obj = {}
     self.cheating_opponent = cheating_opponent
@@ -92,10 +94,20 @@ class VanillaHS(base_env.BaseEnv):
       skip_mulligan=self.skip_mulligan,
       cheating_opponent=self.cheating_opponent,
     )
+    cards = []
     for player in (self.simulation.player1, self.simulation.player2):
       last_card = player.hand[-1]
       if last_card.id == "GAME_005":  # "The Coin"
         last_card.discard()
+
+      for card in player.deck:
+        cards.append((card.atk, card.health))
+      for card in player.hand:
+        cards.append((card.atk, card.health))
+    cards = np.array(cards)
+
+    card_max = list(cards.max(axis=0))
+    self.normalization_factors = np.array(card_max * self.max_cards_in_board + [1, 30] + card_max * self.max_cards_in_board + [1, 30])
     self.games_played = 0
     self.games_finished = 0
     self.info = None
@@ -152,13 +164,8 @@ class VanillaHS(base_env.BaseEnv):
     self.actor_hero = self.simulation.player.hero
 
     self.games_played += 1
-    possible_actions = self.simulation.actions()
-    game_observation = self.simulation.observe()
 
-    reward = self.calculate_reward()
-
-    info = {'possible_actions': possible_actions}
-    return game_observation, reward, False, info
+    return self.gather_transition()
 
   def calculate_reward(self):
     if self.simulation.game.ended:
@@ -211,4 +218,7 @@ class VanillaHS(base_env.BaseEnv):
       'possible_actions': self.encode_actions(possible_actions),
       'original_info': {'possible_actions': possible_actions},
     }
+    game_observation = game_observation / self.normalization_factors
+    game_observation -= 0.5
+
     return game_observation, reward, terminal, info
