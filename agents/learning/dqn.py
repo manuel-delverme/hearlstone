@@ -150,7 +150,7 @@ class DQNAgent(agents.base_agent.Agent):
         assert reward in (-1.0, 0.0, 1.0)
         observation, reward, terminal, info = env.reset()
       else:
-        assert reward == 0.0
+        assert abs(reward) < 1
 
     torch.save(self.model.state_dict(), self.model_path)
 

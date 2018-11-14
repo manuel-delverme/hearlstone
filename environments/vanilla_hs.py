@@ -107,7 +107,10 @@ class VanillaHS(base_env.BaseEnv):
     cards = np.array(cards)
 
     card_max = list(cards.max(axis=0))
-    self.normalization_factors = np.array(card_max * self.max_cards_in_board + [1, 30] + card_max * self.max_cards_in_board + [1, 30])
+    self.normalization_factors = np.array(
+      card_max * self.max_cards_in_board + [1,
+                                            30] + card_max * self.max_cards_in_board + [
+        1, 30])
     self.games_played = 0
     self.games_finished = 0
     self.info = None
@@ -173,6 +176,9 @@ class VanillaHS(base_env.BaseEnv):
     else:
       # reward = -0.01
       reward = 0.0
+      # reward = -len(
+      #  self.simulation.opponent.characters[1:]) / self.max_cards_in_board
+      # reward /= 100
     return reward
 
   def set_opponent(self, opponent):

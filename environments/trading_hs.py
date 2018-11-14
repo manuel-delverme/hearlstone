@@ -2,7 +2,6 @@ from environments import vanilla_hs
 from typing import Tuple, List
 from agents.heuristic import hand_coded
 from environments import simulator
-from copy import deepcopy
 
 
 class TradingHS(vanilla_hs.VanillaHS):
@@ -41,7 +40,7 @@ class TradingHS(vanilla_hs.VanillaHS):
 
     action = self.minion_player_agent.choose(o, restricted_info)
     o, r, t, info = super(TradingHS, self).step(action)
-    assert r == 0.0
+    assert abs(r) < 1
     return self.gather_transition()
 
   @staticmethod

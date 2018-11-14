@@ -73,13 +73,15 @@ class HSsimulation(object):
   }
 
   def __init__(self, skip_mulligan=False, cheating_opponent=False):
+    player1_class = CardClass.MAGE.default_hero
+    player2_class = CardClass.MAGE.default_hero
+    deck1, deck2 = self.generate_decks(self._DECK_SIZE, player1_class, player2_class)
 
-    deck1, deck2 = self.generate_decks(self._DECK_SIZE)
-    self.player1 = Player("Agent", deck1, CardClass.MAGE.default_hero)
-    self.player1.max_hand_size = self._MAX_CARDS_IN_HAND
-
+    self.player1 = Player("Agent", deck1, player1_class)
+    self.player2 = Player("Opponent", deck1, player2_class)
     # self.player2 = Player("Opponent", deck2, CardClass.WARRIOR.default_hero)
-    self.player2 = Player("Opponent", deck1, CardClass.MAGE.default_hero)
+
+    self.player1.max_hand_size = self._MAX_CARDS_IN_HAND
     self.player2.max_hand_size = self._MAX_CARDS_IN_HAND
 
     self.cheating_opponent = cheating_opponent
