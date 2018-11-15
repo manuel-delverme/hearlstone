@@ -45,3 +45,7 @@ def plot(frame_idx, rewards, losses, win_ratio, action_stats, epsilon, end_turns
       np.mean(rewards),
       epsilon
     ))
+
+
+def sync_target(source_network, target_network):
+  target_network.load_state_dict(source_network.state_dict())
