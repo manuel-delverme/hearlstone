@@ -10,8 +10,8 @@ class TradingHS(vanilla_hs.VanillaHS):
     super().__init__(
       skip_mulligan=True,
       cheating_opponent=False,
-      starting_hp=1,
-      max_cards_in_board=1,
+      starting_hp=30,
+      max_cards_in_board=7,
     )
 
   def reset(self):

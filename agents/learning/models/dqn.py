@@ -1,11 +1,12 @@
-from agents.learning import base_q_net
 import torch.nn as nn
 
 
-class DQN(base_q_net.BaseQLearner):
+class DQN(nn.Module):
   def __init__(self, num_inputs, num_actions):
-    super(DQN, self).__init__(num_inputs, num_actions)
     self.layers = None
+    self.num_inputs = num_inputs
+    self.num_actions = num_actions
+    super(DQN, self).__init__()
 
   def build_network(self):
     self.layers = nn.Sequential(

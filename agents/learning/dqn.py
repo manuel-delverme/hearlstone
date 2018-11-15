@@ -4,10 +4,11 @@ import numpy as np
 import torch
 import torch.optim as optim
 import agents.base_agent
+import random
+from typing import Tuple, List
 
 from agents.learning import shared
 from agents.learning.models import dqn
-from agents.learning.models import dueling_dqn
 import tqdm
 
 USE_CUDA = torch.cuda.is_available()
@@ -16,20 +17,23 @@ import torch.autograd as autograd
 
 
 class DQNAgent(agents.base_agent.Agent):
-  def __init__(self, num_inputs, num_actions, gamma,
-    should_flip_board=False,
-    model_path="checkpoints/checkpoint.pth.tar", ):
+  def __init__(self, num_inputs, num_actions, gamma, should_flip_board=False, model_path="checkpoints/checkpoint.pth.tar"):
 
     self.model = dqn.DQN(num_inputs, num_actions)
-    # self.model = dueling_dqn.DuelingDQN(num_inputs, num_actions)
     self.model.build_network()
     if USE_CUDA:
       self.model = self.model.cuda()
-    self.optimizer = optim.Adam(
-      self.model.parameters(),
-      lr=1e-4,
-    )
-    self.replay_buffer = shared.ReplayBuffer(10000)
+    params = self.model.parameters()
+
+    if target:
+      self.target = dqn.DQN(num_inputs, num_actions)
+      self.target.build_network()
+
+      if USE_CUDA:
+        self.target = self.target.cuda()
+
+    self.optimizer = optim.Adam(params, lr=1e-5, )
+    self.replay_buffer = shared.ReplayBuffer(1000)
     self.gamma = gamma
     self.should_flip_board = should_flip_board
     self.model_path = model_path
@@ -57,8 +61,8 @@ class DQNAgent(agents.base_agent.Agent):
     next_actions = np.ones_like(action) * -1
 
     next_state = np.concatenate((next_state, next_actions), axis=1)
-    next_state = Variable(torch.FloatTensor(np.float32(next_state)),
-                          volatile=True)
+    next_state = Variable(torch.FloatTensor(np.float32(next_state)), volatile=True)
+
     next_q_values = self.model(next_state)
 
     q_values = q_values.squeeze()
@@ -70,10 +74,9 @@ class DQNAgent(agents.base_agent.Agent):
 
     self.optimizer.zero_grad()
     loss.backward()
-    for n, p in filter(lambda np: np[1].grad is not None, self.model.named_parameters()):
-        # print(n, p.grad.data.min(), p.grad.data.max())
-        self.summary_writer.add_histogram('grad.' + n, p.grad.data.cpu().numpy(), global_step=step_nr)
-        self.summary_writer.add_histogram(n, p.data.cpu().numpy(), global_step=step_nr)
+    # for n, p in filter(lambda np: np[1].grad is not None, self.model.named_parameters()):
+    #   self.summary_writer.add_histogram('grad.' + n, p.grad.data.cpu().numpy(), global_step=step_nr)
+    #   self.summary_writer.add_histogram(n, p.data.cpu().numpy(), global_step=step_nr)
 
     self.optimizer.step()
     return loss
@@ -84,13 +87,14 @@ class DQNAgent(agents.base_agent.Agent):
 
     for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule), total=game_steps):
 
-      self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
-      action = self.model.act(observation, info['possible_actions'], epsilon, step_nr=step_nr)
+      action = self.act(observation, info['possible_actions'], epsilon, step_nr=step_nr)
       next_observation, reward, done, info = env.step(action)
       self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
-      self.summary_writer.add_scalar('game_stats/diff_hp', env.simulation.player.hero.health - env.simulation.opponent.hero.health, step_nr)
 
       observation = next_observation
+
+      self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
+      # self.summary_writer.add_scalar('game_stats/diff_hp', env.simulation.player.hero.health - env.simulation.opponent.hero.health, step_nr)
       if done:
         game_value = env.game_value()
         self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
@@ -100,25 +104,49 @@ class DQNAgent(agents.base_agent.Agent):
         observation, reward, terminal, info = env.reset()
       else:
         assert abs(reward) < 1
+
       if step_nr % checkpoint_every == 0:
         torch.save(self.model.state_dict(), self.model_path)
 
   def choose(self, observation, info):
-    possible_actions = info['possible_actions']
-    board_size = observation.shape[1]
-    board_center = board_size // 2
+    board_center = observation.shape[1] // 2
     if self.should_flip_board:
-      observation = np.concatenate(observation[board_center:],
-                                   observation[board_center:], axis=1)
-    action = self.model.act(observation, possible_actions, 0.0)
+      observation = np.concatenate(observation[board_center:], observation[board_center:], axis=1)
+
+    action = self.model.act(observation, info['possible_actions'], 0.0)
     return action
 
-  def learn_from_experience(self, observation, action, reward, next_state, done,
-    info, step_nr):
+  def learn_from_experience(self, observation, action, reward, next_state, done, info, step_nr):
     self.replay_buffer.push(observation, action, reward, next_state, done, info)
     if len(self.replay_buffer) > self.batch_size:
       loss = self.compute_td_loss(self.batch_size, step_nr)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
+
+  def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float, step_nr: int = None):
+    assert isinstance(state, np.ndarray)
+    assert isinstance(possible_actions, list)
+    assert isinstance(possible_actions[0], tuple)
+    assert isinstance(possible_actions[0][0], int)
+    assert isinstance(epsilon, float)
+
+    if random.random() > epsilon:
+      network_inputs = []
+      for possible_action in possible_actions:
+        network_input = np.append(state, possible_action)
+        network_inputs.append(network_input)
+
+      network_inputs = np.array(network_inputs)
+      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0), volatile=True)
+      q_values = self.model.forward(network_input).data.cpu().numpy()
+
+      # if step_nr is not None:
+      #   self.summary_writer.add_histogram('q_values', q_values, global_step=step_nr)
+
+      best_action = np.argmax(q_values)
+      action = possible_actions[best_action]
+    else:
+      action, = random.sample(possible_actions, 1)
+    return action
 
   def __del__(self):
     self.summary_writer.close()
