@@ -11,7 +11,6 @@ from agents.learning.models import dueling_dqn
 import tqdm
 
 USE_CUDA = torch.cuda.is_available()
-USE_CUDA = False
 Variable = lambda *args, **kwargs: autograd.Variable(*args, **kwargs).cuda() if USE_CUDA else autograd.Variable(*args, **kwargs)
 import torch.autograd as autograd
 
@@ -28,7 +27,7 @@ class DQNAgent(agents.base_agent.Agent):
       self.model = self.model.cuda()
     self.optimizer = optim.Adam(
       self.model.parameters(),
-      lr=1e-3,
+      lr=1e-4,
     )
     self.replay_buffer = shared.ReplayBuffer(10000)
     self.gamma = gamma
@@ -43,13 +42,11 @@ class DQNAgent(agents.base_agent.Agent):
     self.model.load_state_dict(torch.load(model_path))
     print('loaded', model_path)
 
-  def compute_td_loss(self, batch_size):
-    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(
-      batch_size)
+  def compute_td_loss(self, batch_size, step_nr):
+    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(batch_size)
 
     state = np.concatenate((state, action), axis=1)
     state = Variable(torch.FloatTensor(np.float32(state)))
-    # action = Variable(torch.LongTensor(action))
 
     reward = Variable(torch.FloatTensor(reward))
     done = Variable(torch.FloatTensor(done))
@@ -73,41 +70,38 @@ class DQNAgent(agents.base_agent.Agent):
 
     self.optimizer.zero_grad()
     loss.backward()
-    self.optimizer.step()
+    for n, p in filter(lambda np: np[1].grad is not None, self.model.named_parameters()):
+        # print(n, p.grad.data.min(), p.grad.data.max())
+        self.summary_writer.add_histogram('grad.' + n, p.grad.data.cpu().numpy(), global_step=step_nr)
+        self.summary_writer.add_histogram(n, p.data.cpu().numpy(), global_step=step_nr)
 
+    self.optimizer.step()
     return loss
 
-  def train(self, env, game_steps):
+  def train(self, env, game_steps, checkpoint_every=10000):
     observation, reward, terminal, info = env.reset()
     epsilon_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
 
-    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule),
-                                      total=game_steps):
+    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule), total=game_steps):
 
-      action = self.model.act(observation, info['possible_actions'], epsilon)
+      self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
+      action = self.model.act(observation, info['possible_actions'], epsilon, step_nr=step_nr)
       next_observation, reward, done, info = env.step(action)
-      self.learn_from_experience(observation, action, reward, next_observation,
-                                 done, info, step_nr)
-
-      # self.summary_writer.add_scalar('game_stats/opponent_hp', env.simulation.opponent.hero.health, step_nr)
-      # self.summary_writer.add_scalar('game_stats/self_hp', env.simulation.player.hero.health, step_nr)
-      self.summary_writer.add_scalar('game_stats/diff_hp',
-                                     env.simulation.player.hero.health - env.simulation.opponent.hero.health,
-                                     step_nr)
+      self.learn_from_experience(observation, action, reward, next_observation, done, info, step_nr)
+      self.summary_writer.add_scalar('game_stats/diff_hp', env.simulation.player.hero.health - env.simulation.opponent.hero.health, step_nr)
 
       observation = next_observation
       if done:
         game_value = env.game_value()
-        self.summary_writer.add_scalar('game_stats/end_turn',
-                                       env.simulation.game.turn, step_nr)
-        self.summary_writer.add_scalar('game_stats/game_value', game_value,
-                                       step_nr)
+        self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
+        self.summary_writer.add_scalar('game_stats/game_value', game_value, step_nr)
+
         assert reward in (-1.0, 0.0, 1.0)
         observation, reward, terminal, info = env.reset()
       else:
         assert abs(reward) < 1
-
-    torch.save(self.model.state_dict(), self.model_path)
+      if step_nr % checkpoint_every == 0:
+        torch.save(self.model.state_dict(), self.model_path)
 
   def choose(self, observation, info):
     possible_actions = info['possible_actions']
@@ -123,7 +117,7 @@ class DQNAgent(agents.base_agent.Agent):
     info, step_nr):
     self.replay_buffer.push(observation, action, reward, next_state, done, info)
     if len(self.replay_buffer) > self.batch_size:
-      loss = self.compute_td_loss(self.batch_size)
+      loss = self.compute_td_loss(self.batch_size, step_nr)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
 
   def __del__(self):

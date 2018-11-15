@@ -72,7 +72,8 @@ class HSsimulation(object):
     'silenced': None,
   }
 
-  def __init__(self, skip_mulligan=False, cheating_opponent=False):
+  def __init__(self, skip_mulligan=False, cheating_opponent=False,
+    starting_hp=None):
     player1_class = CardClass.MAGE.default_hero
     player2_class = CardClass.MAGE.default_hero
     deck1, deck2 = self.generate_decks(self._DECK_SIZE, player1_class, player2_class)
@@ -105,6 +106,9 @@ class HSsimulation(object):
           self.player2.hero._max_health = 100
           self.player2.max_mana = 10
           self.player1.hero._max_health = 1
+        elif starting_hp is not None:
+          self.player1.hero._max_health = starting_hp
+          self.player2.hero._max_health = starting_hp
 
       except IndexError as e:
         print("init failed", e)

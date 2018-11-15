@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from agents.learning.models import base_q_net
+from agents.learning import base_q_net
 
 
-class DuelingDQN(base_q_net.base_QN):
+class DuelingDQN(base_q_net.BaseQLearner):
   def __init__(self, num_inputs, num_actions):
     super().__init__(num_inputs, num_actions)
     self.feature = None

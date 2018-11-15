@@ -7,12 +7,14 @@ import environments.trading_hs
 import agents.heuristic.random_agent
 import agents.heuristic.hand_coded
 import agents.learning.dqn
+
+
 # gin.parse_config_file('config.gin')
 
 
 # @gin.configurable
 def train(
-  train_steps=1000000,
+  train_steps=10000,
   test_games=100,
   gamma=0.99,
 ):

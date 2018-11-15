@@ -8,14 +8,12 @@ import torch.nn as nn
 import torch.autograd as autograd
 
 USE_CUDA = torch.cuda.is_available()
-Variable = lambda *args, **kwargs: autograd.Variable(*args,
-                                                     **kwargs).cuda() if USE_CUDA else autograd.Variable(
-  *args, **kwargs)
+Variable = lambda *args, **kwargs: autograd.Variable(*args, **kwargs).cuda() if USE_CUDA else autograd.Variable(*args, **kwargs)
 
 
-class base_QN(nn.Module):
+class BaseQLearner(nn.Module):
   def __init__(self, num_inputs, num_actions):
-    super(base_QN, self).__init__()
+    super(BaseQLearner, self).__init__()
     self.num_inputs = num_inputs
     self.num_actions = num_actions
 
@@ -25,8 +23,7 @@ class base_QN(nn.Module):
   def forward(self, x):
     raise NotImplementedError
 
-  def act(self, state: np.array, possible_actions: List[Tuple[int, int]],
-    epsilon: float):
+  def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float, step_nr: int=None):
     assert isinstance(state, np.ndarray)
     assert isinstance(possible_actions, list)
     assert isinstance(possible_actions[0], tuple)
@@ -40,9 +37,11 @@ class base_QN(nn.Module):
         network_inputs.append(network_input)
 
       network_inputs = np.array(network_inputs)
-      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0),
-                               volatile=True)
-      q_values = self.forward(network_input).cpu().data.numpy()
+      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0), volatile=True)
+      q_values = self.forward(network_input).data.cpu().numpy()
+
+      if step_nr is not None:
+       self.summary_writer.add_histogram('q_values', q_values, global_step=step_nr)
 
       best_action = np.argmax(q_values)
       action = possible_actions[best_action]

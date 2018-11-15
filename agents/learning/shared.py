@@ -27,6 +27,7 @@ def epsilon_schedule(
 ):
   step_nr = 0
   while True:
+    step_nr += 1
     yield epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1. * step_nr / epsilon_decay)
 
 

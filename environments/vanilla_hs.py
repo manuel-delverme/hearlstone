@@ -19,10 +19,13 @@ class VanillaHS(base_env.BaseEnv):
     PASS_TURN = (-1, -1)
 
   def __init__(self, max_cards_in_board=2, skip_mulligan=False,
-    cheating_opponent=False):
+    cheating_opponent=False, starting_hp=30):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
     in front of each player.
+
+    Args:
+      starting_hp:
     """
     fireplace.cards.db.initialized = True
     print("Initializing card database")
@@ -41,6 +44,7 @@ class VanillaHS(base_env.BaseEnv):
     self.skip_mulligan = skip_mulligan
     self.lookup_action_id_to_obj = {}
     self.cheating_opponent = cheating_opponent
+    self.starting_hp = starting_hp
 
     self.reinit_game()
 
@@ -93,6 +97,7 @@ class VanillaHS(base_env.BaseEnv):
     self.simulation = simulator.HSsimulation(
       skip_mulligan=self.skip_mulligan,
       cheating_opponent=self.cheating_opponent,
+      starting_hp=self.starting_hp,
     )
     cards = []
     for player in (self.simulation.player1, self.simulation.player2):
