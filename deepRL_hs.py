@@ -6,7 +6,7 @@ import environments
 import environments.trading_hs
 import agents.heuristic.random_agent
 import agents.heuristic.hand_coded
-import agents.learning.dqn
+import agents.learning.dqn_agent
 
 
 # gin.parse_config_file('config.gin')
@@ -20,7 +20,7 @@ def train(
 ):
   hs_game = environments.trading_hs.TradingHS()
   try:
-    opponent = agents.learning.dqn.DQNAgent(
+    opponent = agents.learning.dqn_agent.DQNAgent(
       hs_game.observation_space,
       hs_game.action_space,
       should_flip_board=True,
@@ -33,7 +33,7 @@ def train(
     # opponent = agents.heuristic.random_agent.RandomAgent()
   hs_game.set_opponent(opponent)
 
-  player = agents.learning.dqn.DQNAgent(
+  player = agents.learning.dqn_agent.DQNAgent(
     hs_game.observation_space,
     hs_game.action_space,
     gamma=gamma,

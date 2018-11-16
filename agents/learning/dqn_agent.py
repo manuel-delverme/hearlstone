@@ -10,18 +10,22 @@ from typing import Tuple, List
 from agents.learning import shared
 from agents.learning.models import dqn
 import tqdm
+import torch.autograd as autograd
 
 USE_CUDA = torch.cuda.is_available()
 USE_CUDA = False
-Variable = lambda *args, **kwargs: autograd.Variable(*args,
-                                                     **kwargs).cuda() if USE_CUDA else autograd.Variable(
-  *args, **kwargs)
-import torch.autograd as autograd
+
+
+def Variable(*args, **kwargs):
+  v = autograd.Variable(*args, **kwargs)
+  if USE_CUDA:
+    v.cuda()
+  return v
 
 
 class DQNAgent(agents.base_agent.Agent):
   def __init__(self, num_inputs, num_actions, gamma, should_flip_board=False,
-    use_target=True, model_path="checkpoints/checkpoint.pth.tar"):
+               use_target=True, model_path="checkpoints/checkpoint.pth.tar"):
 
     self.network = dqn.DQN(num_inputs, num_actions)
     self.network.build_network()
@@ -38,11 +42,11 @@ class DQNAgent(agents.base_agent.Agent):
         self.target_network = self.target_network.cuda()
 
     self.optimizer = optim.Adam(params, lr=1e-5, )
-    self.replay_buffer = shared.ReplayBuffer(1000)
+    self.replay_buffer = shared.ReplayBuffer(10000)
     self.gamma = gamma
     self.should_flip_board = should_flip_board
     self.model_path = model_path
-    self.batch_size = 64
+    self.batch_size = 128
     self.summary_writer = tensorboardX.SummaryWriter()
 
   def load_model(self, model_path=None):
@@ -52,8 +56,7 @@ class DQNAgent(agents.base_agent.Agent):
     print('loaded', model_path)
 
   def compute_td_loss(self, batch_size, step_nr):
-    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(
-      batch_size)
+    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(batch_size)
 
     state_action = np.concatenate((state, action), axis=1)
     state_action = Variable(torch.FloatTensor(np.float32(state_action)))
@@ -138,14 +141,14 @@ class DQNAgent(agents.base_agent.Agent):
     return action
 
   def learn_from_experience(self, observation, action, reward, next_state, done,
-    info, step_nr):
+                            info, step_nr):
     self.replay_buffer.push(observation, action, reward, next_state, done, info)
     if len(self.replay_buffer) > self.batch_size:
       loss = self.compute_td_loss(self.batch_size, step_nr)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
 
   def act(self, state: np.array, possible_actions: List[Tuple[int, int]],
-    epsilon: float, step_nr: int = None):
+          epsilon: float, step_nr: int = None):
     assert isinstance(state, np.ndarray)
     assert isinstance(possible_actions, list)
     assert isinstance(possible_actions[0], tuple)

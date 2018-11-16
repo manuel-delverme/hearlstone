@@ -1,16 +1,16 @@
 import numpy as np
 
 import torch
-from agents.learning import dqn
+from agents.learning import dqn_agent
 import random
 
 
-class DQNAgent(dqn.DQNAgent):
+class DQNAgent(dqn_agent.DQNAgent):
   def __init__(self, *args, **kwargs):
     self.model = None
     super(DQNAgent, self).__init__(*args, **kwargs)
     assert self.model is not None
-    self.target = dqn.DQN(self.num_inputs, self.num_actions)
+    self.target = dqn_agent.DQN(self.num_inputs, self.num_actions)
     self.target.build_network()
 
   def load_model(self, model_path=None):
