@@ -7,6 +7,7 @@ import agents.base_agent
 import random
 from typing import Tuple, List
 
+import agents.learning.replay_buffers
 from agents.learning import shared
 from agents.learning.models import dqn
 import tqdm
@@ -42,7 +43,7 @@ class DQNAgent(agents.base_agent.Agent):
         self.target_network = self.target_network.cuda()
 
     self.optimizer = optim.Adam(params, lr=1e-5, )
-    self.replay_buffer = shared.ReplayBuffer(10000)
+    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(10000)
     self.gamma = gamma
     self.should_flip_board = should_flip_board
     self.model_path = model_path
@@ -55,14 +56,13 @@ class DQNAgent(agents.base_agent.Agent):
     self.network.load_state_dict(torch.load(model_path))
     print('loaded', model_path)
 
-  def compute_td_loss(self, batch_size, step_nr):
-    state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(batch_size)
-
+  def compute_td_loss(self, state, action, reward, next_state, done, next_actions, indices, weights):
     state_action = np.concatenate((state, action), axis=1)
     state_action = Variable(torch.FloatTensor(np.float32(state_action)))
 
     reward = Variable(torch.FloatTensor(reward))
     done = Variable(torch.FloatTensor(done))
+    weights = Variable(torch.FloatTensor(weights))
 
     # TODO: fixme, this is just WRONG, the assumption is that 1 action then pass
     # TODO: it holds for trading game, but nothing else, not even the tradingHS
@@ -70,8 +70,7 @@ class DQNAgent(agents.base_agent.Agent):
     next_actions = np.ones_like(action) * -1
 
     next_state_action = np.concatenate((next_state, next_actions), axis=1)
-    next_state_action = Variable(
-      torch.FloatTensor(np.float32(next_state_action)))
+    next_state_action = Variable(torch.FloatTensor(np.float32(next_state_action)))
 
     q_values = self.network(state_action)
     q_values = q_values.squeeze()
@@ -89,33 +88,38 @@ class DQNAgent(agents.base_agent.Agent):
     next_q_values = next_q_values.squeeze()
     expected_q_values = reward + self.gamma * next_q_values * (1 - done)
 
-    loss = torch.mean((q_values - expected_q_values) ** 2)
+    loss = (q_values - expected_q_values.detach()).pow(2) * weights
+    priorities = loss + 1e-5
+    loss = loss.mean()
 
     self.optimizer.zero_grad()
     loss.backward()
     # for n, p in filter(lambda np: np[1].grad is not None, self.model.named_parameters()):
     # self.summary_writer.add_histogram('grad.' + n, p.grad.data.cpu().numpy(), global_step=step_nr)
     # self.summary_writer.add_histogram(n, p.data.cpu().numpy(), global_step=step_nr)
-
+    self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
     self.optimizer.step()
+
     return loss
 
   def train(self, env, game_steps, checkpoint_every=10000, target_update_every=100, ):
     observation, reward, terminal, info = env.reset()
     epsilon_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
+    beta_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
 
-    for step_nr, epsilon in tqdm.tqdm(zip(range(game_steps), epsilon_schedule),
-                                      total=game_steps):
+    iteration_params = zip(range(game_steps), epsilon_schedule, beta_schedule)
 
-      action = self.act(observation, info['possible_actions'], epsilon,
-                        step_nr=step_nr)
+    for step_nr, epsilon, beta in tqdm.tqdm(iteration_params, total=game_steps):
+
+      action = self.act(observation, info['possible_actions'], epsilon, step_nr=step_nr)
+
       next_observation, reward, done, info = env.step(action)
-      self.learn_from_experience(observation, action, reward, next_observation,
-                                 done, info, step_nr)
+      self.learn_from_experience(observation, action, reward, next_observation, done, info['possible_actions'], step_nr, beta)
 
       observation = next_observation
 
       self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
+
       if done:
         game_value = env.game_value()
         self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
@@ -134,21 +138,19 @@ class DQNAgent(agents.base_agent.Agent):
   def choose(self, observation, info):
     board_center = observation.shape[1] // 2
     if self.should_flip_board:
-      observation = np.concatenate(observation[board_center:],
-                                   observation[board_center:], axis=1)
+      observation = np.concatenate(observation[board_center:], observation[:board_center], axis=1)
 
     action = self.network.act(observation, info['possible_actions'], 0.0)
     return action
 
-  def learn_from_experience(self, observation, action, reward, next_state, done,
-                            info, step_nr):
-    self.replay_buffer.push(observation, action, reward, next_state, done, info)
+  def learn_from_experience(self, observation, action, reward, next_state, done, next_actions, step_nr, beta):
+    self.replay_buffer.push(observation, action, reward, next_state, done, next_actions)
     if len(self.replay_buffer) > self.batch_size:
-      loss = self.compute_td_loss(self.batch_size, step_nr)
+      state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(self.batch_size, beta)
+      loss = self.compute_td_loss(state, action, reward, next_state, done, next_actions, indices, weights)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
 
-  def act(self, state: np.array, possible_actions: List[Tuple[int, int]],
-          epsilon: float, step_nr: int = None):
+  def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float, step_nr: int = None):
     assert isinstance(state, np.ndarray)
     assert isinstance(possible_actions, list)
     assert isinstance(possible_actions[0], tuple)
