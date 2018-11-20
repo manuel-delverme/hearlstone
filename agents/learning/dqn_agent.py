@@ -43,7 +43,7 @@ class DQNAgent(agents.base_agent.Agent):
         self.target_network = self.target_network.cuda()
 
     self.optimizer = optim.Adam(params, lr=1e-5, )
-    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(10000)
+    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(10000, num_inputs, num_actions)
     self.gamma = gamma
     self.should_flip_board = should_flip_board
     self.model_path = model_path
@@ -73,7 +73,6 @@ class DQNAgent(agents.base_agent.Agent):
     next_state_action = Variable(torch.FloatTensor(np.float32(next_state_action)))
 
     q_values = self.network(state_action)
-    q_values = q_values.squeeze()
 
     if self.use_target:
       # not needded because of the above TODOs
@@ -85,7 +84,6 @@ class DQNAgent(agents.base_agent.Agent):
     else:
       next_q_values = self.network(next_state_action)
 
-    next_q_values = next_q_values.squeeze()
     expected_q_values = reward + self.gamma * next_q_values * (1 - done)
 
     loss = (q_values - expected_q_values.detach()).pow(2) * weights
@@ -144,6 +142,9 @@ class DQNAgent(agents.base_agent.Agent):
     return action
 
   def learn_from_experience(self, observation, action, reward, next_state, done, next_actions, step_nr, beta):
+    action = np.array(action)
+    reward = np.array(reward)
+    done = np.array(done)
     self.replay_buffer.push(observation, action, reward, next_state, done, next_actions)
     if len(self.replay_buffer) > self.batch_size:
       state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(self.batch_size, beta)
@@ -152,7 +153,7 @@ class DQNAgent(agents.base_agent.Agent):
 
   def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float, step_nr: int = None):
     assert isinstance(state, np.ndarray)
-    assert isinstance(possible_actions, list)
+    assert isinstance(possible_actions, tuple)
     assert isinstance(possible_actions[0], tuple)
     assert isinstance(possible_actions[0][0], int)
     assert isinstance(epsilon, float)

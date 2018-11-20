@@ -67,7 +67,7 @@ class VanillaHS(base_env.BaseEnv):
       action_id = self.action_to_id(action)
       self.lookup_action_id_to_obj[action_id] = action
       encoded_actions.append(action_id)
-    return encoded_actions
+    return tuple(encoded_actions)
 
   def decode_action(self, encoded_action: Tuple[int, int]):
     assert isinstance(encoded_action, tuple)
