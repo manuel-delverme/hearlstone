@@ -22,7 +22,7 @@ class DQNAgent(dqn_agent.DQNAgent):
       new_param = tau * param.data + (1.0 - tau) * t_param.data
       t_param.data.copy_(new_param)
 
-  def compute_td_loss(self, batch_size, step_nr):
+  def train_step(self, batch_size, step_nr):
     state, action, reward, next_state, done, next_actions = self.replay_buffer.sample(batch_size)
 
     state = np.concatenate((state, action), axis=1)

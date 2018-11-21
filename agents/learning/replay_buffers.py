@@ -55,7 +55,6 @@ class PrioritizedBuffer(object):
     probabilities = priorities / priorities.sum()
 
     indices = np.random.choice(self.filled_up_to, batch_size, p=probabilities)
-    # samples = []
     states, actions, rewards, next_states, dones = self._decompact(self.buffer[indices])
     next_actions = [self.next_actions_buffer[idx] for idx in indices]
 
@@ -75,7 +74,8 @@ class PrioritizedBuffer(object):
 
 
 class ReplayBuffer(object):
-  def __init__(self, capacity, state_size, action_size, prob_alpha, ):
+  def __init__(self, capacity, state_size, action_size, prob_alpha=None, ):
+    raise DeprecationWarning('replace w/ prioritized and uniform probs')
     self.buffer = deque(maxlen=capacity)
 
   def push(self, state, action, reward, next_state, done, next_actions):

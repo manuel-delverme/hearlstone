@@ -9,6 +9,7 @@ class DuelingDQN(base_q_net.BaseQLearner):
     self.feature = None
     self.advantage = None
     self.value = None
+    self.cuda()
 
   def build_network(self):
     hidden_size = 128
@@ -29,6 +30,9 @@ class DuelingDQN(base_q_net.BaseQLearner):
     )
 
   def forward(self, x):
+    if self.use_cuda:
+      x.cuda()
+
     obs = x[:, :self.num_inputs]
     action = x[:, self.num_inputs:]
     h = self.feature(obs)

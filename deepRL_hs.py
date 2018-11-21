@@ -15,8 +15,6 @@ import agents.learning.dqn_agent
 # @gin.configurable
 def train(
   train_steps=100000,
-  test_games=100,
-  gamma=0.99,
 ):
   hs_game = environments.trading_hs.TradingHS()
   try:
@@ -24,19 +22,16 @@ def train(
       hs_game.observation_space,
       hs_game.action_space,
       should_flip_board=True,
-      gamma=gamma,
       model_path="checkpoints/checkpointGPU.pth.tar",
     )
     opponent.load_model('checkpoints/opponent.pth.tar')
   except FileNotFoundError:
     opponent = agents.heuristic.hand_coded.HeuristicAgent()
-    # opponent = agents.heuristic.random_agent.RandomAgent()
   hs_game.set_opponent(opponent)
 
   player = agents.learning.dqn_agent.DQNAgent(
     hs_game.observation_space,
     hs_game.action_space,
-    gamma=gamma,
   )
 
   # player.load_model()

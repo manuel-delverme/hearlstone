@@ -1,4 +1,5 @@
 import tensorboardX
+import copy
 import numpy as np
 
 import torch
@@ -10,83 +11,88 @@ from typing import Tuple, List
 import agents.learning.replay_buffers
 from agents.learning import shared
 from agents.learning.models import dqn
+# from agents.learning.models import double_q_learning
 import tqdm
-import torch.autograd as autograd
+import config
+from torch.autograd import Variable
 
-USE_CUDA = torch.cuda.is_available()
 USE_CUDA = False
 
 
-def Variable(*args, **kwargs):
-  v = autograd.Variable(*args, **kwargs)
-  if USE_CUDA:
-    v.cuda()
-  return v
-
-
 class DQNAgent(agents.base_agent.Agent):
-  def __init__(self, num_inputs, num_actions, gamma, should_flip_board=False,
-               use_target=True, model_path="checkpoints/checkpoint.pth.tar"):
+  def __init__(self, num_inputs, num_actions, should_flip_board=False,
+               model_path="checkpoints/checkpoint.pth.tar") -> None:
+    self.use_double_q = config.DQNAgent.use_double_q
+    self.use_target = config.DQNAgent.use_target
+    assert not (self.use_double_q and self.use_target)
 
-    self.network = dqn.DQN(num_inputs, num_actions)
-    self.network.build_network()
-    if USE_CUDA:
-      self.network = self.network.cuda()
-    params = self.network.parameters()
-
-    self.use_target = use_target
-    if use_target:
-      self.target_network = dqn.DQN(num_inputs, num_actions)
-      self.target_network.build_network()
-
-      if USE_CUDA:
-        self.target_network = self.target_network.cuda()
-
-    self.optimizer = optim.Adam(params, lr=1e-5, )
-    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(10000, num_inputs, num_actions)
-    self.gamma = gamma
-    self.should_flip_board = should_flip_board
+    self.num_actions = num_actions
+    self.num_inputs = num_inputs
+    self.gamma = config.DQNAgent.gamma
+    self.batch_size = config.DQNAgent.batch_size
     self.model_path = model_path
-    self.batch_size = 128
+
+    self.q_network = dqn.DQN(num_inputs, num_actions, USE_CUDA)
+    self.q_network.build_network()
+
+    if self.use_target or self.use_double_q:
+      self.q_network_target = copy.deepcopy(self.q_network)
+      self.q_network_target.build_network()
+
+    self.optimizer = optim.Adam(
+      self.q_network.parameters(),
+      lr=config.DQNAgent.lr,
+      weight_decay=config.DQNAgent.l2_decay,
+    )
+    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(10000, num_inputs, num_actions)
     self.summary_writer = tensorboardX.SummaryWriter()
 
   def load_model(self, model_path=None):
     if model_path is None:
       model_path = self.model_path
-    self.network.load_state_dict(torch.load(model_path))
+    self.q_network.load_state_dict(torch.load(model_path))
     print('loaded', model_path)
 
-  def compute_td_loss(self, state, action, reward, next_state, done, next_actions, indices, weights):
-    state_action = np.concatenate((state, action), axis=1)
-    state_action = Variable(torch.FloatTensor(np.float32(state_action)))
+  def train_step(self, states, actions, rewards, next_states, dones, next_possible_actionss, indices, weights):
+    state_action_pairs = np.concatenate((states, actions), axis=1)
+    del states, actions
 
-    reward = Variable(torch.FloatTensor(reward))
-    done = Variable(torch.FloatTensor(done))
-    weights = Variable(torch.FloatTensor(weights))
-
-    # TODO: fixme, this is just WRONG, the assumption is that 1 action then pass
-    # TODO: it holds for trading game, but nothing else, not even the tradingHS
-    # TODO: this breaks many things
-    next_actions = np.ones_like(action) * -1
-
-    next_state_action = np.concatenate((next_state, next_actions), axis=1)
-    next_state_action = Variable(torch.FloatTensor(np.float32(next_state_action)))
-
-    q_values = self.network(state_action)
+    not_done_mask = dones == 0
 
     if self.use_target:
-      # not needded because of the above TODOs
-      # next_q_values = self.network(next_state_action)
-      next_q_values_target = self.target_network(next_state_action)
-      # FIXME: the action should be selected by the network and the future
-      # FIXME: value should be selected by the target network
-      next_q_values = next_q_values_target
+      action_selection_network = self.q_network_target
+      q_value_network = self.q_network_target
+    elif self.use_double_q:
+      action_selection_network = self.q_network
+      q_value_network = self.q_network_target
     else:
-      next_q_values = self.network(next_state_action)
+      action_selection_network = self.q_network
+      q_value_network = self.q_network
 
-    expected_q_values = reward + self.gamma * next_q_values * (1 - done)
+    # TODO: remove loops
+    best_future_actions = np.empty(shape=(self.batch_size, self.num_actions))
+    for idx, (state, possible_actions) in enumerate(zip(next_states, next_possible_actionss)):
+      q_values = self.get_q_values(action_selection_network, state, possible_actions)
+      best_future_action_idx = torch.argmax(q_values.detach())
+      best_future_actions[idx] = possible_actions[best_future_action_idx]
 
-    loss = (q_values - expected_q_values.detach()).pow(2) * weights
+    next_best_state_action_pairs = np.concatenate((next_states, best_future_actions), axis=1)
+    target_future_q_values = q_value_network(next_best_state_action_pairs)
+    target_future_q_values = target_future_q_values.detach()
+
+    # what the q_network should have estimated
+    discount_tensor = torch.full(target_future_q_values.shape, self.gamma)
+    rewards = torch.FloatTensor(rewards)
+
+    expected_q_values = rewards + not_done_mask * (discount_tensor * target_future_q_values)
+
+    # what the q_network estimates
+    q_values = self.q_network(state_action_pairs)
+
+    # expected_q_values = rewards + self.gamma * next_q_values * (1 - dones)
+    weights = torch.FloatTensor(weights)
+    loss = (q_values - expected_q_values).pow(2) * weights
+
     priorities = loss + 1e-5
     loss = loss.mean()
 
@@ -128,17 +134,17 @@ class DQNAgent(agents.base_agent.Agent):
       else:
         assert abs(reward) < 1
 
-      if self.use_target and step_nr % target_update_every == 0:
-        shared.sync_target(self.network, self.target_network)
+      if self.use_double_q and step_nr % target_update_every == 0:
+        shared.sync_target(self.q_network, self.q_network_target)
       if step_nr % checkpoint_every == 0:
-        torch.save(self.network.state_dict(), self.model_path)
+        torch.save(self.q_network.state_dict(), self.model_path)
 
   def choose(self, observation, info):
     board_center = observation.shape[1] // 2
     if self.should_flip_board:
       observation = np.concatenate(observation[board_center:], observation[:board_center], axis=1)
 
-    action = self.network.act(observation, info['possible_actions'], 0.0)
+    action = self.q_network.act(observation, info['possible_actions'], 0.0)
     return action
 
   def learn_from_experience(self, observation, action, reward, next_state, done, next_actions, step_nr, beta):
@@ -147,8 +153,9 @@ class DQNAgent(agents.base_agent.Agent):
     done = np.array(done)
     self.replay_buffer.push(observation, action, reward, next_state, done, next_actions)
     if len(self.replay_buffer) > self.batch_size:
-      state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(self.batch_size, beta)
-      loss = self.compute_td_loss(state, action, reward, next_state, done, next_actions, indices, weights)
+      state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(
+        self.batch_size, beta)
+      loss = self.train_step(state, action, reward, next_state, done, next_actions, indices, weights)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
 
   def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float, step_nr: int = None):
@@ -159,23 +166,24 @@ class DQNAgent(agents.base_agent.Agent):
     assert isinstance(epsilon, float)
 
     if random.random() > epsilon:
-      network_inputs = []
-      for possible_action in possible_actions:
-        network_input = np.append(state, possible_action)
-        network_inputs.append(network_input)
-
-      network_inputs = np.array(network_inputs)
-      network_input = Variable(torch.FloatTensor(network_inputs).unsqueeze(0))
-      q_values = self.network.forward(network_input).data.cpu().numpy()
-
+      q_values = self.get_q_values(self.q_network, state, possible_actions)
       # if step_nr is not None:
       #   self.summary_writer.add_histogram('q_values', q_values, global_step=step_nr)
 
-      best_action = np.argmax(q_values)
-      action = possible_actions[best_action]
+      best_action = torch.argmax(q_values)
+      action = possible_actions[best_action.detach()]
     else:
       action, = random.sample(possible_actions, 1)
     return action
+
+  @staticmethod
+  def get_q_values(q_network, state, possible_actions):
+    state_action_pairs = []
+    for possible_action in possible_actions:
+      state_action_pair = np.append(state, possible_action)
+      state_action_pairs.append(state_action_pair)
+    q_values = q_network(state_action_pairs)
+    return q_values
 
   def __del__(self):
     self.summary_writer.close()
