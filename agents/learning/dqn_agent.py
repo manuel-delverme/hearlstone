@@ -15,6 +15,9 @@ from agents.learning.models import dqn
 import tqdm
 import config
 from torch.autograd import Variable
+import os
+import time
+import subprocess
 
 USE_CUDA = False
 
@@ -30,6 +33,7 @@ class DQNAgent(agents.base_agent.Agent):
     self.num_inputs = num_inputs
     self.gamma = config.DQNAgent.gamma
     self.batch_size = config.DQNAgent.batch_size
+    self.warmup_steps = config.DQNAgent.warmup_steps
     self.model_path = model_path
 
     self.q_network = dqn.DQN(num_inputs, num_actions, USE_CUDA)
@@ -44,8 +48,16 @@ class DQNAgent(agents.base_agent.Agent):
       lr=config.DQNAgent.lr,
       weight_decay=config.DQNAgent.l2_decay,
     )
-    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(10000, num_inputs, num_actions)
-    self.summary_writer = tensorboardX.SummaryWriter()
+    self.replay_buffer = agents.learning.replay_buffers.PrioritizedBuffer(
+      config.DQNAgent.buffer_size, num_inputs, num_actions
+    )
+    experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
+    log_dir = 'runs/{}'.format(experiment_name)
+    self.summary_writer = tensorboardX.SummaryWriter(log_dir=log_dir)
+
+    print("Experiment name:", experiment_name)
+    cmd = "find {} -name '*.py' | grep -v venv | tar -cvf {}/code.tar --files-from -".format(os.getcwd(), log_dir)
+    subprocess.check_output(cmd, shell=True)
 
   def load_model(self, model_path=None):
     if model_path is None:
@@ -103,13 +115,15 @@ class DQNAgent(agents.base_agent.Agent):
     # self.summary_writer.add_histogram(n, p.data.cpu().numpy(), global_step=step_nr)
     self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
     self.optimizer.step()
-
     return loss
 
-  def train(self, env, game_steps, checkpoint_every=10000, target_update_every=100, ):
+  def train(self, env, game_steps=None, checkpoint_every=10000, target_update_every=100, ):
+    if game_steps is None:
+      game_steps = config.DQNAgent.training_steps
     observation, reward, terminal, info = env.reset()
-    epsilon_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
-    beta_schedule = shared.epsilon_schedule(epsilon_decay=game_steps / 6)
+    long_term = min(game_steps / 6, int(2e4))
+    epsilon_schedule = shared.epsilon_schedule(epsilon_decay=long_term)
+    beta_schedule = shared.epsilon_schedule(epsilon_decay=long_term)
 
     iteration_params = zip(range(game_steps), epsilon_schedule, beta_schedule)
 
@@ -118,7 +132,8 @@ class DQNAgent(agents.base_agent.Agent):
       action = self.act(observation, info['possible_actions'], epsilon, step_nr=step_nr)
 
       next_observation, reward, done, info = env.step(action)
-      self.learn_from_experience(observation, action, reward, next_observation, done, info['possible_actions'], step_nr, beta)
+      self.learn_from_experience(observation, action, reward, next_observation, done, info['possible_actions'], step_nr,
+                                 beta)
 
       observation = next_observation
 
@@ -152,7 +167,7 @@ class DQNAgent(agents.base_agent.Agent):
     reward = np.array(reward)
     done = np.array(done)
     self.replay_buffer.push(observation, action, reward, next_state, done, next_actions)
-    if len(self.replay_buffer) > self.batch_size:
+    if len(self.replay_buffer) > max(self.batch_size, self.warmup_steps):
       state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(
         self.batch_size, beta)
       loss = self.train_step(state, action, reward, next_state, done, next_actions, indices, weights)
@@ -184,6 +199,95 @@ class DQNAgent(agents.base_agent.Agent):
       state_action_pairs.append(state_action_pair)
     q_values = q_network(state_action_pairs)
     return q_values
+
+  def __del__(self):
+    self.summary_writer.close()
+
+
+class DQNAgentBaselines(agents.base_agent.Agent):
+  def __init__(self, num_inputs, num_actions) -> None:
+    import baselines.deepq
+    self.learn = baselines.deepq.learn
+    self.num_actions = num_actions
+    self.num_inputs = num_inputs
+
+    experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
+    log_dir = 'runs/baselines_{}'.format(experiment_name)
+    self.summary_writer = tensorboardX.SummaryWriter(log_dir=log_dir)
+    print("Experiment name:", experiment_name)
+    cmd = "find {} -name '*.py' | grep -v venv | tar -cvf {}/code.tar --files-from -".format(os.getcwd(), log_dir)
+    subprocess.check_output(cmd, shell=True)
+
+  def train(self, env, game_steps=None, checkpoint_every=10000, target_update_every=100, ):
+    if game_steps is None:
+      game_steps = config.DQNAgent.training_steps
+
+    model = self.learn(
+      env=env,
+      total_timesteps=game_steps,
+      network='mlp'
+    )
+
+  def _learn(self):
+    long_term = min(game_steps / 6, int(2e4))
+    epsilon_schedule = shared.epsilon_schedule(epsilon_decay=long_term)
+    beta_schedule = shared.epsilon_schedule(epsilon_decay=long_term)
+
+    iteration_params = zip(range(game_steps), epsilon_schedule, beta_schedule)
+
+    for step_nr, epsilon, beta in tqdm.tqdm(iteration_params, total=game_steps):
+
+      action = self.act(observation, info['possible_actions'], epsilon, step_nr=step_nr)
+
+      next_observation, reward, done, info = env.step(action)
+      self.learn_from_experience(observation, action, reward, next_observation, done, info['possible_actions'], step_nr,
+                                 beta)
+
+      observation = next_observation
+
+      self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
+
+      if done:
+        game_value = env.game_value()
+        self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
+        self.summary_writer.add_scalar('game_stats/game_value', (game_value + 1) / 2, step_nr)
+
+        assert reward in (-1.0, 0.0, 1.0)
+        observation, reward, terminal, info = env.reset()
+      else:
+        assert abs(reward) < 1
+
+      if self.use_double_q and step_nr % target_update_every == 0:
+        shared.sync_target(self.q_network, self.q_network_target)
+      if step_nr % checkpoint_every == 0:
+        torch.save(self.q_network.state_dict(), self.model_path)
+
+
+  def choose(self, observation, info):
+    board_center = observation.shape[1] // 2
+    if self.should_flip_board:
+      observation = np.concatenate(observation[board_center:], observation[:board_center], axis=1)
+
+    action = self.q_network.act(observation, info['possible_actions'], 0.0)
+    return action
+
+  def act(self, state: np.array, possible_actions: List[Tuple[int, int]], epsilon: float, step_nr: int = None):
+    assert isinstance(state, np.ndarray)
+    assert isinstance(possible_actions, tuple)
+    assert isinstance(possible_actions[0], tuple)
+    assert isinstance(possible_actions[0][0], int)
+    assert isinstance(epsilon, float)
+
+    if random.random() > epsilon:
+      q_values = self.get_q_values(self.q_network, state, possible_actions)
+      # if step_nr is not None:
+      #   self.summary_writer.add_histogram('q_values', q_values, global_step=step_nr)
+
+      best_action = torch.argmax(q_values)
+      action = possible_actions[best_action.detach()]
+    else:
+      action, = random.sample(possible_actions, 1)
+    return action
 
   def __del__(self):
     self.summary_writer.close()

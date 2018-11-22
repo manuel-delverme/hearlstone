@@ -6,6 +6,7 @@ import numpy as np
 
 class PrioritizedBuffer(object):
   def __init__(self, capacity, state_size, action_size, prob_alpha=0.6, ):
+    # TODO: sumtree
     self.prob_alpha = prob_alpha
     self.capacity = capacity
     self.filled_up_to = 0

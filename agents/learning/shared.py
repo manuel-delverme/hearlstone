@@ -4,7 +4,7 @@ import math
 
 def epsilon_schedule(
         epsilon_start=1.0,
-        epsilon_final=0.01,
+        epsilon_final=0.1,
         epsilon_decay=200,
 ):
   step_nr = 0

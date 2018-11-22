@@ -9,16 +9,6 @@ class BaseEnv(gym.Env, ABC):
 
   @property
   @abstractmethod
-  def action_space(self):
-    raise NotImplemented
-
-  @property
-  @abstractmethod
-  def observation_space(self):
-    raise NotImplemented
-
-  @property
-  @abstractmethod
   def cards_in_hand(self):
     raise NotImplemented
 

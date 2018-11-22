@@ -6,6 +6,7 @@ import fireplace.logging
 import hearthstone
 from fireplace.exceptions import GameOver
 from fireplace.game import Game, PlayState
+from gym import spaces
 
 from environments import simulator
 from environments import base_env
@@ -50,11 +51,12 @@ class VanillaHS(base_env.BaseEnv):
 
   @property
   def action_space(self):
-    # source, target
+    # sources = self.simulation._MAX_CARDS_IN_BOARD + 1
+    # targets = (self.simulation._MAX_CARDS_IN_BOARD + 1)
     return 2
 
   @property
-  def observation_space(self):
+  def observation_size(self):
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
     return ((self.simulation._MAX_CARDS_IN_BOARD + 1) * 2) * 2
 
@@ -71,7 +73,7 @@ class VanillaHS(base_env.BaseEnv):
 
   def decode_action(self, encoded_action: Tuple[int, int]):
     assert isinstance(encoded_action, tuple)
-    assert isinstance(encoded_action[0], int)
+    assert isinstance(encoded_action[0], (int, np.int64))
 
     return self.lookup_action_id_to_obj[encoded_action]
 
