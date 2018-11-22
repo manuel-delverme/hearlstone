@@ -17,7 +17,7 @@ class GymWrapper(gym.Env):
 
   @property
   def observation_space(self):
-    obs_size = self.env.observation_size
+    obs_size = self.env.observation_space
     return gym.spaces.Box(low=-1, high=1, shape=(obs_size,))
 
   def reset(self):

@@ -56,7 +56,7 @@ class VanillaHS(base_env.BaseEnv):
     return 2
 
   @property
-  def observation_size(self):
+  def observation_space(self):
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
     return ((self.simulation._MAX_CARDS_IN_BOARD + 1) * 2) * 2
 
@@ -115,9 +115,8 @@ class VanillaHS(base_env.BaseEnv):
 
     card_max = list(cards.max(axis=0))
     self.normalization_factors = np.array(
-      card_max * self.max_cards_in_board + [1,
-                                            30] + card_max * self.max_cards_in_board + [
-        1, 30])
+      card_max * self.max_cards_in_board + [1, 30] + card_max * self.max_cards_in_board + [1, 30]
+    )
     self.games_played = 0
     self.games_finished = 0
     self.info = None
