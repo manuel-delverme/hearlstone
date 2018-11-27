@@ -1,5 +1,0 @@
-train.train_steps = 10000
-train.num_iter = 100
-train.batch_size = 8
-train.number_episodes = 100
-train.update_threshold = 0.55

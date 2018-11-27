@@ -1,7 +1,22 @@
 import random
 from collections import deque
+import baselines.deepq.replay_buffer
 
 import numpy as np
+
+
+class PrioritizedBufferOpenAI(baselines.deepq.replay_buffer.PrioritizedReplayBuffer):
+  def __init__(self, capacity, state_size, action_size, prob_alpha=0.6, ):
+    super(PrioritizedBufferOpenAI, self).__init__(capacity, prob_alpha)
+
+  def push(self, state, action, reward, next_state, done, next_actions):
+    assert len(next_state.shape) == 1
+    assert state.ndim == next_state.ndim
+    super(PrioritizedBufferOpenAI, self).add(state, action, reward, next_state, done, next_actions)
+
+  def sample(self, batch_size, beta):
+    states, actions, rewards, next_states, dones, next_actions, weights, indices = super(PrioritizedBufferOpenAI, self).sample(batch_size, beta)
+    return states, actions, rewards, next_states, dones, next_actions, indices, weights
 
 
 class PrioritizedBuffer(object):

@@ -96,6 +96,9 @@ class HSsimulation(object):
         self.player = new_game.players[0]
         self.opponent = new_game.players[1]
 
+        self.player.deck = sorted(self.player.deck, key=lambda x: x.cost)
+        self.opponent.deck = sorted(self.opponent.deck, key=lambda x: x.cost)
+
         if skip_mulligan:
           cards_to_mulligan = self.mulligan_heuristic(self.player1)
           self.player1.choice.choose(*cards_to_mulligan)

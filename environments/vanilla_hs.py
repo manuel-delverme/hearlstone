@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 
+import config
 import fireplace
 import fireplace.logging
 import hearthstone
@@ -19,8 +20,13 @@ class VanillaHS(base_env.BaseEnv):
   class GameActions(object):
     PASS_TURN = (-1, -1)
 
-  def __init__(self, max_cards_in_board=2, skip_mulligan=False,
-    cheating_opponent=False, starting_hp=30):
+  def __init__(
+    self,
+    max_cards_in_board=config.VanillaHS.max_cards_in_board,
+    skip_mulligan=True,
+    cheating_opponent=False,
+    starting_hp=config.VanillaHS.starting_hp,
+  ):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
     in front of each player.
@@ -63,6 +69,7 @@ class VanillaHS(base_env.BaseEnv):
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
     assert isinstance(actions[0], simulator.HSsimulation.Action)
+
     self.lookup_action_id_to_obj.clear()
     encoded_actions = []
     for action in actions:
@@ -114,9 +121,13 @@ class VanillaHS(base_env.BaseEnv):
     cards = np.array(cards)
 
     card_max = list(cards.max(axis=0))
-    self.normalization_factors = np.array(
-      card_max * self.max_cards_in_board + [1, 30] + card_max * self.max_cards_in_board + [1, 30]
-    )
+    if config.VanillaHS.normalize:
+      self.normalization_factors = np.array(
+        card_max * self.max_cards_in_board + [1, 30] + card_max * self.max_cards_in_board + [1, 30]
+      )
+    else:
+      self.normalization_factors = False
+
     self.games_played = 0
     self.games_finished = 0
     self.info = None
@@ -150,7 +161,7 @@ class VanillaHS(base_env.BaseEnv):
   def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
 
-  def render(self, mode='human'):
+  def render(self, mode='human', info={}):
     board = ""
     board += "-" * 100
     board += "\nYOU:{player_hp}\n[{player_hand}]\n{player_board}\n{separator}\nboard:{o_board}\nENEMY:{o_hp}\n[{o_hand}]".format(
@@ -177,35 +188,40 @@ class VanillaHS(base_env.BaseEnv):
     return self.gather_transition()
 
   def calculate_reward(self):
+    """
+    Mana efficiency: player mana spent - opponent mana spent
+    Board mana advantage: sum mana player board - opponent board
+    Board advantage: nr minions
+    # Draw advantage: nr cards drawn in this game
+    Hand size advantage:nr cards in hand
+    """
     if self.simulation.game.ended:
       reward = self.game_value()
     else:
-      # reward = -0.01
       reward = 0.0
-      # reward = -len(
-      #  self.simulation.opponent.characters[1:]) / self.max_cards_in_board
-      # reward /= 100
+      # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health)/self.starting_hp
     return reward
 
   def set_opponent(self, opponent):
     self.opponent = opponent
 
   def play_opponent_turn(self):
-    if self.opponent is None:
-      with utils.suppress_stdout():
-        fireplace.utils.play_turn(self.simulation.game)
-    else:
-      raise NotImplementedError
-      while self.simulation.whosturn == opponent:
-        self.play_opponent_action()
+    assert self.simulation.game.current_player.controller.name == 'Opponent'
+    while self.simulation.game.current_player.controller.name == 'Opponent':
+      self.play_opponent_action()
 
   def play_opponent_action(self):
-    info = {'possible_actions': self.simulation.actions()}
-    observation = self.simulation.observe()
+    assert self.simulation.game.current_player.controller.name == 'Opponent'
+    observation, _, terminal, info = self.gather_transition()
     action = self.opponent.choose(observation, info)
     self.step(action)
+    trans = self.gather_transition()
+    return trans
 
   def step(self, encoded_action: Tuple[int, int]):
+    if self.simulation.game.turn > 90:
+      print('SUDDEN DEATH')
+      self.simulation.sudden_death()
     action = self.decode_action(encoded_action)
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
@@ -224,13 +240,21 @@ class VanillaHS(base_env.BaseEnv):
   def gather_transition(self):
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
+    print('TODO: add if a feature to each card saying if already attacked')
+    board_adv = len(self.simulation.player.characters) - len(self.simulation.opponent.characters)
+    hand_adv = len(self.simulation.player.hand) - len(self.simulation.opponent.hand)
+    board_mana_adv = sum((c.cost for c in self.simulation.player.characters)) - sum((c.cost for c in self.simulation.opponent.characters))
+    stats = np.array([board_adv, hand_adv, board_mana_adv])
+    game_observation = np.concatenate((game_observation, stats), axis=0)
+
     reward = self.calculate_reward()
     terminal = self.simulation.game.ended
     info = {
       'possible_actions': self.encode_actions(possible_actions),
       'original_info': {'possible_actions': possible_actions},
     }
-    game_observation = game_observation / self.normalization_factors
-    game_observation -= 0.5
+    if config.VanillaHS.normalize:
+      game_observation = game_observation / self.normalization_factors
+      game_observation -= 0.5
 
     return game_observation, reward, terminal, info

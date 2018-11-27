@@ -2,17 +2,13 @@ from environments import vanilla_hs
 from typing import Tuple, List
 from agents.heuristic import hand_coded
 from environments import simulator
+import config
 
 
 class TradingHS(vanilla_hs.VanillaHS):
   def __init__(self):
     self.minion_player_agent = hand_coded.HeuristicAgent()
-    super().__init__(
-      skip_mulligan=True,
-      cheating_opponent=False,
-      starting_hp=30,
-      max_cards_in_board=7,
-    )
+    super().__init__()
 
   def reset(self):
     super().reset()
@@ -61,11 +57,6 @@ class TradingHS(vanilla_hs.VanillaHS):
         non_trade_actions_obj.append(act_obj)
         non_trade_actions_enc.append(act_enc)
     return non_trade_actions_obj, non_trade_actions_enc
-
-  def play_opponent_turn(self):
-    assert self.simulation.game.current_player.controller.name == 'Opponent'
-    while self.simulation.game.current_player.controller.name == 'Opponent':
-      self.play_opponent_action()
 
   def play_opponent_action(self):
     assert self.simulation.game.current_player.controller.name == 'Opponent'
