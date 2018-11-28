@@ -87,37 +87,33 @@ class HSsimulation(object):
 
     self.cheating_opponent = cheating_opponent
 
-    while True:
-      try:
-        new_game = Game(players=(self.player1, self.player2))
-        new_game.MAX_MINIONS_ON_FIELD = self._MAX_CARDS_IN_BOARD
-        new_game.start()
+    new_game = Game(players=(self.player1, self.player2))
+    new_game.MAX_MINIONS_ON_FIELD = self._MAX_CARDS_IN_BOARD
+    new_game.start()
 
-        self.player = new_game.players[0]
-        self.opponent = new_game.players[1]
+    for player in new_game.players:
+      player.max_hand_size = self._MAX_CARDS_IN_HAND
 
-        self.player.deck = sorted(self.player.deck, key=lambda x: x.cost)
-        self.opponent.deck = sorted(self.opponent.deck, key=lambda x: x.cost)
+    self.player = new_game.players[0]
+    self.opponent = new_game.players[1]
 
-        if skip_mulligan:
-          cards_to_mulligan = self.mulligan_heuristic(self.player1)
-          self.player1.choice.choose(*cards_to_mulligan)
+    self.player.deck = sorted(self.player.deck, key=lambda x: x.cost)
+    self.opponent.deck = sorted(self.opponent.deck, key=lambda x: x.cost)
 
-        cards_to_mulligan = self.mulligan_heuristic(self.player2)
-        self.player2.choice.choose(*cards_to_mulligan)
-        if cheating_opponent:
-          self.player2.hero._max_health = 100
-          self.player2.max_mana = 10
-          self.player1.hero._max_health = 1
-        elif starting_hp is not None:
-          self.player1.hero._max_health = starting_hp
-          self.player2.hero._max_health = starting_hp
+    if skip_mulligan:
+      cards_to_mulligan = self.mulligan_heuristic(self.player1)
+      self.player1.choice.choose(*cards_to_mulligan)
+      cards_to_mulligan = self.mulligan_heuristic(self.player2)
+      self.player2.choice.choose(*cards_to_mulligan)
 
-      except IndexError as e:
-        print("init failed", e)
-      else:
-        self.game = new_game
-        break
+    if cheating_opponent:
+      self.player2.hero._max_health = 100
+      self.player2.max_mana = 10
+      self.player1.hero._max_health = 1
+    elif starting_hp is not None:
+      self.player1.hero._max_health = starting_hp
+      self.player2.hero._max_health = starting_hp
+    self.game = new_game
 
   @staticmethod
   def mulligan_heuristic(player):
@@ -401,6 +397,11 @@ class HSsimulation(object):
       except AttributeError:
         card_dict[k] = None
 
+    if card_obj is not None:
+      card_dict['can_attack'] = card_obj.can_attack()
+    else:
+      card_dict['can_attack'] = None
+
     # crash if skipping important data
     for k in self._skipped:
       try:
@@ -426,7 +427,7 @@ class HSsimulation(object):
         # card_lst.extend(list(val))
       else:
         raise TypeError()
-    assert len(card_lst) == 2
+    assert len(card_lst) == 3
     return np.array(card_lst)
 
   def entity_to_vec(self, entity):

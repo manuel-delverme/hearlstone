@@ -23,9 +23,11 @@ class TradingHS(vanilla_hs.VanillaHS):
     return self.gather_transition()
 
   def fast_forward_game(self, o, info):
+    self.episodic_log('fast_forward', o, info)
     if self.simulation.game.ended:
       return
-    non_trade_actions_obj, non_trade_actions_enc =self.gather_play_from_hand_acts(info)
+
+    non_trade_actions_obj, non_trade_actions_enc = self.gather_play_from_hand_acts(info)
     if len(non_trade_actions_obj) == 0:
       return
 
@@ -36,8 +38,9 @@ class TradingHS(vanilla_hs.VanillaHS):
     }
 
     action = self.minion_player_agent.choose(o, restricted_info)
+    assert sum(action) == 1
     o, r, t, info = super(TradingHS, self).step(action)
-    assert abs(r) < 1
+    assert abs(r) < 1, 'game should not end here but reward was ' + str(r)
     return self.gather_transition()
 
   @staticmethod

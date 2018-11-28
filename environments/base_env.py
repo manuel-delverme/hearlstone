@@ -4,8 +4,6 @@ import gym
 
 
 class BaseEnv(gym.Env, ABC):
-  class GameActions(object):
-    PASS_TURN = 0
 
   @property
   @abstractmethod

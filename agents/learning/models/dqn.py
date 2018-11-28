@@ -15,7 +15,7 @@ class DQN(nn.Module):
 
   def build_network(self):
     if config.DQNAgent.silly:
-      self.silly_fc = noisy_networks.NoisyLinear(37, 1)
+      self.silly_fc = noisy_networks.NoisyLinear(69, 1)
     else:
       # each card is summarized in 12 numbers
       self.conv_minions = nn.Conv1d(1, 2, kernel_size=2, stride=2,)
@@ -24,8 +24,9 @@ class DQN(nn.Module):
       self.action_fc1 = nn.Linear(self.num_actions, 64)
 
       # 1 is the Q(s, a) value
-      self.value_fc1 = nn.Linear(256, 256)
-      self.value_nosiy_fc2 = noisy_networks.NoisyLinear(256, 1)
+      self.value_fc1 = nn.Linear(67, 256)
+      self.value_fc2 = nn.Linear(256, 256)
+      self.value_nosiy_fc3 = noisy_networks.NoisyLinear(256, 1)
 
     if self.use_cuda:
       self.cuda()
@@ -64,7 +65,9 @@ class DQN(nn.Module):
   def value_network(self, x):
     h = self.value_fc1(x)
     h = F.leaky_relu(h)
-    h = self.value_nosiy_fc2(h)
+    h = self.value_fc2(h)
+    h = F.leaky_relu(h)
+    h = self.value_nosiy_fc3(h)
     return h
 
   def silly_network(self, x):
@@ -81,8 +84,10 @@ class DQN(nn.Module):
     else:
       board = x[:, :-2]
       action = x[:, -2:]
-      h_state = self.state_features(board)
-      h_action = self.action_features(action)
+      # h_state = self.state_features(board)
+      # h_action = self.action_features(action)
+      h_state = board
+      h_action = action
       h_value = torch.cat((h_state, h_action), dim=1)
       q_val = self.value_network(h_value)
 

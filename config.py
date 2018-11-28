@@ -1,10 +1,10 @@
 import torch.optim as optim
 
-enjoy = True
+enjoy = False
 
 
 class DQNAgent:
-  silly = True
+  silly = False
   target_update = 500
   nr_epochs = 1
   buffer_size = int(1e5)
@@ -26,6 +26,10 @@ class DQNAgent:
 
 
 class VanillaHS:
+  debug = False
   normalize = False
   starting_hp = 30
   max_cards_in_board = 7
+  max_cards_in_hand = 8
+  # encoding error
+  assert max_cards_in_hand <= (max_cards_in_board + 1)

@@ -6,11 +6,9 @@ import environments.vanilla_hs
 import environments.trading_hs
 import config
 import environments.gym_wrapper
-import baselines
 
 
 def train():
-  # hs_game = environments.vanilla_hs.VanillaHS()
   hs_game = environments.trading_hs.TradingHS()
   opponent = agents.heuristic.hand_coded.HeuristicAgent()
   hs_game.set_opponent(opponent)
@@ -24,8 +22,11 @@ def train():
     player.load_model()
     player.render(hs_game)
   else:
-    player.train(hs_game)
-
+    try:
+      player.train(hs_game)
+    except Exception as e:
+      hs_game.dump_log('/tmp/logfile')
+      raise e
 
 
 if __name__ == "__main__":

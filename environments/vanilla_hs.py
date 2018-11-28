@@ -1,4 +1,7 @@
 import logging
+import pprint
+import collections
+import functools
 import numpy as np
 
 import config
@@ -7,22 +10,18 @@ import fireplace.logging
 import hearthstone
 from fireplace.exceptions import GameOver
 from fireplace.game import Game, PlayState
-from gym import spaces
 
 from environments import simulator
 from environments import base_env
-from shared import utils
 
 from typing import Tuple, List
 
 
 class VanillaHS(base_env.BaseEnv):
-  class GameActions(object):
-    PASS_TURN = (-1, -1)
-
   def __init__(
     self,
     max_cards_in_board=config.VanillaHS.max_cards_in_board,
+    max_cards_in_hand=config.VanillaHS.max_cards_in_hand,
     skip_mulligan=True,
     cheating_opponent=False,
     starting_hp=config.VanillaHS.starting_hp,
@@ -37,6 +36,14 @@ class VanillaHS(base_env.BaseEnv):
     fireplace.cards.db.initialized = True
     print("Initializing card database")
     db, xml = hearthstone.cardxml.load()
+    if config.VanillaHS.debug:
+      self.log = collections.deque(maxlen=2)
+      self.episodic_log('init', new_episode=True)
+      logger = logging.getLogger('fireplace')
+      logger.setLevel(logging.INFO)
+    else:
+      self.log = None
+      logging.getLogger("fireplace").setLevel(logging.ERROR)
 
     # allow coin, mage and warrior hero powers
     allowed_ids = ("GAME_005", "CS2_034", "CS2_102")
@@ -44,9 +51,9 @@ class VanillaHS(base_env.BaseEnv):
       if card.description == "" or card.id in allowed_ids:
         fireplace.cards.db[id] = fireplace.cards.db.merge(id, card)
 
-    logging.getLogger("fireplace").setLevel(logging.ERROR)
 
     simulator.HSsimulation._MAX_CARDS_IN_BOARD = max_cards_in_board
+    simulator.HSsimulation._MAX_CARDS_IN_HAND = max_cards_in_hand
     self.max_cards_in_board = max_cards_in_board
     self.skip_mulligan = skip_mulligan
     self.lookup_action_id_to_obj = {}
@@ -55,20 +62,42 @@ class VanillaHS(base_env.BaseEnv):
 
     self.reinit_game()
 
+  def episodic_log(self, *args, new_episode=False):
+    if self.log is not None:
+      if new_episode:
+        self.log.append([])
+      self.log[-1].append(tuple(args))
+
+  def dump_log(self, log_file):
+    if self.log is None:
+      return
+
+    with open(log_file, 'w') as fout:
+      for episode in self.log:
+        fout.write('=' * 100)
+        fout.write('\n')
+        for event in episode:
+          fout.write(pprint.pformat(event))
+          fout.write('\n')
+
   @property
   def action_space(self):
     # sources = self.simulation._MAX_CARDS_IN_BOARD + 1
     # targets = (self.simulation._MAX_CARDS_IN_BOARD + 1)
-    return 2
+    self.episodic_log('action_space')
+    act = self.action_to_id(None)
+    return len(act)
 
   @property
   def observation_space(self):
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
+    self.episodic_log('observation_space')
     return ((self.simulation._MAX_CARDS_IN_BOARD + 1) * 2) * 2
 
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
     assert isinstance(actions[0], simulator.HSsimulation.Action)
+    self.episodic_log('encode_actions', actions)
 
     self.lookup_action_id_to_obj.clear()
     encoded_actions = []
@@ -81,6 +110,7 @@ class VanillaHS(base_env.BaseEnv):
   def decode_action(self, encoded_action: Tuple[int, int]):
     assert isinstance(encoded_action, tuple)
     assert isinstance(encoded_action[0], (int, np.int64))
+    self.episodic_log('decode_action', encoded_action)
 
     return self.lookup_action_id_to_obj[encoded_action]
 
@@ -103,6 +133,8 @@ class VanillaHS(base_env.BaseEnv):
     return source_idx, target_idx
 
   def reinit_game(self):
+    self.episodic_log('reinit_game', new_episode=True)
+
     self.simulation = simulator.HSsimulation(
       skip_mulligan=self.skip_mulligan,
       cheating_opponent=self.cheating_opponent,
@@ -110,9 +142,9 @@ class VanillaHS(base_env.BaseEnv):
     )
     cards = []
     for player in (self.simulation.player1, self.simulation.player2):
-      last_card = player.hand[-1]
-      if last_card.id == "GAME_005":  # "The Coin"
-        last_card.discard()
+      for c in player.hand:
+        if c.id == "GAME_005":  # "The Coin"
+          c.discard()
 
       for card in player.deck:
         cards.append((card.atk, card.health))
@@ -134,6 +166,7 @@ class VanillaHS(base_env.BaseEnv):
     self.actor_hero = None
 
   def game_value(self):
+    self.episodic_log('game_value')
     player = self.simulation.player
     if player.playstate == PlayState.WON:
       return +1.0
@@ -159,6 +192,7 @@ class VanillaHS(base_env.BaseEnv):
 
   @property
   def cards_in_hand(self):
+    self.episodic_log('cards_in_hand')
     return self.simulation._MAX_CARDS_IN_HAND
 
   def render(self, mode='human', info={}):
@@ -180,6 +214,7 @@ class VanillaHS(base_env.BaseEnv):
     return board
 
   def reset(self):
+    self.episodic_log('reset')
     self.reinit_game()
     self.actor_hero = self.simulation.player.hero
 
@@ -188,29 +223,28 @@ class VanillaHS(base_env.BaseEnv):
     return self.gather_transition()
 
   def calculate_reward(self):
-    """
-    Mana efficiency: player mana spent - opponent mana spent
-    Board mana advantage: sum mana player board - opponent board
-    Board advantage: nr minions
-    # Draw advantage: nr cards drawn in this game
-    Hand size advantage:nr cards in hand
-    """
+    self.episodic_log('calculate_reward')
     if self.simulation.game.ended:
       reward = self.game_value()
     else:
-      reward = 0.0
+      board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
+        (c.cost + 1 for c in self.simulation.opponent.characters))
+      reward = np.clip(board_mana_adv/10, -0.99, 0.99)
       # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health)/self.starting_hp
     return reward
 
   def set_opponent(self, opponent):
+    self.episodic_log('set_opponent')
     self.opponent = opponent
 
   def play_opponent_turn(self):
+    self.episodic_log('play_turn')
     assert self.simulation.game.current_player.controller.name == 'Opponent'
     while self.simulation.game.current_player.controller.name == 'Opponent':
       self.play_opponent_action()
 
   def play_opponent_action(self):
+    self.episodic_log('play_opponent_action')
     assert self.simulation.game.current_player.controller.name == 'Opponent'
     observation, _, terminal, info = self.gather_transition()
     action = self.opponent.choose(observation, info)
@@ -219,14 +253,19 @@ class VanillaHS(base_env.BaseEnv):
     return trans
 
   def step(self, encoded_action: Tuple[int, int]):
-    if self.simulation.game.turn > 90:
-      print('SUDDEN DEATH')
-      self.simulation.sudden_death()
+    self.episodic_log('step', encoded_action, self.simulation.game.turn)
     action = self.decode_action(encoded_action)
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
-      if encoded_action == self.GameActions.PASS_TURN:
+      if encoded_action == self.action_to_id(None):
         self.simulation.game.end_turn()
+
+        if self.simulation.game.turn > 90:
+          self.episodic_log('sudden death', self.simulation.game.turn)
+          print('SUDDEN DEATH')
+          self.simulation.sudden_death()
+          raise GameOver
+
         if self.simulation.game.current_player.controller.name == 'Opponent':
           self.play_opponent_turn()
       else:
@@ -235,15 +274,18 @@ class VanillaHS(base_env.BaseEnv):
       assert self.simulation.game.ended
 
     transition = self.gather_transition()
+    self.episodic_log('step end turn:', self.simulation.game.turn)
     return transition
 
   def gather_transition(self):
+    self.episodic_log('gather_transition')
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
-    print('TODO: add if a feature to each card saying if already attacked')
+
     board_adv = len(self.simulation.player.characters) - len(self.simulation.opponent.characters)
     hand_adv = len(self.simulation.player.hand) - len(self.simulation.opponent.hand)
-    board_mana_adv = sum((c.cost for c in self.simulation.player.characters)) - sum((c.cost for c in self.simulation.opponent.characters))
+    board_mana_adv = sum((c.cost for c in self.simulation.player.characters)) - sum(
+      (c.cost for c in self.simulation.opponent.characters))
     stats = np.array([board_adv, hand_adv, board_mana_adv])
     game_observation = np.concatenate((game_observation, stats), axis=0)
 

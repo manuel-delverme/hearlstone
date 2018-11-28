@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from environments import base_env
 
 
 class Agent(ABC):

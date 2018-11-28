@@ -20,7 +20,7 @@ import time
 import torch.nn
 import subprocess
 
-USE_CUDA = False
+USE_CUDA = True
 
 
 class DQNAgent(agents.base_agent.Agent):
@@ -111,7 +111,7 @@ class DQNAgent(agents.base_agent.Agent):
     # expected_q_values = rewards + self.gamma * next_q_values * (1 - dones)
     weights = torch.FloatTensor(weights)
     # loss = (q_values - expected_q_values).pow(2) * weights
-    loss = self.loss(q_values, expected_q_values) #  * weights
+    loss = self.loss(q_values, expected_q_values) * weights
     assert loss.shape == (self.batch_size, )
 
     priorities = loss * weights + 1e-5
