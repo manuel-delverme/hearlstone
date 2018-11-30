@@ -7,10 +7,10 @@ import torch
 
 
 class DQN(nn.Module):
-  def __init__(self, num_inputs, num_actions, use_cuda):
+  def __init__(self, num_inputs, num_actions):
     self.num_inputs = num_inputs
     self.num_actions = num_actions
-    self.use_cuda = use_cuda
+    self.use_cuda = config.DQNAgent.use_gpu
     super(DQN, self).__init__()
 
   def build_network(self):
@@ -24,9 +24,9 @@ class DQN(nn.Module):
       self.action_fc1 = nn.Linear(self.num_actions, 64)
 
       # 1 is the Q(s, a) value
-      self.value_fc1 = nn.Linear(67, 256)
+      self.value_fc1 = nn.Linear(51, 256)
       self.value_fc2 = nn.Linear(256, 256)
-      self.value_nosiy_fc3 = noisy_networks.NoisyLinear(256, 1)
+      self.value_nosiy_fc3 = noisy_networks.NoisyLinear(256, self.num_actions)
 
     if self.use_cuda:
       self.cuda()
@@ -75,21 +75,14 @@ class DQN(nn.Module):
     return torch.tanh(h)
 
   def forward(self, x):
-    x = torch.FloatTensor(x)
+    x = torch.Tensor(x)
     if self.use_cuda:
       x = x.cuda()
 
     if config.DQNAgent.silly:
       q_val = self.silly_network(x)
     else:
-      board = x[:, :-2]
-      action = x[:, -2:]
-      # h_state = self.state_features(board)
-      # h_action = self.action_features(action)
-      h_state = board
-      h_action = action
-      h_value = torch.cat((h_state, h_action), dim=1)
-      q_val = self.value_network(h_value)
+      q_val = self.value_network(x)
 
     if self.use_cuda:
       q_val = q_val.cpu()

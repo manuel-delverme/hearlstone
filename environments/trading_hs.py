@@ -16,8 +16,8 @@ class TradingHS(vanilla_hs.VanillaHS):
     self.fast_forward_game(observation, info)
     return self.gather_transition()
 
-  def step(self, action: Tuple[int, int]):
-    observation, reward, terminal, info = super(TradingHS, self).step(action)
+  def step(self, action: int):
+    observation, reward, terminal, info = super().step(action)
     if not terminal:
       self.fast_forward_game(observation, info)
     return self.gather_transition()
@@ -38,15 +38,14 @@ class TradingHS(vanilla_hs.VanillaHS):
     }
 
     action = self.minion_player_agent.choose(o, restricted_info)
-    assert sum(action) == 1
-    o, r, t, info = super(TradingHS, self).step(action)
+    o, r, t, info = super().step(action)
     assert abs(r) < 1, 'game should not end here but reward was ' + str(r)
     return self.gather_transition()
 
   @staticmethod
   def gather_play_from_hand_acts(info: dict):
     assert isinstance(info['original_info']['possible_actions'][0], simulator.HSsimulation.Action)
-    assert isinstance(info['possible_actions'][0], tuple)
+    assert isinstance(info['possible_actions'][0], int)
 
     acts_obj = info['original_info']['possible_actions']
     acts_enc = info['possible_actions']

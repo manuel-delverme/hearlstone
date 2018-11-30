@@ -1,4 +1,5 @@
 import logging
+import gym.spaces
 import pprint
 import collections
 import functools
@@ -13,6 +14,7 @@ from fireplace.game import Game, PlayState
 
 from environments import simulator
 from environments import base_env
+from shared import utils
 
 from typing import Tuple, List
 
@@ -33,6 +35,15 @@ class VanillaHS(base_env.BaseEnv):
     Args:
       starting_hp:
     """
+    self.id_to_action = [(-1, -1), ]
+    for src_idx in range(max_cards_in_hand):
+      self.id_to_action.append((src_idx, -1))
+    for src_idx in range(max_cards_in_hand):
+      for target_idx in range(max_cards_in_board + 1):
+        self.id_to_action.append((src_idx, target_idx))
+    self.action_to_id_dict = {v: k for k, v in enumerate(self.id_to_action)}
+    self.num_actions = len(self.id_to_action)
+
     fireplace.cards.db.initialized = True
     print("Initializing card database")
     db, xml = hearthstone.cardxml.load()
@@ -51,10 +62,10 @@ class VanillaHS(base_env.BaseEnv):
       if card.description == "" or card.id in allowed_ids:
         fireplace.cards.db[id] = fireplace.cards.db.merge(id, card)
 
-
     simulator.HSsimulation._MAX_CARDS_IN_BOARD = max_cards_in_board
     simulator.HSsimulation._MAX_CARDS_IN_HAND = max_cards_in_hand
     self.max_cards_in_board = max_cards_in_board
+
     self.skip_mulligan = skip_mulligan
     self.lookup_action_id_to_obj = {}
     self.cheating_opponent = cheating_opponent
@@ -82,17 +93,15 @@ class VanillaHS(base_env.BaseEnv):
 
   @property
   def action_space(self):
-    # sources = self.simulation._MAX_CARDS_IN_BOARD + 1
-    # targets = (self.simulation._MAX_CARDS_IN_BOARD + 1)
     self.episodic_log('action_space')
-    act = self.action_to_id(None)
-    return len(act)
+    return gym.spaces.Discrete(self.num_actions)
 
   @property
   def observation_space(self):
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
     self.episodic_log('observation_space')
-    return ((self.simulation._MAX_CARDS_IN_BOARD + 1) * 2) * 2
+    obs, _, _, _ = self.gather_transition()
+    return gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
 
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
@@ -107,30 +116,26 @@ class VanillaHS(base_env.BaseEnv):
       encoded_actions.append(action_id)
     return tuple(encoded_actions)
 
-  def decode_action(self, encoded_action: Tuple[int, int]):
-    assert isinstance(encoded_action, tuple)
-    assert isinstance(encoded_action[0], (int, np.int64))
+  def decode_action(self, encoded_action: int):
+    assert isinstance(encoded_action, (int, np.int64))
     self.episodic_log('decode_action', encoded_action)
-
     return self.lookup_action_id_to_obj[encoded_action]
 
-  @staticmethod
-  def action_to_id(possible_action) -> Tuple[int, int]:
-    card = possible_action.card
-    if card is None:
+  def action_to_id(self, possible_action) -> Tuple:
+    self.episodic_log('action_to_id', possible_action)
+    target_idx = -1
+
+    if possible_action.card is None:
       source_idx = -1
       target_idx = -1
     else:
+      card = possible_action.card
       source_idx = card.zone_position
       target = possible_action.params['target']
-      if target is None:
-        target_idx = -1
-      else:
+      if target is not None:
         target_idx = target.zone_position
-
-    # TODO: reverse lookup cache
-    # action_id = self.action_to_ref.index((card_idx, target_idx))
-    return source_idx, target_idx
+        assert target_idx >= 0
+    return self.action_to_id_dict[(source_idx, target_idx)]
 
   def reinit_game(self):
     self.episodic_log('reinit_game', new_episode=True)
@@ -219,7 +224,6 @@ class VanillaHS(base_env.BaseEnv):
     self.actor_hero = self.simulation.player.hero
 
     self.games_played += 1
-
     return self.gather_transition()
 
   def calculate_reward(self):
@@ -227,9 +231,10 @@ class VanillaHS(base_env.BaseEnv):
     if self.simulation.game.ended:
       reward = self.game_value()
     else:
-      board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
-        (c.cost + 1 for c in self.simulation.opponent.characters))
-      reward = np.clip(board_mana_adv/10, -0.99, 0.99)
+      reward = 0.0
+      # board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
+      #   (c.cost + 1 for c in self.simulation.opponent.characters))
+      # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
       # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health)/self.starting_hp
     return reward
 
@@ -246,18 +251,18 @@ class VanillaHS(base_env.BaseEnv):
   def play_opponent_action(self):
     self.episodic_log('play_opponent_action')
     assert self.simulation.game.current_player.controller.name == 'Opponent'
-    observation, _, terminal, info = self.gather_transition()
+    observation, _, terminal, info = self.gather_transition(pickle=False)
     action = self.opponent.choose(observation, info)
     self.step(action)
-    trans = self.gather_transition()
+    trans = self.gather_transition(pickle=False)
     return trans
 
-  def step(self, encoded_action: Tuple[int, int]):
+  def step(self, encoded_action: int):
     self.episodic_log('step', encoded_action, self.simulation.game.turn)
     action = self.decode_action(encoded_action)
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
-      if encoded_action == self.action_to_id(None):
+      if encoded_action == 0:
         self.simulation.game.end_turn()
 
         if self.simulation.game.turn > 90:
@@ -273,11 +278,10 @@ class VanillaHS(base_env.BaseEnv):
     except GameOver as e:
       assert self.simulation.game.ended
 
-    transition = self.gather_transition()
-    self.episodic_log('step end turn:', self.simulation.game.turn)
-    return transition
+    game_observation, reward, terminal, info = self.gather_transition()
+    return game_observation, reward, terminal, info
 
-  def gather_transition(self):
+  def gather_transition(self, pickle=True):
     self.episodic_log('gather_transition')
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
@@ -291,12 +295,13 @@ class VanillaHS(base_env.BaseEnv):
 
     reward = self.calculate_reward()
     terminal = self.simulation.game.ended
-    info = {
-      'possible_actions': self.encode_actions(possible_actions),
-      'original_info': {'possible_actions': possible_actions},
-    }
-    if config.VanillaHS.normalize:
-      game_observation = game_observation / self.normalization_factors
-      game_observation -= 0.5
-
+    enc_possible_actions = self.encode_actions(possible_actions)
+    if pickle:
+      possible_actions = utils.one_hot_actions((enc_possible_actions,), self.num_actions)
+      info = possible_actions.squeeze()
+    else:
+      info = {
+        'original_info': {'possible_actions': possible_actions},
+        'possible_actions': enc_possible_actions,
+      }
     return game_observation, reward, terminal, info

@@ -10,8 +10,7 @@ class PrioritizedBufferOpenAI(baselines.deepq.replay_buffer.PrioritizedReplayBuf
     super(PrioritizedBufferOpenAI, self).__init__(capacity, prob_alpha)
 
   def push(self, state, action, reward, next_state, done, next_actions):
-    assert len(next_state.shape) == 1
-    assert state.ndim == next_state.ndim
+    assert state.shape == next_state.shape
     super(PrioritizedBufferOpenAI, self).add(state, action, reward, next_state, done, next_actions)
 
   def sample(self, batch_size, beta):

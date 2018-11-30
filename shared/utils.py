@@ -2,6 +2,8 @@ import pickle
 from contextlib import contextmanager
 import sys
 import os
+
+import numpy as np
 import tqdm
 from environments import base_env
 import sys
@@ -132,3 +134,9 @@ def suppress_stdout():
       sys.stdout = old_stdout
 
 
+def one_hot_actions(actions, num_actions):
+  possible_actions = np.zeros((len(actions), num_actions), np.float32)
+  for row, pas in enumerate(actions):
+    for pa in pas:
+      possible_actions[row, pa] = 1
+  return possible_actions
