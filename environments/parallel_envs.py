@@ -5,10 +5,9 @@ import numpy as np
 class ParallelEnvs(subproc_vec_env.SubprocVecEnv):
   def reset(self):
     retr = super(ParallelEnvs, self).reset()
-    s, r, t, pa = (np.stack(e, axis=0) for e in retr.T)
-    return s, r, t, pa
+    s, r, t, pa = retr.T
+    return np.stack(s, axis=0), np.expand_dims(r, 1), np.expand_dims(t, 1), np.stack(pa, axis=0)
 
   def step(self, actions):
-    retr = super(ParallelEnvs, self).step(actions)
-    s, r, t, pa = (np.stack(e, axis=0) for e in retr)
-    return s, r, t, pa
+    s, r, t, pa = super(ParallelEnvs, self).step(actions)
+    return np.stack(s, axis=0), np.expand_dims(r, 1), np.expand_dims(t, 1), np.stack(pa, axis=0)

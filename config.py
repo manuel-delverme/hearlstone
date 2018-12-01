@@ -4,7 +4,7 @@ enjoy = False
 
 
 class DQNAgent:
-  nr_parallel_envs = 30
+  nr_parallel_envs = 300
   tau = 1
   gradient_clip = 1
   use_gpu = True
@@ -13,7 +13,8 @@ class DQNAgent:
   nr_epochs = 2
   buffer_size = int(1e6)
   training_steps = int(1e7)
-  warmup_steps = int(5e3)
+  # warmup_steps = int(5e3)
+  warmup_steps = 0
 
   epsilon_decay = None
   beta_decay = max(training_steps / 3, int(1e5))
@@ -24,7 +25,7 @@ class DQNAgent:
   lr = 1e-5
   l2_decay = 0
   # batch_size = 256
-  batch_size = 64
+  batch_size = 32
 
 
 class VanillaHS:
@@ -32,9 +33,7 @@ class VanillaHS:
   normalize = False
   starting_hp = 30
   max_cards_in_board = 7
-  max_cards_in_hand = 7
-  # encoding error
-  assert max_cards_in_hand <= (max_cards_in_board + 1)
+  max_cards_in_hand = 10
 
 
 class PPOAgent:

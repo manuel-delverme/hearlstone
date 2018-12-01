@@ -5,6 +5,7 @@ import copy
 import numpy as np
 
 import torch
+from shared import utils
 import agents.base_agent
 import random
 from typing import Tuple, List
@@ -71,13 +72,14 @@ class DQNAgent(agents.base_agent.Agent):
     print('loaded', model_path)
 
   def train_step(self, states, actions, rewards, next_states, dones, next_possible_actionss, indices, weights):
-    actions = self.one_hot_actions(actions)
+    actions = self.one_hot_actions(actions.reshape(-1, 1))
     not_done_mask = torch.Tensor(1 - dones.astype(np.int))
-    next_possible_actionss = self.one_hot_actions(next_possible_actionss)
+    # next_possible_actionss = self.one_hot_actions(next_possible_actionss)
 
     states = torch.Tensor(states).detach().requires_grad_(True)
     actions = torch.Tensor(actions)
     weights = torch.Tensor(weights)
+    rewards = torch.Tensor(rewards)
 
     if self.minibatch == 0:
       assert (states.shape[0] == self.batch_size), "Invalid shape: " + str(states.shape)
@@ -197,7 +199,9 @@ class DQNAgent(agents.base_agent.Agent):
   def learn_from_experience(self, state, action, reward, next_state, done, next_actions, step_nr, beta):
     # reward = np.array(reward, dtype=np.float32).reshape(1, )
     # done = np.array([done], np.bool)
-    self.replay_buffer.push(state, action, reward, next_state, done, next_actions)
+    for i in range(config.DQNAgent.nr_parallel_envs):
+      self.replay_buffer.push(state[i], action[i], reward[i], next_state[i], done[i], next_actions[i])
+
     if len(self.replay_buffer) > max(self.batch_size, self.warmup_steps):
       state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(
         self.batch_size, beta)
@@ -219,8 +223,9 @@ class DQNAgent(agents.base_agent.Agent):
       if step_nr is not None:
         self.summary_writer.add_scalar('dqn/minq', min(q_values), step_nr)
         self.summary_writer.add_scalar('dqn/maxq', max(q_values), step_nr)
-      action = best_action.detach().numpy().squeeze(1)
+      action = best_action.detach().numpy()
     else:
+      raise NotImplementedError
       action, = random.sample(possible_actions, 1)
     return action
 
@@ -262,4 +267,5 @@ class DQNAgent(agents.base_agent.Agent):
     return q_values, max_indicies
 
   def one_hot_actions(self, actions):
-    return one_hot_actions(actions, self.num_actions)
+    return utils.one_hot_actions(actions, self.num_actions)
+

@@ -10,11 +10,17 @@ class PrioritizedBufferOpenAI(baselines.deepq.replay_buffer.PrioritizedReplayBuf
     super(PrioritizedBufferOpenAI, self).__init__(capacity, prob_alpha)
 
   def push(self, state, action, reward, next_state, done, next_actions):
+    args = (state, action, reward, next_state, done, next_actions)
+    state, action, reward, next_state, done, next_actions = (a.reshape(-1, 1) for a in args)
     assert state.shape == next_state.shape
+    assert len(state.shape) == 2
+    assert state.shape[1] == 1
     super(PrioritizedBufferOpenAI, self).add(state, action, reward, next_state, done, next_actions)
 
   def sample(self, batch_size, beta):
     states, actions, rewards, next_states, dones, next_actions, weights, indices = super(PrioritizedBufferOpenAI, self).sample(batch_size, beta)
+    trans = (states, actions, rewards, next_states, dones, next_actions)
+    states, actions, rewards, next_states, dones, next_actions = (di.squeeze(2) for di in trans)
     return states, actions, rewards, next_states, dones, next_actions, indices, weights
 
 

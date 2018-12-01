@@ -38,9 +38,10 @@ class VanillaHS(base_env.BaseEnv):
     self.id_to_action = [(-1, -1), ]
     for src_idx in range(max_cards_in_hand):
       self.id_to_action.append((src_idx, -1))
-    for src_idx in range(max_cards_in_hand):
+    for src_idx in range(max_cards_in_board):
       for target_idx in range(max_cards_in_board + 1):
         self.id_to_action.append((src_idx, target_idx))
+
     self.action_to_id_dict = {v: k for k, v in enumerate(self.id_to_action)}
     self.num_actions = len(self.id_to_action)
 
@@ -70,7 +71,6 @@ class VanillaHS(base_env.BaseEnv):
     self.lookup_action_id_to_obj = {}
     self.cheating_opponent = cheating_opponent
     self.starting_hp = starting_hp
-
     self.reinit_game()
 
   def episodic_log(self, *args, new_episode=False):
@@ -123,19 +123,27 @@ class VanillaHS(base_env.BaseEnv):
 
   def action_to_id(self, possible_action) -> Tuple:
     self.episodic_log('action_to_id', possible_action)
-    target_idx = -1
 
     if possible_action.card is None:
       source_idx = -1
       target_idx = -1
     else:
       card = possible_action.card
-      source_idx = card.zone_position
       target = possible_action.params['target']
-      if target is not None:
+      if target is None:
+        # playing from hand
+        source_idx = card.controller.hand.index(card)
+        target_idx = -1
+      else:
+        # trading
+        source_idx = card.controller.field.index(card)
+        # 0 for hero, 1+ board
         target_idx = target.zone_position
-        assert target_idx >= 0
-    return self.action_to_id_dict[(source_idx, target_idx)]
+    try:
+      return self.action_to_id_dict[(source_idx, target_idx)]
+    except KeyError as e:
+      print(possible_action)
+      raise e
 
   def reinit_game(self):
     self.episodic_log('reinit_game', new_episode=True)
@@ -236,7 +244,7 @@ class VanillaHS(base_env.BaseEnv):
       #   (c.cost + 1 for c in self.simulation.opponent.characters))
       # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
       # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health)/self.starting_hp
-    return reward
+    return np.array(reward, dtype=np.float32)
 
   def set_opponent(self, opponent):
     self.episodic_log('set_opponent')
@@ -257,9 +265,9 @@ class VanillaHS(base_env.BaseEnv):
     trans = self.gather_transition(pickle=False)
     return trans
 
-  def step(self, encoded_action: int):
+  def step(self, encoded_action):
     self.episodic_log('step', encoded_action, self.simulation.game.turn)
-    action = self.decode_action(encoded_action)
+    action = self.decode_action(int(encoded_action))
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
       if encoded_action == 0:
@@ -267,7 +275,7 @@ class VanillaHS(base_env.BaseEnv):
 
         if self.simulation.game.turn > 90:
           self.episodic_log('sudden death', self.simulation.game.turn)
-          print('SUDDEN DEATH')
+          # print('SUDDEN DEATH')
           self.simulation.sudden_death()
           raise GameOver
 

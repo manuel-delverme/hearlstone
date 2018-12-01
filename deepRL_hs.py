@@ -35,7 +35,6 @@ def train():
     player.load_model()
     player.render(env_loader())
   else:
-    player.load_model()
     player.train(env_loader)
 
 
