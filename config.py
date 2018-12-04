@@ -1,17 +1,17 @@
 import torch.optim as optim
 
 enjoy = False
+use_gpu = False
 
 
 class DQNAgent:
-  nr_parallel_envs = 300
+  nr_parallel_envs = 1
   tau = 1
   gradient_clip = 1
-  use_gpu = True
   silly = False
-  target_update = 10000
+  target_update = 10000 / nr_parallel_envs
   nr_epochs = 2
-  buffer_size = int(1e6)
+  buffer_size = int(1e6) * nr_parallel_envs
   training_steps = int(1e7)
   # warmup_steps = int(5e3)
   warmup_steps = 0
@@ -25,7 +25,7 @@ class DQNAgent:
   lr = 1e-5
   l2_decay = 0
   # batch_size = 256
-  batch_size = 32
+  batch_size = 256
 
 
 class VanillaHS:
@@ -49,3 +49,22 @@ class PPOAgent:
   entropy_coeff = 0.0
   clip_epsilon = 0.2
   use_joint_pol_val = True
+
+
+class A2CAgent:
+  num_workers = 32
+  optimizer = optim.Adam
+  lr = 1e-5
+  discount = 0.99
+  use_gae = True
+  gae_tau = 0.95
+  entropy_weight = 0.01
+  rollout_length = 20
+  gradient_clip = 0.5
+  # defaults
+  training_steps = int(1e7)
+
+  # Hyper params:
+  hidden_size = 256
+  ddlr = 3e-4
+  # num_steps = 5

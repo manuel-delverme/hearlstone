@@ -21,7 +21,6 @@ import torch.nn
 import subprocess
 
 
-
 class DQNAgent(agents.base_agent.Agent):
   def __init__(self, num_inputs, num_actions, should_flip_board=False,
                model_path="checkpoints/checkpoint.pth.tar", record=True,
@@ -55,7 +54,6 @@ class DQNAgent(agents.base_agent.Agent):
     self.loss = torch.nn.SmoothL1Loss(reduction='none')
     experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
     log_dir = 'runs/{}'.format(experiment_name)
-    self.opponent = opponent
 
     if record:
       self.summary_writer = tensorboardX.SummaryWriter(log_dir=log_dir)
@@ -63,7 +61,7 @@ class DQNAgent(agents.base_agent.Agent):
       cmd = "find {} -name '*.py' | grep -v venv | tar -cvf {}/code.tar --files-from -".format(os.getcwd(), log_dir)
       subprocess.check_output(cmd, shell=True)
     else:
-      self.summary_writer = tensorboardX.SummaryWriter(log_dir='/tmp/trash/')
+      self.summary_writer = tensorboardX.SummaryWriter(log_dir='/tmp/trash/', flush_secs=10)
 
   def load_model(self, model_path=None):
     if model_path is None:
@@ -137,7 +135,8 @@ class DQNAgent(agents.base_agent.Agent):
         print(done, reward)
         observation, reward, terminal, possible_actions = env.reset()
 
-  def train(self, make_env, game_steps=None, checkpoint_every=10000, target_update_every=config.DQNAgent.target_update, ):
+  def train(self, make_env, game_steps=None, checkpoint_every=10000,
+            target_update_every=config.DQNAgent.target_update, ):
     envs = environments.parallel_envs.ParallelEnvs([make_env] * config.DQNAgent.nr_parallel_envs)
 
     self.minibatch = None
@@ -170,12 +169,11 @@ class DQNAgent(agents.base_agent.Agent):
       self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
       self.summary_writer.add_scalar('dqn/beta', beta, step_nr)
 
-      for reward_e, done_e in zip(reward, done):
+      for env_idx, (reward_e, done_e) in enumerate(zip(reward, done)):
         if done_e:
           game_value = (reward_e + 1) / 2
           # self.summary_writer.add_scalar('game_stats/end_turn', envs.simulation.game.turn, step_nr)
-          self.summary_writer.add_scalar('game_stats/game_value', (game_value + 1) / 2, step_nr)
-
+          self.summary_writer.add_scalar('game_stats/game_value', int(game_value), step_nr * len(done) + env_idx)
           assert reward_e in (-1.0, 0.0, 1.0)
         else:
           assert reward_e < 1
@@ -184,9 +182,10 @@ class DQNAgent(agents.base_agent.Agent):
         shared.sync_target(self.q_network, self.q_network_target)
       if step_nr % checkpoint_every == 0 and step_nr > 0:
         torch.save(self.q_network.state_dict(), self.model_path)
-      if (step_nr % int(game_steps / 100)) == 0:
-        self.q_network.value_nosiy_fc3.reset_noise()
-        self.q_network.value_nosiy_fc3.reset_parameters()
+
+      # if (step_nr % int(game_steps / 100)) == 0:
+      #   self.q_network.value_nosiy_fc3.reset_noise()
+      #   self.q_network.value_nosiy_fc3.reset_parameters()
 
   def choose(self, observation, info):
     board_center = observation.shape[1] // 2
@@ -268,4 +267,3 @@ class DQNAgent(agents.base_agent.Agent):
 
   def one_hot_actions(self, actions):
     return utils.one_hot_actions(actions, self.num_actions)
-

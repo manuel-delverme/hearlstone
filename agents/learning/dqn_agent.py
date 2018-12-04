@@ -17,7 +17,7 @@ import time
 import torch.nn
 import subprocess
 
-USE_CUDA = config.DQNAgent.use_gpu
+USE_CUDA = config.use_gpu
 
 
 class DQNAgent(agents.base_agent.Agent):

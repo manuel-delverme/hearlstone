@@ -1,17 +1,17 @@
 import agents.base_agent
-import agents.heuristic.random_agent
 import agents.heuristic.hand_coded
+import agents.heuristic.random_agent
+import agents.learning.a2c_agent
 import agents.learning.dqn_agent
 import agents.learning.dqn_horizon
 import agents.learning.ppo_agent
-# import agents.learning.learning_from_heuristics
-import environments.vanilla_hs
-import environments.trading_hs
 import config
 import environments.gym_wrapper
+import environments.trading_hs
+import environments.vanilla_hs
 
 
-def env_loader():
+def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
   hs_game = environments.vanilla_hs.VanillaHS()
   hs_game.set_opponent(
     agents.heuristic.hand_coded.HeuristicAgent()
@@ -22,8 +22,7 @@ def env_loader():
 def train():
   dummy_hs_env = environments.vanilla_hs.VanillaHS()
 
-  # agent = agents.learning.ppo_agent.PPOAgent
-  agent = agents.learning.dqn_horizon.DQNAgent
+  agent = agents.learning.a2c_agent.A2CAgent
   player = agent(
     dummy_hs_env.observation_space.shape[0],
     dummy_hs_env.action_space.n,
@@ -33,9 +32,9 @@ def train():
 
   if config.enjoy:
     player.load_model()
-    player.render(env_loader())
+    player.render(make_env())
   else:
-    player.train(env_loader)
+    player.train(make_env)
 
 
 if __name__ == "__main__":
