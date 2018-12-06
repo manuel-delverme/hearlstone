@@ -21,6 +21,7 @@ class A2CAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs, num_actions, should_flip_board=False, model_path="checkpoints/checkpoint.pth.tar",
                record=True, opponent=None, ) -> None:
+    self.model_path = model_path
     self.network = actor_critic.A2C(num_inputs, num_actions)
     self.network.build_network()
     self.optimizer = config.A2CAgent.optimizer(
@@ -83,11 +84,11 @@ class A2CAgent(agents.base_agent.Agent):
 
         states = next_state
         progress_bar.update(len(states))
-        frame_idx += 1
 
-        if frame_idx % 1000 == 0:
-          pass  # test_rewards.append(np.mean([test_env() for _ in range(10)]))
-          pass  # plot(frame_idx, test_rewards)
+        if frame_idx % config.A2CAgent.checkpoint_every == 0 and frame_idx > 0:
+          torch.save(self.network.state_dict(), self.model_path)
+
+        frame_idx += 1
 
       next_state = torch.FloatTensor(next_state)  # .to(device)
 

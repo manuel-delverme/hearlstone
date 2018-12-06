@@ -78,6 +78,7 @@ class HSsimulation(object):
     player2_class = CardClass.MAGE.default_hero
     deck1, deck2 = self.generate_decks(self._DECK_SIZE, player1_class, player2_class)
 
+    # NOTE: both players play the same deck
     self.player1 = Player("Agent", deck1, player1_class)
     self.player2 = Player("Opponent", deck1, player2_class)
     # self.player2 = Player("Opponent", deck2, CardClass.WARRIOR.default_hero)
@@ -258,19 +259,18 @@ class HSsimulation(object):
 
     assert len(player.hand) <= self._MAX_CARDS_IN_HAND
 
-    player_board = list(sorted(player_board, key=lambda x: x.id)) + [
-      None] * self._MAX_CARDS_IN_BOARD
-    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(
-      player_board[self._MAX_CARDS_IN_BOARD:])
+    player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_BOARD
 
-    player_board = np.hstack(
-      self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
+    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
+
+    player_board = np.hstack(self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
+
 
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
 
     # game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
-    game_state = np.hstack((player_board, player_hero))  # , player_mana))
+    game_state = np.hstack((player_board, player_hero, player_mana))
     return game_state
 
   def observe(self):
@@ -316,7 +316,7 @@ class HSsimulation(object):
     elif val is False:
       val = 0
     elif val is True:
-      val = 0
+      val = 1
     elif isinstance(val, str):
       val = HSsimulation.str_to_vec(val)
 

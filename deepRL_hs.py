@@ -13,16 +13,16 @@ import environments.vanilla_hs
 
 def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
   hs_game = environments.vanilla_hs.VanillaHS()
-  hs_game.set_opponent(
-    agents.heuristic.hand_coded.HeuristicAgent()
-  )
+  opponent = config.VanillaHS.opponent()
+  hs_game.set_opponent(opponent)
   return hs_game
 
 
 def train():
   dummy_hs_env = environments.vanilla_hs.VanillaHS()
 
-  agent = agents.learning.a2c_agent.A2CAgent
+  # agent = agents.learning.a2c_agent.A2CAgent
+  agent = agents.learning.dqn_horizon.DQNAgent
   player = agent(
     dummy_hs_env.observation_space.shape[0],
     dummy_hs_env.action_space.n,

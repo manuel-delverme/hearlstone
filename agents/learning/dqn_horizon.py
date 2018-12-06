@@ -88,28 +88,45 @@ class DQNAgent(agents.base_agent.Agent):
       assert (next_possible_actionss.shape == actions.shape), "Invalid shape: " + str(next_possible_actionss.shape)
     self.minibatch += 1
 
-    # Compute max a' Q(s', a') over all possible actions using target network
-    next_q_values, max_q_action_idxs = self.get_max_q_values(next_states, next_possible_actionss)
-
-    target_q_values = rewards + not_done_mask * (self.gamma * next_q_values)
-
-    # Get Q-value of action taken
-    all_q_values = self.q_network(states)
-    q_values = torch.sum(all_q_values * actions, 1, keepdim=True)
-
-    loss = self.loss(q_values, target_q_values).squeeze()
-    loss = loss * weights
-    assert loss.shape == (self.batch_size,), loss.shape
-
-    priorities = loss * weights + 1e-5
-    loss_value = loss.mean()
+    proj_dist = self.projection_distribution(next_states, rewards, not_done_mask)
+    dist = self.q_network(states)
+    actions = actions.unsqueeze(1).expand(self.batch_size, 1, self.q_network.num_atoms)
+    dist = dist.gather(1, actions).squeeze(1)
+    dist.data.clamp_(0.01, 0.99)
+    proj_dist = torch.Tensor(proj_dist, requires_grad=True)
+    loss = -(proj_dist * dist.log()).sum(1)
+    loss = loss.mean()
 
     self.optimizer.zero_grad()
-    loss_value.backward()
-    torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), config.DQNAgent.gradient_clip)
+    loss.backward()
     self.optimizer.step()
 
-    self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
+    self.q_network.reset_noise()
+    self.q_network_target.reset_noise()
+
+    # # Compute max a' Q(s', a') over all possible actions using target network
+    # next_q_values, max_q_action_idxs = self.get_max_q_values(next_states, next_possible_actionss)
+
+    # target_q_values = rewards + not_done_mask * (self.gamma * next_q_values)
+
+    # # Get Q-value of action taken
+    # all_q_values = self.q_network(states)
+    # q_values = torch.sum(all_q_values * actions, 1, keepdim=True)
+
+    # loss = self.loss(q_values, target_q_values).squeeze()
+    # loss = loss * weights
+    assert loss.shape == (self.batch_size,), loss.shape
+
+    # TODO: re-enable
+    # priorities = loss * weights + 1e-5
+    # loss_value = loss.mean()
+
+    # self.optimizer.zero_grad()
+    # loss_value.backward()
+    # torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), config.DQNAgent.gradient_clip)
+    # self.optimizer.step()
+
+    # self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
 
     if self.minibatch % config.DQNAgent.target_update:
       shared.sync_target(self.q_network, self.q_network_target)
@@ -196,8 +213,6 @@ class DQNAgent(agents.base_agent.Agent):
     return action
 
   def learn_from_experience(self, state, action, reward, next_state, done, next_actions, step_nr, beta):
-    # reward = np.array(reward, dtype=np.float32).reshape(1, )
-    # done = np.array([done], np.bool)
     for i in range(config.DQNAgent.nr_parallel_envs):
       self.replay_buffer.push(state[i], action[i], reward[i], next_state[i], done[i], next_actions[i])
 
@@ -216,27 +231,21 @@ class DQNAgent(agents.base_agent.Agent):
       # assert all(isinstance(a, int) for a in possible_actions)
       assert isinstance(epsilon, float)
 
-    if random.random() > epsilon:
-      # q_values = self.get_q_values(self.q_network, state, possible_actions)
-      q_values, best_action = self.get_max_q_values(state, possible_actions)
-      if step_nr is not None:
-        self.summary_writer.add_scalar('dqn/minq', min(q_values), step_nr)
-        self.summary_writer.add_scalar('dqn/maxq', max(q_values), step_nr)
-      action = best_action.detach().numpy()
-    else:
-      raise NotImplementedError
-      action, = random.sample(possible_actions, 1)
-    return action
+    dist = self.q_network(state).data.cpu()
+    dist = dist * torch.linspace(self.q_network.Vmin, self.q_network.Vmax, self.q_network.num_atoms)
+    q_values = dist.sum(2)
 
-  @staticmethod
-  def get_q_values(q_network, state, possible_actions):
-    raise Exception
-    state_action_pairs = []
-    for possible_action in possible_actions:
-      state_action_pair = np.append(state, possible_action)
-      state_action_pairs.append(state_action_pair)
-    q_values = q_network(state_action_pairs)
-    return q_values
+    # q_values = self.get_q_values(self.q_network, state, possible_actions)
+    # q_values, best_action = self.get_max_q_values(state, possible_actions)
+    if step_nr is not None:
+      self.summary_writer.add_scalar('dqn/minq', min(q_values[0, :]), step_nr)
+      self.summary_writer.add_scalar('dqn/maxq', max(q_values[0, :]), step_nr)
+
+    q_values, = q_values.numpy()
+    possible_actions, = possible_actions
+    q_values += -1e5 * (1 - possible_actions)
+    action = np.argmax(q_values).reshape(-1, 1)
+    return action
 
   def __del__(self):
     self.summary_writer.close()
@@ -251,6 +260,7 @@ class DQNAgent(agents.base_agent.Agent):
         state i.
     :param double_q_learning: bool to use double q-learning
     """
+    raise Exception
     q_values = self.q_network(states).detach()
     q_values_target = self.q_network_target(states).detach()
     # Set q-values of impossible actions to a very large negative number.
@@ -264,6 +274,35 @@ class DQNAgent(agents.base_agent.Agent):
     # to decouble selection & scoring, preventing overestimation of q-values
     q_values = torch.gather(q_values_target, 1, max_indicies)
     return q_values, max_indicies
+
+  def projection_distribution(self, next_state, rewards, not_dones):
+    Vmin, Vmax, num_atoms = self.q_network.Vmax, self.q_network.Vmin, self.q_network.num_atoms
+    delta_z = float(Vmax - Vmin) / (num_atoms - 1)
+    support = torch.linspace(Vmin, Vmax, num_atoms)
+
+    next_dist = self.q_network_target(next_state).data.cpu() * support
+    next_action = next_dist.sum(2).max(1)[1]
+    next_action = next_action.unsqueeze(1).unsqueeze(1).expand(next_dist.size(0), 1, next_dist.size(2))
+    next_dist = next_dist.gather(1, next_action).squeeze(1)
+
+    rewards = rewards.expand_as(next_dist)
+    not_dones = not_dones.expand_as(next_dist)
+    support = support.unsqueeze(0).expand_as(next_dist)
+
+    Tz = rewards + not_dones * 0.99 * support
+    Tz = Tz.clamp(min=Vmin, max=Vmax)
+    b = (Tz - Vmin) / delta_z
+    l = b.floor().long()
+    u = b.ceil().long()
+
+    offset = torch.linspace(0, (self.batch_size - 1) * num_atoms, self.batch_size).long().unsqueeze(1).expand(
+      self.batch_size, num_atoms)
+
+    proj_dist = torch.zeros(next_dist.size())
+    proj_dist.view(-1).index_add_(0, (l + offset).view(-1), (next_dist * (u.float() - b)).view(-1))
+    proj_dist.view(-1).index_add_(0, (u + offset).view(-1), (next_dist * (b - l.float())).view(-1))
+
+    return proj_dist
 
   def one_hot_actions(self, actions):
     return utils.one_hot_actions(actions, self.num_actions)

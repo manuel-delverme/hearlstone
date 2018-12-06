@@ -17,6 +17,7 @@ from environments import base_env
 from shared import utils
 
 from typing import Tuple, List
+from baselines.common.running_mean_std import RunningMeanStd
 
 
 class VanillaHS(base_env.BaseEnv):
@@ -71,7 +72,11 @@ class VanillaHS(base_env.BaseEnv):
     self.lookup_action_id_to_obj = {}
     self.cheating_opponent = cheating_opponent
     self.starting_hp = starting_hp
+
+    self.ob_rms = None
     self.reinit_game()
+    if config.VanillaHS.normalize:
+      self.ob_rms = RunningMeanStd(shape=self.observation_space.shape)
 
   def episodic_log(self, *args, new_episode=False):
     if self.log is not None:
@@ -101,7 +106,7 @@ class VanillaHS(base_env.BaseEnv):
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
     self.episodic_log('observation_space')
     obs, _, _, _ = self.gather_transition()
-    return gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
+    return gym.spaces.Box(low=-1, high=10, shape=obs.shape, dtype=np.int)
 
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
@@ -166,13 +171,7 @@ class VanillaHS(base_env.BaseEnv):
         cards.append((card.atk, card.health))
     cards = np.array(cards)
 
-    card_max = list(cards.max(axis=0))
-    if config.VanillaHS.normalize:
-      self.normalization_factors = np.array(
-        card_max * self.max_cards_in_board + [1, 30] + card_max * self.max_cards_in_board + [1, 30]
-      )
-    else:
-      self.normalization_factors = False
+    card_max = list(cards.max(axis=0) + [1])
 
     self.games_played = 0
     self.games_finished = 0
@@ -244,7 +243,7 @@ class VanillaHS(base_env.BaseEnv):
       # board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
       #   (c.cost + 1 for c in self.simulation.opponent.characters))
       # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
-      # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health)/self.starting_hp
+      # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health) / self.starting_hp
     return np.array(reward, dtype=np.float32)
 
   def set_opponent(self, opponent):
@@ -295,12 +294,16 @@ class VanillaHS(base_env.BaseEnv):
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
 
-    board_adv = len(self.simulation.player.characters) - len(self.simulation.opponent.characters)
-    hand_adv = len(self.simulation.player.hand) - len(self.simulation.opponent.hand)
-    board_mana_adv = sum((c.cost for c in self.simulation.player.characters)) - sum(
-      (c.cost for c in self.simulation.opponent.characters))
-    stats = np.array([board_adv, hand_adv, board_mana_adv])
-    game_observation = np.concatenate((game_observation, stats), axis=0)
+    # board_adv = len(self.simulation.player.characters) - len(self.simulation.opponent.characters)
+    # hand_adv = len(self.simulation.player.hand) - len(self.simulation.opponent.hand)
+    # board_mana_adv = sum((c.cost for c in self.simulation.player.characters)) - sum(
+    #   (c.cost for c in self.simulation.opponent.characters))
+    # stats = np.array([board_adv, hand_adv, board_mana_adv])
+    # game_observation = np.concatenate((game_observation, stats), axis=0)
+
+    if self.ob_rms is not None:
+      self.ob_rms.update(game_observation)
+      game_observation = (game_observation - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + 1e-8)
 
     reward = self.calculate_reward()
     terminal = self.simulation.game.ended

@@ -1,11 +1,13 @@
-import random
 import agents.base_agent
+import numpy as np
+import random
 
 
 class RandomAgent(agents.base_agent.Agent):
-  def choose(self, observation, info):
-    choice = random.choice(info['possible_actions'])
-    return choice
-
   def __init__(self):
-    pass
+    super().__init__()
+
+  def choose(self, observation: np.array, info: dict):
+    possible_actions = info['possible_actions']
+    choice = random.choice(possible_actions)
+    return choice

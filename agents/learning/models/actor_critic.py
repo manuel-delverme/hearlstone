@@ -14,15 +14,16 @@ class A2C(nn.Module):
 
   def build_network(self):
     self.critic = nn.Sequential(
-      nn.Linear(self.num_inputs, 256),
+      nn.Linear(self.num_inputs, config.A2CAgent.hidden_size),
       nn.ReLU(),
-      nn.Linear(256, 1)
+      nn.Linear(config.A2CAgent.hidden_size, 1),
+      nn.Tanh(),
     )
 
     self.actor = nn.Sequential(
-      nn.Linear(self.num_inputs, 256),
+      nn.Linear(self.num_inputs, config.A2CAgent.hidden_size),
       nn.ReLU(),
-      nn.Linear(256, self.num_actions),
+      nn.Linear(config.A2CAgent.hidden_size, self.num_actions),
     )
 
     if self.use_cuda:
