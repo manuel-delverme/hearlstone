@@ -4,18 +4,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from numpy import ndarray
+from torch import Tensor
+from typing import Union
+
 
 class DQN(nn.Module):
-  def __init__(self, num_inputs, num_actions):
+  def __init__(self, num_inputs: int, num_actions: int) -> None:
     self.num_inputs = num_inputs
     self.num_actions = num_actions
     self.use_cuda = config.use_gpu
     self.num_atoms = 51
-    self.Vmin = -10
-    self.Vmax = 10
+    self.Vmin = -1
+    self.Vmax = 1
     super(DQN, self).__init__()
 
-  def build_network(self):
+  def build_network(self) -> None:
     self.linear1 = nn.Linear(self.num_inputs, 32)
     self.linear2 = nn.Linear(32, 64)
 
@@ -37,7 +41,7 @@ class DQN(nn.Module):
     h = self.value_nosiy_fc3(h)
     return h
 
-  def forward(self, x):
+  def forward(self, x: Union[ndarray, Tensor]) -> Tensor:
     x = torch.Tensor(x)
     if self.use_cuda:
       x = x.cuda()
@@ -63,7 +67,7 @@ class DQN(nn.Module):
       q_val = q_val.cpu()
     return q_val
 
-  def reset_noise(self):
+  def reset_noise(self) -> None:
     self.noisy_value1.reset_noise()
     self.noisy_value2.reset_noise()
     self.noisy_advantage1.reset_noise()

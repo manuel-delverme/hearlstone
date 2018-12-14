@@ -1,5 +1,5 @@
 import agents.heuristic.hand_coded
-import agents.heuristic.random_agent
+import agents.heuristic.hand_coded
 import torch.optim as optim
 
 enjoy = False
@@ -17,6 +17,13 @@ class VanillaHS:
   opponent = agents.heuristic.hand_coded.HeuristicAgent
 
 
+class ES:
+  nr_games = 100
+  nr_threads = 15
+  population_size = 30
+  nr_iters = 100
+
+
 class DQNAgent:
   nr_parallel_envs = 1
   nr_epochs = nr_parallel_envs
@@ -25,7 +32,7 @@ class DQNAgent:
   silly = False
   target_update = 1000
   buffer_size = int(1e6)
-  training_steps = int(1e7)
+  training_steps = int(1e2)
   # warmup_steps = int(5e3)
   warmup_steps = 0
 
@@ -36,10 +43,10 @@ class DQNAgent:
   optimizer = optim.Adam
   gamma = 0.99
   # lr = 1e-5
-  lr = 1e-3
+  lr = 1e-4
   l2_decay = 0
   # batch_size = 256
-  batch_size = 32
+  batch_size = 64
 
 
 class PPOAgent:

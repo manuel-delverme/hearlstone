@@ -18,7 +18,9 @@ import random
 from agents.base_agent import Agent
 from hearthstone.enums import CardClass, CardType
 
-
+from functools import _lru_cache_wrapper
+from numpy import ndarray
+from typing import Callable, List, Tuple, Union
 def to_tuples(list_of_lists):
   tuple_of_tuples = []
   for item in list_of_lists:
@@ -28,7 +30,7 @@ def to_tuples(list_of_lists):
   return tuple(tuple_of_tuples)
 
 
-def disk_cache(f):
+def disk_cache(f: Callable) -> _lru_cache_wrapper:
   @lru_cache(maxsize=1024)
   def wrapper(*args, **kwargs):
     fid = f.__name__
@@ -57,7 +59,7 @@ def arena_fight(
   opponent_policy: Agent,
   nr_games: int = 100,
 ):
-  player_order = [player_policy, opponent_policy]  # type: List[Agent]
+  player_order: List[Agent] = [player_policy, opponent_policy]
   random.shuffle(player_order)
   active_player, passive_player = player_order  # type: (Agent, Agent)
 
@@ -95,7 +97,8 @@ def arena_fight(
   return win_ratio
 
 
-def random_draft(card_class: CardClass, exclude=tuple(), deck_length=30, max_mana=30):
+def random_draft(card_class: CardClass, exclude: Tuple = tuple(), deck_length: int = 30, max_mana: int = 30) -> List[
+  str]:
   from fireplace import cards
 
   deck = []
@@ -134,7 +137,7 @@ def suppress_stdout():
       sys.stdout = old_stdout
 
 
-def one_hot_actions(actions, num_actions):
+def one_hot_actions(actions: Union[Tuple[Tuple[int, int]], Tuple[Tuple[int, int, int]]], num_actions: int) -> ndarray:
   possible_actions = np.zeros((len(actions), num_actions), np.float32)
   for row, pas in enumerate(actions):
     for pa in pas:

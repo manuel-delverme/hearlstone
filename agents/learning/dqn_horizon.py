@@ -70,39 +70,33 @@ class DQNAgent(agents.base_agent.Agent):
     print('loaded', model_path)
 
   def train_step(self, states, actions, rewards, next_states, dones, next_possible_actionss, indices, weights):
-    actions = self.one_hot_actions(actions.reshape(-1, 1))
+    # actions = self.one_hot_actions(actions.reshape(-1, 1))
     not_done_mask = torch.Tensor(1 - dones.astype(np.int))
     # next_possible_actionss = self.one_hot_actions(next_possible_actionss)
 
     states = torch.Tensor(states).detach().requires_grad_(True)
-    actions = torch.Tensor(actions)
+    actions = torch.Tensor(actions).long()
     weights = torch.Tensor(weights)
     rewards = torch.Tensor(rewards)
 
     if self.minibatch == 0:
       assert (states.shape[0] == self.batch_size), "Invalid shape: " + str(states.shape)
-      assert actions.shape == torch.Size([self.batch_size, self.num_actions]), "Invalid shape: " + str(actions.shape)
+      # assert actions.shape == torch.Size([self.batch_size, self.num_actions]), "Invalid shape: " + str(actions.shape)
+      assert actions.shape == torch.Size([self.batch_size, 1]), "Invalid shape: " + str(actions.shape)
       assert rewards.shape == torch.Size([self.batch_size, 1]), "Invalid shape: " + str(rewards.shape)
       assert (next_states.shape == states.shape), "Invalid shape: " + str(next_states.shape)
       assert (dones.shape == rewards.shape), "Invalid shape: " + str(dones.shape)
-      assert (next_possible_actionss.shape == actions.shape), "Invalid shape: " + str(next_possible_actionss.shape)
+      # assert (next_possible_actionss.shape == actions.shape), "Invalid shape: " + str(next_possible_actionss.shape)
     self.minibatch += 1
 
-    proj_dist = self.projection_distribution(next_states, rewards, not_done_mask)
+    proj_dist = self.projection_distribution(next_states, rewards, not_done_mask, next_possible_actionss)
     dist = self.q_network(states)
+    # next_action = next_action.unsqueeze(1).unsqueeze(1).expand(next_dist.size(0), 1, next_dist.size(2))
     actions = actions.unsqueeze(1).expand(self.batch_size, 1, self.q_network.num_atoms)
     dist = dist.gather(1, actions).squeeze(1)
     dist.data.clamp_(0.01, 0.99)
-    proj_dist = torch.Tensor(proj_dist, requires_grad=True)
+    proj_dist = torch.tensor(proj_dist, requires_grad=True)
     loss = -(proj_dist * dist.log()).sum(1)
-    loss = loss.mean()
-
-    self.optimizer.zero_grad()
-    loss.backward()
-    self.optimizer.step()
-
-    self.q_network.reset_noise()
-    self.q_network_target.reset_noise()
 
     # # Compute max a' Q(s', a') over all possible actions using target network
     # next_q_values, max_q_action_idxs = self.get_max_q_values(next_states, next_possible_actionss)
@@ -115,16 +109,20 @@ class DQNAgent(agents.base_agent.Agent):
 
     # loss = self.loss(q_values, target_q_values).squeeze()
     # loss = loss * weights
+
     assert loss.shape == (self.batch_size,), loss.shape
 
     # TODO: re-enable
     # priorities = loss * weights + 1e-5
-    # loss_value = loss.mean()
+    loss_value = loss.mean()
 
-    # self.optimizer.zero_grad()
-    # loss_value.backward()
+    self.optimizer.zero_grad()
+    loss_value.backward()
     # torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), config.DQNAgent.gradient_clip)
-    # self.optimizer.step()
+    self.optimizer.step()
+
+    self.q_network.reset_noise()
+    self.q_network_target.reset_noise()
 
     # self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
 
@@ -234,14 +232,14 @@ class DQNAgent(agents.base_agent.Agent):
     dist = self.q_network(state).data.cpu()
     dist = dist * torch.linspace(self.q_network.Vmin, self.q_network.Vmax, self.q_network.num_atoms)
     q_values = dist.sum(2)
+    q_values, = q_values.numpy()
 
     # q_values = self.get_q_values(self.q_network, state, possible_actions)
     # q_values, best_action = self.get_max_q_values(state, possible_actions)
     if step_nr is not None:
-      self.summary_writer.add_scalar('dqn/minq', min(q_values[0, :]), step_nr)
-      self.summary_writer.add_scalar('dqn/maxq', max(q_values[0, :]), step_nr)
+      self.summary_writer.add_scalar('dqn/minq', min(q_values), step_nr)
+      self.summary_writer.add_scalar('dqn/maxq', max(q_values), step_nr)
 
-    q_values, = q_values.numpy()
     possible_actions, = possible_actions
     q_values += -1e5 * (1 - possible_actions)
     action = np.argmax(q_values).reshape(-1, 1)
@@ -275,13 +273,15 @@ class DQNAgent(agents.base_agent.Agent):
     q_values = torch.gather(q_values_target, 1, max_indicies)
     return q_values, max_indicies
 
-  def projection_distribution(self, next_state, rewards, not_dones):
-    Vmin, Vmax, num_atoms = self.q_network.Vmax, self.q_network.Vmin, self.q_network.num_atoms
+  def projection_distribution(self, next_state, rewards, not_dones, possible_actions):
+    Vmin, Vmax, num_atoms = self.q_network.Vmin, self.q_network.Vmax, self.q_network.num_atoms
     delta_z = float(Vmax - Vmin) / (num_atoms - 1)
     support = torch.linspace(Vmin, Vmax, num_atoms)
 
     next_dist = self.q_network_target(next_state).data.cpu() * support
-    next_action = next_dist.sum(2).max(1)[1]
+    next_action = next_dist.sum(2)
+    next_action += torch.tensor(-1e5 * (1 - possible_actions))
+    next_action = next_action.max(1)[1]
     next_action = next_action.unsqueeze(1).unsqueeze(1).expand(next_dist.size(0), 1, next_dist.size(2))
     next_dist = next_dist.gather(1, next_action).squeeze(1)
 
