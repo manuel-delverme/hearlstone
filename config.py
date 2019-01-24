@@ -1,3 +1,5 @@
+import functools
+
 import agents.heuristic.hand_coded
 import agents.heuristic.hand_coded
 import torch.optim as optim
@@ -6,11 +8,15 @@ enjoy = False
 use_gpu = False
 
 
+# experiment_name = 'normalized_rw'
+
+
 class VanillaHS:
+  shuffle_deck = True
   debug = False
-  normalize = True
-  starting_hp = 30
-  max_cards_in_board = 5
+  normalize = False
+  starting_hp = 10
+  max_cards_in_board = 3
   max_cards_in_hand = 5
   # opponent = agents.heuristic.hand_coded.PassingAgent
   # opponent = agents.heuristic.random_agent.RandomAgent
@@ -18,34 +24,32 @@ class VanillaHS:
 
 
 class ES:
-  nr_games = 100
+  nr_games = 10
   nr_threads = 15
-  population_size = 30
-  nr_iters = 100
+  population_size = 15
+  nr_iters = 5000
 
 
 class DQNAgent:
+  eval_episodes = 100
+  eval_every = 5000
   nr_parallel_envs = 1
-  nr_epochs = nr_parallel_envs
+  # nr_epochs = nr_parallel_envs
   tau = 1
   gradient_clip = 1
   silly = False
   target_update = 1000
   buffer_size = int(1e6)
-  training_steps = int(1e2)
-  # warmup_steps = int(5e3)
-  warmup_steps = 0
+  training_steps = int(1e6)
+  warmup_steps = 0  # int(1e4)
 
-  epsilon_decay = None
+  epsilon_decay = max(training_steps / 3, int(1e5))
   beta_decay = max(training_steps / 3, int(1e5))
-  # optimizer = optim.RMSprop
-
   optimizer = optim.Adam
   gamma = 0.99
   # lr = 1e-5
-  lr = 1e-4
+  lr = 1e-5
   l2_decay = 0
-  # batch_size = 256
   batch_size = 64
 
 

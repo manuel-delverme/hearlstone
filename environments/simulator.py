@@ -72,8 +72,7 @@ class HSsimulation(object):
     'silenced': None,
   }
 
-  def __init__(self, skip_mulligan=False, cheating_opponent=False,
-    starting_hp=None):
+  def __init__(self, skip_mulligan=False, cheating_opponent=False, shuffle_deck=True, starting_hp=None):
     player1_class = CardClass.MAGE.default_hero
     player2_class = CardClass.MAGE.default_hero
     deck1, deck2 = self.generate_decks(self._DECK_SIZE, player1_class, player2_class)
@@ -98,8 +97,9 @@ class HSsimulation(object):
     self.player = new_game.players[0]
     self.opponent = new_game.players[1]
 
-    self.player.deck = sorted(self.player.deck, key=lambda x: x.cost)
-    self.opponent.deck = sorted(self.opponent.deck, key=lambda x: x.cost)
+    if shuffle_deck:
+      self.player.deck = sorted(self.player.deck, key=lambda x: x.cost)
+      self.opponent.deck = sorted(self.opponent.deck, key=lambda x: x.cost)
 
     if skip_mulligan:
       cards_to_mulligan = self.mulligan_heuristic(self.player1)
@@ -123,7 +123,7 @@ class HSsimulation(object):
   @staticmethod
   @functools.lru_cache()
   def generate_decks(deck_size, player1_class=CardClass.MAGE,
-    player2_class=CardClass.WARRIOR):
+                     player2_class=CardClass.WARRIOR):
     while True:
       deck1 = utils.random_draft(player1_class, max_mana=5)
       deck2 = utils.random_draft(player2_class, max_mana=5)
@@ -265,7 +265,6 @@ class HSsimulation(object):
 
     player_board = np.hstack(self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
 
-
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
 
@@ -277,12 +276,13 @@ class HSsimulation(object):
     # TODO: encode the player's hand, right now the observation doesnt
     # include your own hand
     if self.game.current_player == self.player:
-      passive_player = self.player
+      active_player, passive_player = self.player, self.opponent
     else:
-      passive_player = self.opponent
+      active_player, passive_player = self.opponent, self.player
 
-    observation = self.observe_player(self.game.current_player)
-    observation = np.hstack((observation, self.observe_player(passive_player)))
+    player_observation = self.observe_player(active_player)
+    opponent_observation = self.observe_player(passive_player)
+    observation = np.hstack((player_observation, opponent_observation))
     return observation
 
   def step(self, action):
@@ -385,7 +385,8 @@ class HSsimulation(object):
       player_lst.append(val)
     return player_lst
 
-  @functools.lru_cache(maxsize=20000)
+  # TODONT: cards have __hash__ as their ID, which means changes in health wont change the card id
+  # @functools.lru_cache(maxsize=20000)
   def card_to_bow(self, card_obj):
     assert card_obj is None or card_obj.data.description == ""
 

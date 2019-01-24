@@ -26,7 +26,7 @@ class DQNAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs, num_actions, model_path="checkpoints/evo_checkpoint.pth.tar", record=True,
                population_size=config.ES.population_size, threadcount=config.ES.nr_threads,
-               sigma=0.1, learning_rate=0.001, decay=1.0, sigma_decay=1.0, render_test=False, save_path=None
+               sigma=0.2, learning_rate=0.01, decay=1.0, sigma_decay=1.0, render_test=False, save_path=None
                ) -> None:
     self.nr_threads = threadcount
     self.minibatch = None
@@ -58,7 +58,12 @@ class DQNAgent(agents.base_agent.Agent):
       self.summary_writer = tensorboardX.SummaryWriter(log_dir='/tmp/trash/', flush_secs=99999)
 
     self.reward_function = partial(self.fitness, model=self.model)
-    self.weights = list(self.model.parameters())
+    try:
+      with open(self.model_path, 'rb') as fin:
+        self.weights = pickle.load(fin)
+    except FileNotFoundError:
+      self.weights = list(self.model.parameters())
+
     self.pool = Pool(threadcount)
     self.render_test = render_test
     self.save_path = save_path
@@ -142,10 +147,12 @@ class DQNAgent(agents.base_agent.Agent):
       self.summary_writer.add_scalar('rewards/mean', rewards.mean(), iter_nr)
       self.summary_writer.add_scalar('rewards/max', rewards.max(), iter_nr)
       self.summary_writer.add_scalar('rewards/std', rewards.std(), iter_nr)
+      self.summary_writer.add_histogram('rewards/distr', rewards, iter_nr)
 
       if np.std(rewards) != 0:
-        normalized_rewards = rewards
-        for index, param in enumerate(self.weights):
+        # normalized_rewards = rewards
+        normalized_rewards = (rewards - np.mean(rewards)) / np.std(rewards)
+      for index, param in enumerate(self.weights):
           A = np.array([p[index] for p in population])
           rewards_pop = torch.from_numpy(np.dot(A.T, normalized_rewards).T).float()
           param.data = param.data + self.learning_rate / (self.population_size * self.sigma) * rewards_pop
