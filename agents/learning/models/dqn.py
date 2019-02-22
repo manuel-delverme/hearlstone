@@ -18,13 +18,13 @@ class DQN(nn.Module):
     super(DQN, self).__init__()
 
   def build_network(self) -> None:
-    self.linear1 = nn.Linear(self.num_inputs, 32)
-    self.linear2 = nn.Linear(32, 64)
+    self.linear1 = nn.Linear(self.num_inputs, 64)
+    # self.linear2 = nn.Linear(32, 64)
 
-    self.value1 = nn.Linear(64, 64)
+    # self.value1 = nn.Linear(64, 64)
     self.value_out = nn.Linear(64, 1)
 
-    self.advantage1 = nn.Linear(64, 64)
+    # self.advantage1 = nn.Linear(64, 64)
     self.advantage_out = nn.Linear(64, self.num_actions)
 
     if self.use_cuda:
@@ -36,12 +36,14 @@ class DQN(nn.Module):
       x = x.cuda()
 
     x = F.relu(self.linear1(x))
-    x = F.relu(self.linear2(x))
+    # x = F.relu(self.linear2(x))
 
-    value = F.relu(self.value1(x))
+    value = x
+    # value = F.relu(self.value1(x))
     value = self.value_out(value)
 
-    advantage = F.relu(self.advantage1(x))
+    advantage = x
+    # advantage = F.relu(self.advantage1(x))
     advantage = self.advantage_out(advantage)
 
     q_val = value + advantage - advantage.mean()
@@ -56,9 +58,10 @@ class DQN(nn.Module):
       x = x.cuda()
 
     x = F.relu(self.linear1(x))
-    x = F.relu(self.linear2(x))
+    # x = F.relu(self.linear2(x))
 
-    value = F.relu(self.value1(x))
+    value = x
+    # value = F.relu(self.value1(x))
     value = self.value_out(value)
 
     if self.use_cuda:

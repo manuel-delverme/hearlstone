@@ -1,8 +1,9 @@
 import tensorboardX
-import environments.parallel_envs
+# import environments.parallel_envs
 # TODO use the shmem version
 import copy
 import numpy as np
+# import torch.nn.functional as F
 
 import torch
 
@@ -24,7 +25,8 @@ import subprocess
 
 
 class DQNAgent(agents.base_agent.Agent):
-  def __init__(self, num_inputs, num_actions, model_path="checkpoints/checkpoint.pth.tar", record=True) -> None:
+  def __init__(self, num_inputs, num_actions, model_path="checkpoints/checkpoint.pth.tar", record=True,
+               experiment_name="") -> None:
     self.IMPOSSIBLE_ACTION_PENALTY = -1e5
     self.minibatch_num = None
     self.num_actions = num_actions
@@ -51,7 +53,8 @@ class DQNAgent(agents.base_agent.Agent):
       config.DQNAgent.buffer_size, num_inputs, num_actions
     )
     self.loss = torch.nn.SmoothL1Loss(reduction='none')
-    experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
+    experiment_name += time.strftime("%Y_%m_%d-%H_%M_%S")
+
     log_dir = 'runs/{}'.format(experiment_name)
 
     if record:
@@ -68,8 +71,7 @@ class DQNAgent(agents.base_agent.Agent):
     self.q_network.load_state_dict(torch.load(model_path))
     print('loaded', model_path)
 
-  def train_step(self, states, actions, rewards, next_states, dones, next_possible_actionss, indices, weights, sgood,
-                 sbad):
+  def train_step(self, states, actions, rewards, next_states, dones, next_possible_actionss, indices, weights):
     # actions = self.one_hot_actions(actions.reshape(-1, 1))
     not_done_mask = torch.Tensor(1 - dones.astype(np.int))
     # next_possible_actionss = self.one_hot_actions(next_possible_actionss)
@@ -104,22 +106,11 @@ class DQNAgent(agents.base_agent.Agent):
     assert loss_dqn.shape == (self.batch_size,), loss_dqn.shape
 
     priorities = loss_dqn * weights + 1e-5
-    loss_dqn_value = loss_dqn.mean()
-
-    good_state_values = self.q_network.get_value(sgood)
-    bad_state_values = self.q_network.get_value(sbad)
-
-    auxiliary_task_weight = 0.05
-
-    loss_dqn_value = (1 - auxiliary_task_weight) * loss_dqn_value
-    loss_good = auxiliary_task_weight * torch.pow(good_state_values - self.gamma ** 2 * 1, 2).mean()
-    loss_bad = auxiliary_task_weight * torch.pow(bad_state_values - self.gamma ** 2 * -1, 2).mean()
-
-    loss = 0.5 * (loss_good + loss_bad) + 0.5 * loss_dqn_value
+    loss = loss_dqn.mean()
 
     self.optimizer.zero_grad()
     loss.backward()
-    # torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), config.DQNAgent.gradient_clip)
+    torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), config.DQNAgent.gradient_clip)
     self.optimizer.step()
 
     self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
@@ -127,7 +118,7 @@ class DQNAgent(agents.base_agent.Agent):
     if self.minibatch_num % config.DQNAgent.target_update:
       shared.sync_target(self.q_network, self.q_network_target)
 
-    return loss, loss_good, loss_bad
+    return loss, 0, 0
 
   def render(self, env):
     observation, reward, terminal, possible_actions = env.reset()
@@ -183,27 +174,31 @@ class DQNAgent(agents.base_agent.Agent):
     self.minibatch_num = 0
     observation, reward, terminal, possible_actions = env.reset()
     progress_bar = tqdm.tqdm(total=game_steps)
+    cum_reward = 0
 
     for step_nr, epsilon, beta in iteration_params:
       progress_bar.update(config.DQNAgent.nr_parallel_envs)
       action = self.act(observation, possible_actions, epsilon, step_nr=step_nr)
       next_observation, reward, done, possible_actions = env.step(action)
+      self.summary_writer.add_scalar('dqn/reward', reward, step_nr)
+      cum_reward += reward
 
-      self.learn_from_experience(observation, action, reward, next_observation, done, possible_actions, step_nr, beta,
-                                 almost_won_states, almost_lost_states)
+      self.learn_from_experience(observation, action, reward, next_observation, done, possible_actions, step_nr, beta)
 
       observation = next_observation
 
-      self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
-      self.summary_writer.add_scalar('dqn/beta', beta, step_nr)
-
       if done:
-        # self.summary_writer.add_scalar('game_stats/end_turn', envs.simulation.game.turn, step_nr)
-        self.summary_writer.add_scalar('game_stats/game_value', int(0.5 + reward / 2), step_nr)
+        self.summary_writer.add_scalar('dqn/epsilon', epsilon, step_nr)
+        self.summary_writer.add_scalar('dqn/beta', beta, step_nr)
+        self.summary_writer.add_scalar('game_stats/end_turn', env.simulation.game.turn, step_nr)
+        # self.summary_writer.add_scalar('game_stats/game_value', int(0.5 + reward / 2), step_nr)
+        self.summary_writer.add_scalar('game_stats/cum_reward', cum_reward, step_nr)
+        cum_reward = 0
         assert reward in (-1.0, 0.0, 1.0)
         observation, reward, terminal, possible_actions = env.reset()
       else:
-        assert reward < 1
+        if env.game_mode == 'normal':
+          assert reward < 1
 
       if step_nr % eval_every == 0 and step_nr > 0:
         good_values = self.q_network.get_value(almost_won_states)
@@ -218,7 +213,8 @@ class DQNAgent(agents.base_agent.Agent):
           while not done:
             action = self.act(observation, possible_actions, 0.0, step_nr=None)
             observation, reward, done, possible_actions = env.step(action)
-          assert reward in (-1.0, 1.0)
+          if env.game_mode == 'normal':
+            assert reward in (-1.0, 1.0)
           num_won_games += int(0.5 + reward / 2)
 
         self.summary_writer.add_scalar('game_stats/win_ratio', num_won_games / config.DQNAgent.eval_episodes, step_nr)
@@ -233,8 +229,7 @@ class DQNAgent(agents.base_agent.Agent):
     action = self.q_network.act(observation, info['possible_actions'], 0.0)
     return action
 
-  def learn_from_experience(self, observation, action, reward, next_state, done, next_actions, step_nr, beta, sgood,
-                            sbad):
+  def learn_from_experience(self, observation, action, reward, next_state, done, next_actions, step_nr, beta):
     action = np.array(action)
     reward = np.array(reward)
     done = np.array(done)
@@ -244,7 +239,7 @@ class DQNAgent(agents.base_agent.Agent):
         self.batch_size, beta)
 
       loss, loss_good, loss_bad = self.train_step(state, action, reward, next_state, done, next_actions, indices,
-                                                  weights, sgood, sbad)
+                                                  weights)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
       self.summary_writer.add_scalar('dqn/loss_good', loss_good, step_nr)
       self.summary_writer.add_scalar('dqn/loss_bad', loss_bad, step_nr)

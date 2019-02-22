@@ -62,6 +62,7 @@ class VanillaHS(base_env.BaseEnv):
     cheating_opponent=False,
     starting_hp=config.VanillaHS.starting_hp,
     shuffle_deck=config.VanillaHS.shuffle_deck,
+    game_mode=config.VanillaHS.game_mode,
   ):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -70,7 +71,7 @@ class VanillaHS(base_env.BaseEnv):
     Args:
       starting_hp:
     """
-
+    self.game_mode = game_mode
     self.id_to_action = [(-1, -1), ]
     for src_idx in range(max_cards_in_hand):
       self.id_to_action.append((src_idx, -1))
@@ -108,6 +109,7 @@ class VanillaHS(base_env.BaseEnv):
     self.cheating_opponent = cheating_opponent
     self.shuffle_deck = shuffle_deck
     self.starting_hp = starting_hp
+    self.minions_in_board = 0
 
     self.reinit_game()
 
@@ -198,10 +200,13 @@ class VanillaHS(base_env.BaseEnv):
 
     card_max = list(cards.max(axis=0) + [1])
 
+    try:
+      self.opponent.set_simulation(self.simulation)
+    except AttributeError:
+      pass
     self.games_played = 0
     self.games_finished = 0
     self.info = None
-    self.actor_hero = None
 
   @episodic_log
   def game_value(self):
@@ -254,21 +259,28 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def reset(self, shuffle_deck=config.VanillaHS.shuffle_deck):
     self.reinit_game(shuffle_deck)
-    self.actor_hero = self.simulation.player.hero
 
     self.games_played += 1
     return self.gather_transition()
 
   @episodic_log
-  def calculate_reward(self):
-    if self.simulation.game.ended:
-      reward = self.game_value()
+  def calculate_reward(self, action):
+    if self.game_mode == 'normal':
+      if self.simulation.game.ended:
+        reward = self.game_value()
+      else:
+        reward = 0.0
+        # board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
+        #   (c.cost + 1 for c in self.simulation.opponent.characters))
+        # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
+        # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health) / self.starting_hp
+    elif self.game_mode == 'board_control':
+      if len(self.simulation.opponent.characters[1:]) > 0:
+        reward = -1.0
+      else:
+        reward = 1.0
     else:
-      reward = 0.0
-      # board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
-      #   (c.cost + 1 for c in self.simulation.opponent.characters))
-      # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
-      # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health) / self.starting_hp
+      raise ValueError("invalid game mode")
     return np.array(reward, dtype=np.float32)
 
   @episodic_log
@@ -292,6 +304,12 @@ class VanillaHS(base_env.BaseEnv):
 
   @episodic_log
   def step(self, encoded_action):
+    # try:
+    #   terminal = self.simulation.game.ended
+    #   return self.fake_step[0], self.fake_step[1], terminal, {}
+    # except Exception:
+    #   pass
+
     action = self.decode_action(int(encoded_action))
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
@@ -311,11 +329,12 @@ class VanillaHS(base_env.BaseEnv):
       if not self.simulation.game.ended:
         raise e
 
-    game_observation, reward, terminal, info = self.gather_transition()
+    game_observation, reward, terminal, info = self.gather_transition(action)
+    # self.fake_step = game_observation, reward, terminal, info
     return game_observation, reward, terminal, info
 
   @episodic_log
-  def gather_transition(self, pickle=True):
+  def gather_transition(self, action=None, pickle=True):
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
 
@@ -330,9 +349,9 @@ class VanillaHS(base_env.BaseEnv):
       self.ob_rms.update(game_observation)
       game_observation = (game_observation - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + 1e-8)
 
-    reward = self.calculate_reward()
+    reward = self.calculate_reward(action)
     terminal = self.simulation.game.ended
-    if reward != 0 and terminal is not True:
+    if self.game_mode == 'normal' and (reward != 0 and terminal is not True):
       raise Exception
 
     enc_possible_actions = self.encode_actions(possible_actions)

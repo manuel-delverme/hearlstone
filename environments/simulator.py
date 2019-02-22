@@ -1,12 +1,42 @@
-from fireplace.game import Game, PlayState
+import fireplace.game
+import random
+from fireplace.game import PlayState
 import functools
 import numpy as np
 import shelve
 from fireplace.player import Player
 from hearthstone.enums import CardClass
+
+import config
 from shared import utils
 import string
 from collections import defaultdict
+
+
+class CoinRules:
+  """
+  Randomly determines the starting player when the Game starts.
+  The second player gets "The Coin" (GAME_005).
+  """
+
+  def pick_first_player(self):
+    if config.VanillaHS.player_first:
+      winner = self.players[0]
+      self.log("[FORCED] Player starts", winner)
+    else:
+      winner = random.choice(self.players)
+      self.log("Tossing the coin... %s wins!", winner)
+    return winner, winner.opponent
+
+  def begin_turn(self, player):
+    # if self.turn == 0:
+    # self.log("%s gets The Coin (%s)", self.player2, THE_COIN)
+    # self.player2.give(THE_COIN)
+    super().begin_turn(player)
+
+
+class Game(fireplace.game.MulliganRules, CoinRules, fireplace.game.BaseGame):
+  pass
 
 
 class HSsimulation(object):
@@ -250,15 +280,12 @@ class HSsimulation(object):
     # fill with nones
     assert len(player.hand) <= self._MAX_CARDS_IN_HAND
 
-    # player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_HAND
-    # ents = [self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]]
-    # player_hand = np.hstack(ents)
+    player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_HAND
+    ents = [self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]]
+    player_hand = np.hstack(ents)
 
     # the player hero itself is not in the board
     player_board = player.characters[1:]
-
-    assert len(player.hand) <= self._MAX_CARDS_IN_HAND
-
     player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_BOARD
 
     assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
@@ -268,8 +295,7 @@ class HSsimulation(object):
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
 
-    # game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
-    game_state = np.hstack((player_board, player_hero, player_mana))
+    game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
     return game_state
 
   def observe(self):
@@ -311,7 +337,9 @@ class HSsimulation(object):
   def encode_to_numerical(k, val):
     if k == "power" and val:
       val = val.data.id
-    if val is None:
+    if isinstance(val, int):
+      pass
+    elif val is None:
       val = -1
     elif val is False:
       val = 0
@@ -319,13 +347,10 @@ class HSsimulation(object):
       val = 1
     elif isinstance(val, str):
       val = HSsimulation.str_to_vec(val)
-
     elif isinstance(val, list):
       if len(val) != 0:
         raise Exception("wtf is this list?", val)
       val = 0
-    elif isinstance(val, int):
-      pass
     else:
       raise Exception("wtf is this data?", val)
     return val
@@ -365,26 +390,6 @@ class HSsimulation(object):
         pass
     return bag_of_words
 
-  def player_to_bow(self, entity):
-    # TODO: check all the possible attributes
-    player_dict = {
-      'combo': None,
-      'fatigue_counter': None,
-      'healing_as_damage': None,
-      'healing_double': None,
-      'shadowform': None,
-      'times_hero_power_used_this_game': None,
-    }
-    player_lst = []
-    for k in sorted(player_dict.keys()):
-      try:
-        val = player_obj.__getattribute__(k)
-      except AttributeError:
-        val = None
-      val = encode_to_numerical(k, val)
-      player_lst.append(val)
-    return player_lst
-
   # TODONT: cards have __hash__ as their ID, which means changes in health wont change the card id
   # @functools.lru_cache(maxsize=20000)
   def card_to_bow(self, card_obj):
@@ -404,13 +409,14 @@ class HSsimulation(object):
       card_dict['can_attack'] = None
 
     # crash if skipping important data
-    for k in self._skipped:
-      try:
-        value = card_obj.__getattribute__(k)
-      except AttributeError:
-        pass
-      else:
-        assert self._skipped[k] is None or value in self._skipped[k]
+    if config.VanillaHS.debug:
+      for k in self._skipped:
+        try:
+          value = card_obj.__getattribute__(k)
+        except AttributeError:
+          pass
+        else:
+          assert self._skipped[k] is None or value in self._skipped[k]
 
     # card_dict['description'] = ''
 

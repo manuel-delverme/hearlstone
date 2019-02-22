@@ -1,7 +1,8 @@
 import functools
 
 import agents.heuristic.hand_coded
-import agents.heuristic.hand_coded
+import agents.heuristic.random_agent
+import agents.search.classical
 import torch.optim as optim
 
 enjoy = False
@@ -12,14 +13,18 @@ use_gpu = False
 
 
 class VanillaHS:
-  shuffle_deck = True
+  # game_mode = 'board_control'
+  game_mode = 'normal'
+  shuffle_deck = False
   debug = False
   normalize = False
-  starting_hp = 10
-  max_cards_in_board = 3
-  max_cards_in_hand = 5
+  player_first = True
+  starting_hp = 30
+  max_cards_in_board = 7
+  max_cards_in_hand = 10
   # opponent = agents.heuristic.hand_coded.PassingAgent
   # opponent = agents.heuristic.random_agent.RandomAgent
+  # opponent = agents.heuristic.hand_coded.WeakHeuristicAgent
   opponent = agents.heuristic.hand_coded.HeuristicAgent
 
 

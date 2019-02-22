@@ -1,5 +1,8 @@
+import random
+
 import agents.base_agent
 import numpy as np
+import agents.heuristic.random_agent
 import collections
 
 
@@ -12,10 +15,29 @@ class PassingAgent(agents.base_agent.Agent):
 
 
 class HeuristicAgent(agents.base_agent.Agent):
-  def __init__(self):
+  def __init__(self, level):
+    assert -1 <= level <= 5
+    self.randomness = [
+      1,
+      0.75,
+      0.5,
+      0.25,
+      0.125,
+      0,
+      None,
+    ][level]
+    self.level = level
     super().__init__()
+    self.random_agent = agents.heuristic.random_agent.RandomAgent()
+    self.passing_agent = PassingAgent()
 
   def choose(self, observation: np.array, info: dict):
+    if self.level == -1:
+      return self.passing_agent.choose(observation, info)
+
+    if random.random() < self.randomness:
+      return self.random_agent.choose(observation, info)
+
     possible_actions = info['original_info']['possible_actions']
 
     if len(possible_actions) == 1:

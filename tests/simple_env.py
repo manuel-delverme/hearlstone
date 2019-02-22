@@ -1,18 +1,16 @@
-import envs.simple_HSenv
-import fireplace.game
 import random
+
+import environments.vanilla_hs
+import fireplace.game
 
 
 def main():
-    env = envs.simple_HSenv.simple_HSEnv(skip_mulligan=True)
+  env = environments.vanilla_hs.VanillaHS(skip_mulligan=True)
     step = 0
     for _ in range(3):
-        s, reward, done, info = env.reset()
+      s, reward, done, possible_actions = env.reset()
         while not done:
             step += 1
-            possible_actions = info['possible_actions']
-            actions = [0, ]
-
             if len(possible_actions) == 1:
                 action, = possible_actions
             else:
