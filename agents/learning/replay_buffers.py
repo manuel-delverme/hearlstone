@@ -4,12 +4,14 @@ import baselines.deepq.replay_buffer
 
 import numpy as np
 
-
+from numpy import ndarray
+from typing import List, Tuple
 class PrioritizedBufferOpenAI(baselines.deepq.replay_buffer.PrioritizedReplayBuffer):
-  def __init__(self, capacity, state_size, action_size, prob_alpha=0.6, ):
+  def __init__(self, capacity: int, state_size: int, action_size: int, prob_alpha: float = 0.6) -> None:
     super(PrioritizedBufferOpenAI, self).__init__(capacity, prob_alpha)
 
-  def push(self, state, action, reward, next_state, done, next_actions):
+  def push(self, state: ndarray, action: ndarray, reward: ndarray, next_state: ndarray, done: ndarray,
+           next_actions: ndarray) -> None:
     args = (state, action, reward, next_state, done, next_actions)
     state, action, reward, next_state, done, next_actions = (a.reshape(-1, 1) for a in args)
     assert state.shape == next_state.shape
@@ -17,7 +19,8 @@ class PrioritizedBufferOpenAI(baselines.deepq.replay_buffer.PrioritizedReplayBuf
     assert state.shape[1] == 1
     super(PrioritizedBufferOpenAI, self).add(state, action, reward, next_state, done, next_actions)
 
-  def sample(self, batch_size, beta):
+  def sample(self, batch_size: int, beta: float) -> Tuple[
+    ndarray, ndarray, ndarray, ndarray, ndarray, ndarray, List[int], ndarray]:
     states, actions, rewards, next_states, dones, next_actions, weights, indices = super(PrioritizedBufferOpenAI, self).sample(batch_size, beta)
     trans = (states, actions, rewards, next_states, dones, next_actions)
     states, actions, rewards, next_states, dones, next_actions = (di.squeeze(2) for di in trans)

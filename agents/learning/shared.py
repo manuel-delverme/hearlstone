@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-
+from agents.learning.models.dqn import DQN
 def epsilon_schedule(
         offset,
         epsilon_start=1.0,
@@ -37,5 +37,5 @@ def plot(frame_idx, rewards, losses, win_ratio, action_stats, epsilon, end_turns
     ))
 
 
-def sync_target(source_network, target_network):
+def sync_target(source_network: DQN, target_network: DQN) -> None:
   target_network.load_state_dict(source_network.state_dict())

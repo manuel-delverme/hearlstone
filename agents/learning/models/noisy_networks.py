@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-
+from torch import Tensor
 class NoisyLinear(nn.Module):
-  def __init__(self, in_features, out_features, std_init=0.5):
+  def __init__(self, in_features: int, out_features: int, std_init: float = 0.5) -> None:
     super(NoisyLinear, self).__init__()
 
     self.in_features = in_features
@@ -23,7 +23,7 @@ class NoisyLinear(nn.Module):
     self.reset_parameters()
     self.reset_noise()
 
-  def forward(self, x):
+  def forward(self, x: Tensor) -> Tensor:
     if self.training:
       weight = self.weight_mu + self.weight_sigma.mul(self.weight_epsilon)
       bias = self.bias_mu + self.bias_sigma.mul(self.bias_epsilon)
@@ -33,7 +33,7 @@ class NoisyLinear(nn.Module):
 
     return F.linear(x, weight, bias)
 
-  def reset_parameters(self):
+  def reset_parameters(self) -> None:
     mu_range = 1 / math.sqrt(self.weight_mu.size(1))
 
     self.weight_mu.data.uniform_(-mu_range, mu_range)
@@ -42,14 +42,14 @@ class NoisyLinear(nn.Module):
     self.bias_mu.data.uniform_(-mu_range, mu_range)
     self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.bias_sigma.size(0)))
 
-  def reset_noise(self):
+  def reset_noise(self) -> None:
     epsilon_in = self._scale_noise(self.in_features)
     epsilon_out = self._scale_noise(self.out_features)
 
     self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
     self.bias_epsilon.copy_(self._scale_noise(self.out_features))
 
-  def _scale_noise(self, size):
+  def _scale_noise(self, size: int) -> Tensor:
     x = torch.randn(size)
     x = x.sign().mul(x.abs().sqrt())
     return x
