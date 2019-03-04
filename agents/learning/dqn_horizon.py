@@ -14,7 +14,7 @@ import agents.learning.replay_buffers
 from agents.learning import shared
 from agents.learning.models import dqn
 import tqdm
-import config
+import hs_config
 import os
 import time
 import torch.nn
@@ -30,9 +30,9 @@ class DQNAgent(agents.base_agent.Agent):
     self.minibatch = None
     self.num_actions = num_actions
     self.num_inputs = num_inputs
-    self.gamma = config.DQNAgent.gamma
-    self.batch_size = config.DQNAgent.batch_size
-    self.warmup_steps = config.DQNAgent.warmup_steps
+    self.gamma = hs_config.DQNAgent.gamma
+    self.batch_size = hs_config.DQNAgent.batch_size
+    self.warmup_steps = hs_config.DQNAgent.warmup_steps
     self.model_path = model_path
 
     self.q_network = dqn.DQN(num_inputs, num_actions)
@@ -41,17 +41,17 @@ class DQNAgent(agents.base_agent.Agent):
     self.q_network_target = copy.deepcopy(self.q_network)
     self.q_network_target.build_network()
 
-    optimizer = config.DQNAgent.optimizer
+    optimizer = hs_config.DQNAgent.optimizer
 
     self.optimizer = optimizer(
       self.q_network.parameters(),
-      lr=config.DQNAgent.lr,
-      weight_decay=config.DQNAgent.l2_decay,
+      lr=hs_config.DQNAgent.lr,
+      weight_decay=hs_config.DQNAgent.l2_decay,
     )
     self.replay_buffer = agents.learning.replay_buffers.PrioritizedBufferOpenAI(
-      config.DQNAgent.buffer_size, num_inputs, num_actions
+      hs_config.DQNAgent.buffer_size, num_inputs, num_actions
     )
-    self.loss = torch.nn.SmoothL1Loss(reduction='none')
+    self.loss_fn = torch.nn.SmoothL1Loss(reduction='none')
     experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
     log_dir = 'runs/{}'.format(experiment_name)
 
@@ -128,7 +128,7 @@ class DQNAgent(agents.base_agent.Agent):
 
     # self.replay_buffer.update_priorities(indices, priorities.data.cpu().numpy())
 
-    if self.minibatch % config.DQNAgent.target_update:
+    if self.minibatch % hs_config.DQNAgent.target_update:
       shared.sync_target(self.q_network, self.q_network_target)
 
     return loss_value
@@ -153,20 +153,20 @@ class DQNAgent(agents.base_agent.Agent):
         observation, reward, terminal, possible_actions = env.reset()
 
   def train(self, make_env, game_steps=None, checkpoint_every=10000,
-            target_update_every=config.DQNAgent.target_update, ):
-    envs = environments.parallel_envs.ParallelEnvs([make_env] * config.DQNAgent.nr_parallel_envs)
+            target_update_every=hs_config.DQNAgent.target_update, ):
+    envs = environments.parallel_envs.ParallelEnvs([make_env] * hs_config.DQNAgent.nr_parallel_envs)
 
     self.minibatch = None
     if game_steps is None:
-      game_steps = config.DQNAgent.training_steps
+      game_steps = hs_config.DQNAgent.training_steps
 
     epsilon_schedule = shared.epsilon_schedule(
-      offset=config.DQNAgent.warmup_steps,
-      epsilon_decay=config.DQNAgent.epsilon_decay
+      offset=hs_config.DQNAgent.warmup_steps,
+      epsilon_decay=hs_config.DQNAgent.epsilon_decay
     )
     beta_schedule = shared.epsilon_schedule(
-      offset=config.DQNAgent.warmup_steps,
-      epsilon_decay=config.DQNAgent.beta_decay,
+      offset=hs_config.DQNAgent.warmup_steps,
+      epsilon_decay=hs_config.DQNAgent.beta_decay,
     )
     iteration_params = zip(range(game_steps), epsilon_schedule, beta_schedule)
 
@@ -175,7 +175,7 @@ class DQNAgent(agents.base_agent.Agent):
     progress_bar = tqdm.tqdm(total=game_steps)
 
     for step_nr, epsilon, beta in iteration_params:
-      progress_bar.update(config.DQNAgent.nr_parallel_envs)
+      progress_bar.update(hs_config.DQNAgent.nr_parallel_envs)
       action = self.act(observation, possible_actions, epsilon, step_nr=step_nr)
       next_observation, reward, done, possible_actions = envs.step(action)
 
@@ -213,14 +213,14 @@ class DQNAgent(agents.base_agent.Agent):
     return action
 
   def learn_from_experience(self, state, action, reward, next_state, done, next_actions, step_nr, beta):
-    for i in range(config.DQNAgent.nr_parallel_envs):
+    for i in range(hs_config.DQNAgent.nr_parallel_envs):
       self.replay_buffer.push(state[i], action[i], reward[i], next_state[i], done[i], next_actions[i])
 
     if len(self.replay_buffer) > max(self.batch_size, self.warmup_steps):
       state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(
         self.batch_size, beta)
 
-      for _ in range(config.DQNAgent.nr_epochs):
+      for _ in range(hs_config.DQNAgent.nr_epochs):
         loss = self.train_step(state, action, reward, next_state, done, next_actions, indices, weights)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
 

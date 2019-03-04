@@ -11,27 +11,27 @@ import agents.learning.replay_buffers
 from agents.learning import shared
 from agents.learning.models import dqn
 import tqdm
-import config
+import hs_config
 import os
 import time
 import torch.nn
 import subprocess
 
-USE_CUDA = config.use_gpu
+USE_CUDA = hs_config.use_gpu
 
 
 class DQNAgent(agents.base_agent.Agent):
   def __init__(self, num_inputs, num_actions, should_flip_board=False,
                model_path="checkpoints/checkpoint.pth.tar", record=True) -> None:
-    self.use_double_q = config.DQNAgent.use_double_q
-    self.use_target = config.DQNAgent.use_target
+    self.use_double_q = hs_config.DQNAgent.use_double_q
+    self.use_target = hs_config.DQNAgent.use_target
     assert not (self.use_double_q and self.use_target)
 
     self.num_actions = num_actions
     self.num_inputs = num_inputs
-    self.gamma = config.DQNAgent.gamma
-    self.batch_size = config.DQNAgent.batch_size
-    self.warmup_steps = config.DQNAgent.warmup_steps
+    self.gamma = hs_config.DQNAgent.gamma
+    self.batch_size = hs_config.DQNAgent.batch_size
+    self.warmup_steps = hs_config.DQNAgent.warmup_steps
     self.model_path = model_path
 
     self.q_network = dqn.DQN(num_inputs, num_actions, USE_CUDA)
@@ -41,15 +41,15 @@ class DQNAgent(agents.base_agent.Agent):
       self.q_network_target = copy.deepcopy(self.q_network)
       self.q_network_target.build_network()
 
-    optimizer = config.DQNAgent.optimizer
+    optimizer = hs_config.DQNAgent.optimizer
 
     self.optimizer = optimizer(
       self.q_network.parameters(),
-      lr=config.DQNAgent.lr,
-      weight_decay=config.DQNAgent.l2_decay,
+      lr=hs_config.DQNAgent.lr,
+      weight_decay=hs_config.DQNAgent.l2_decay,
     )
     self.replay_buffer = agents.learning.replay_buffers.PrioritizedBufferOpenAI(
-      config.DQNAgent.buffer_size, num_inputs, num_actions
+      hs_config.DQNAgent.buffer_size, num_inputs, num_actions
     )
     self.loss = torch.nn.SmoothL1Loss(reduction='none')
     experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
@@ -141,17 +141,17 @@ class DQNAgent(agents.base_agent.Agent):
         print(done, reward)
         observation, reward, terminal, info = env.reset()
 
-  def train(self, env, game_steps=None, checkpoint_every=10000, target_update_every=config.DQNAgent.target_update, ):
+  def train(self, env, game_steps=None, checkpoint_every=10000, target_update_every=hs_config.DQNAgent.target_update, ):
     if game_steps is None:
-      game_steps = config.DQNAgent.training_steps
+      game_steps = hs_config.DQNAgent.training_steps
     observation, reward, terminal, info = env.reset()
     epsilon_schedule = shared.epsilon_schedule(
-      offset=config.DQNAgent.warmup_steps,
-      epsilon_decay=config.DQNAgent.epsilon_decay
+      offset=hs_config.DQNAgent.warmup_steps,
+      epsilon_decay=hs_config.DQNAgent.epsilon_decay
     )
     beta_schedule = shared.epsilon_schedule(
-      offset=config.DQNAgent.warmup_steps,
-      epsilon_decay=config.DQNAgent.beta_decay,
+      offset=hs_config.DQNAgent.warmup_steps,
+      epsilon_decay=hs_config.DQNAgent.beta_decay,
     )
 
     iteration_params = zip(range(game_steps), epsilon_schedule, beta_schedule)
@@ -203,7 +203,7 @@ class DQNAgent(agents.base_agent.Agent):
       state, action, reward, next_state, done, next_actions, indices, weights = self.replay_buffer.sample(
         self.batch_size, beta)
 
-      for _ in range(config.DQNAgent.nr_epochs):
+      for _ in range(hs_config.DQNAgent.nr_epochs):
         loss = self.train_step(state, action, reward, next_state, done, next_actions, indices, weights)
       self.summary_writer.add_scalar('dqn/loss', loss, step_nr)
 

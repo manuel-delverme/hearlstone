@@ -1,8 +1,9 @@
+import numpy as np
+
 from environments import vanilla_hs
 from typing import Tuple, List
 from agents.heuristic import hand_coded
 from environments import simulator
-import config
 
 
 class TradingHS(vanilla_hs.VanillaHS):
@@ -13,7 +14,7 @@ class TradingHS(vanilla_hs.VanillaHS):
   def reset(self):
     super().reset()
     observation, _, _, info = self.gather_transition()
-    self.fast_forward_game(observation, info)
+    self.fast_forward_game(observation, self.game_info())
     return self.gather_transition()
 
   def step(self, action: int):

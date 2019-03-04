@@ -1,5 +1,5 @@
 from agents.learning.models import noisy_networks
-import config
+import hs_config
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +9,7 @@ class DQN(nn.Module):
   def __init__(self, num_inputs, num_actions):
     self.num_inputs = num_inputs
     self.num_actions = num_actions
-    self.use_cuda = config.use_gpu
+    self.use_cuda = hs_config.use_gpu
     self.num_atoms = 51
     self.Vmin = -10
     self.Vmax = 10

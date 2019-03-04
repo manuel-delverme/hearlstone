@@ -1,3 +1,5 @@
+import hs_config
+
 import logging
 import gym.spaces
 import pprint
@@ -5,7 +7,6 @@ import collections
 import functools
 import numpy as np
 
-import config
 import fireplace
 import fireplace.logging
 import hearthstone
@@ -16,18 +17,18 @@ from environments import simulator
 from environments import base_env
 from shared import utils
 
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Text, Any
 from baselines.common.running_mean_std import RunningMeanStd
 
 
 class VanillaHS(base_env.BaseEnv):
   def __init__(
     self,
-    max_cards_in_board=config.VanillaHS.max_cards_in_board,
-    max_cards_in_hand=config.VanillaHS.max_cards_in_hand,
+    max_cards_in_board=hs_config.VanillaHS.max_cards_in_board,
+    max_cards_in_hand=hs_config.VanillaHS.max_cards_in_hand,
     skip_mulligan=True,
     cheating_opponent=False,
-    starting_hp=config.VanillaHS.starting_hp,
+    starting_hp=hs_config.VanillaHS.starting_hp,
   ):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -49,7 +50,7 @@ class VanillaHS(base_env.BaseEnv):
     fireplace.cards.db.initialized = True
     print("Initializing card database")
     db, xml = hearthstone.cardxml.load()
-    if config.VanillaHS.debug:
+    if hs_config.VanillaHS.debug:
       self.log = collections.deque(maxlen=2)
       self.episodic_log('init', new_episode=True)
       logger = logging.getLogger('fireplace')
@@ -75,7 +76,7 @@ class VanillaHS(base_env.BaseEnv):
 
     self.ob_rms = None
     self.reinit_game()
-    if config.VanillaHS.normalize:
+    if hs_config.VanillaHS.normalize:
       self.ob_rms = RunningMeanStd(shape=self.observation_space.shape)
 
   def episodic_log(self, *args, new_episode=False):
@@ -106,7 +107,7 @@ class VanillaHS(base_env.BaseEnv):
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
     self.episodic_log('observation_space')
     obs, _, _, _ = self.gather_transition()
-    return gym.spaces.Box(low=-1, high=10, shape=obs.shape, dtype=np.int)
+    return gym.spaces.Box(low=-1, high=10, shape=obs.shape, dtype=obs.dtype)
 
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
@@ -174,6 +175,7 @@ class VanillaHS(base_env.BaseEnv):
     card_max = list(cards.max(axis=0) + [1])
 
     self.games_played = 0
+    self.episode_steps = 0
     self.games_finished = 0
     self.info = None
     self.actor_hero = None
@@ -232,6 +234,7 @@ class VanillaHS(base_env.BaseEnv):
     self.actor_hero = self.simulation.player.hero
 
     self.games_played += 1
+    self.episode_steps = 0
     return self.gather_transition()
 
   def calculate_reward(self):
@@ -267,6 +270,7 @@ class VanillaHS(base_env.BaseEnv):
 
   def step(self, encoded_action):
     self.episodic_log('step', encoded_action, self.simulation.game.turn)
+    self.episode_steps += 1
     action = self.decode_action(int(encoded_action))
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
@@ -287,9 +291,17 @@ class VanillaHS(base_env.BaseEnv):
       assert self.simulation.game.ended
 
     game_observation, reward, terminal, info = self.gather_transition()
+
+    if terminal:
+      info['game_statistics'] = {
+        'num_games': self.games_played,
+        'num_steps': self.episode_steps,
+        'turn': self.simulation.game.turn,
+      }
+      self.reset()
     return game_observation, reward, terminal, info
 
-  def gather_transition(self, pickle=True):
+  def gather_transition(self) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
     self.episodic_log('gather_transition')
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
@@ -308,12 +320,18 @@ class VanillaHS(base_env.BaseEnv):
     reward = self.calculate_reward()
     terminal = self.simulation.game.ended
     enc_possible_actions = self.encode_actions(possible_actions)
-    if pickle:
-      possible_actions = utils.one_hot_actions((enc_possible_actions,), self.num_actions)
-      info = possible_actions.squeeze()
-    else:
-      info = {
-        'original_info': {'possible_actions': possible_actions},
-        'possible_actions': enc_possible_actions,
-      }
+
+    possible_actions = utils.one_hot_actions((enc_possible_actions,), self.num_actions)
+    info = {
+      'possible_actions': possible_actions.squeeze()
+    }
     return game_observation, reward, terminal, info
+
+  def game_info(self):
+    self.episodic_log('game_info')
+    possible_actions = self.simulation.actions()
+    info = {
+      'possible_actions': self.encode_actions(possible_actions),
+      'original_info': {'possible_actions': possible_actions},
+    }
+    return info

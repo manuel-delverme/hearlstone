@@ -1,6 +1,6 @@
 import torch.distributions
 import torch.nn as nn
-import config
+import hs_config
 import torch
 
 
@@ -14,15 +14,14 @@ class ActorCritic(nn.Module):
   def __init__(self, num_inputs, num_outputs, hidden_size, std=0.0):
     super(ActorCritic, self).__init__()
 
-    self.critic_fc1 = nn.Linear(num_inputs, hidden_size)
+    self.fc1 = nn.Linear(num_inputs, hidden_size)
+    # self.actor_fc1 = nn.Linear(num_inputs, hidden_size)
+
     self.critic_fc2 = nn.Linear(hidden_size, 1)
-
-    self.actor_fc1 = nn.Linear(num_inputs, hidden_size)
     self.actor_fc2 = nn.Linear(hidden_size, num_outputs)
-
     self.apply(init_weights)
 
-    self.use_cuda = config.DQNAgent.use_gpu
+    self.use_cuda = hs_config.DQNAgent.use_gpu
     if self.use_cuda:
       self.cuda()
     self.log_std = nn.Parameter(torch.ones(1, num_outputs) * std)
@@ -32,10 +31,9 @@ class ActorCritic(nn.Module):
     if self.use_cuda:
       x = x.cuda()
 
-    h = self.critic_fc1(x)
-    value = self.critic_fc2(h)
+    h = self.fc1(x)
 
-    h = self.actor_fc1(x)
+    value = self.critic_fc2(h)
     mu = self.actor_fc2(h)
 
     if self.use_cuda:
