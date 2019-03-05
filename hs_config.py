@@ -15,7 +15,7 @@ benchmark = False
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
-log_interval = 100
+log_interval = 10
 BIG_NUMBER = 9999999999999
 
 
@@ -90,7 +90,7 @@ class PPOAgent:
   entropy_coeff = 0.01  # entropy weight in loss function
   value_loss_coeff = 0.5
   max_grad_norm = 0.5  # any bigger gradient is clipped
-  num_mini_batches = 32
+  num_mini_batches = 32 if num_processes > 1 else num_steps
   clip_epsilon = 0.2  # PPO paper
 
   # batch_size = 5000

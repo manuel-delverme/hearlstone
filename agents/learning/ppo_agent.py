@@ -120,19 +120,22 @@ class PPOAgent(agents.base_agent.Agent):
 
     obs, _, _, info = envs.reset()
     rollouts.obs[0].copy_(obs)
+    rollouts.possible_actionss[0].copy_(info[0]['possible_actions'])
     rollouts.to(hs_config.device)
 
     episode_rewards = deque(maxlen=10)
+    possible_actionss = torch.zeros(size=(len(info),) + info[0]['possible_actions'].shape)
 
     start = time.time()
 
     for ppo_update_num in range(hs_config.PPOAgent.num_updates):
       if hs_config.PPOAgent.use_linear_lr_decay:
         # decrease learning rate linearly
-        update_linear_schedule(self.agent.optimizer, ppo_update_num, hs_config.PPOAgent.num_updates, hs_config.PPOAgent.lr)
-
+        update_linear_schedule(self.agent.optimizer, ppo_update_num, hs_config.PPOAgent.num_updates,
+                               hs_config.PPOAgent.lr)
       if hs_config.PPOAgent.use_linear_clip_decay:
-        self.agent.clip_param = hs_config.PPOAgent.clip_param * (1 - ppo_update_num / float(hs_config.PPOAgent.num_updates))
+        self.agent.clip_param = hs_config.PPOAgent.clip_param * (
+          1 - ppo_update_num / float(hs_config.PPOAgent.num_updates))
 
       for step in range(hs_config.PPOAgent.num_steps):
         # sample actions
@@ -141,101 +144,110 @@ class PPOAgent(agents.base_agent.Agent):
             rollouts.obs[step],
             rollouts.recurrent_hidden_states[step],
             rollouts.masks[step],
+            rollouts.possible_actionss[step],
           )
 
         # obser reward and next obs
         obs, reward, done, infos = envs.step(action)
 
-        for info in infos:
+        for num, info in enumerate(infos):
+          possible_actionss[num] = torch.from_numpy(info['possible_actions'])
+
           if 'episode' in info.keys():
             episode_rewards.append(info['episode']['r'])
 
         # if done then clean the history of observations.
-        masks = torch.floattensor([[0.0] if done_ else [1.0]
-                                   for done_ in done])
-        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
+        dones = [[0.0] if done_ else [1.0] for done_ in done]
+        masks = torch.FloatTensor(dones)
+        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, possible_actionss)
 
-    with torch.no_grad():
-      next_value = self.agent.actor_critic.get_value(rollouts.obs[-1],
-                                                     rollouts.recurrent_hidden_states[-1],
-                                                     rollouts.masks[-1]).detach()
+      with torch.no_grad():
+        next_value = self.agent.actor_critic.get_value(rollouts.obs[-1],
+                                                       rollouts.recurrent_hidden_states[-1],
+                                                       rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_value, hs_config.PPOAgent.use_gae, hs_config.PPOAgent.gamma, hs_config.PPOAgent.tau)
+      rollouts.compute_returns(next_value, hs_config.PPOAgent.use_gae, hs_config.PPOAgent.gamma, hs_config.PPOAgent.tau)
 
-    value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
-    rollouts.after_update()
+      value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+      rollouts.after_update()
 
-    # save for every interval-th episode or for the last epoch
-    if (
-      ppo_update_num % hs_config.PPOAgent.save_interval == 0 or ppo_update_num == hs_config.PPOAgent.num_updates - 1) and hs_config.PPOAgent.save_dir != "":
-      try:
-        os.makedirs(hs_config.PPOAgent.save_dir)
-      except OSError:
-        pass
+      # save for every interval-th episode or for the last epoch
+      if (
+        ppo_update_num % hs_config.PPOAgent.save_interval == 0 or ppo_update_num == hs_config.PPOAgent.num_updates - 1) and hs_config.PPOAgent.save_dir != "":
+        try:
+          os.makedirs(hs_config.PPOAgent.save_dir)
+        except OSError:
+          pass
 
-      # a really ugly way to save a model to cpu
-      save_model = self.agent.actor_critic
-      if hs_config.use_gpu:
-        save_model = copy.deepcopy(self.agent.actor_critic).cpu()
+        # a really ugly way to save a model to cpu
+        save_model = self.agent.actor_critic
+        if hs_config.use_gpu:
+          save_model = copy.deepcopy(self.agent.actor_critic).cpu()
 
-      save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
-      torch.save(save_model, os.path.join(hs_config.PPOAgent.save_dir, str(envs[0].game_mode) + ".pt"))
+        save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
+        torch.save(save_model,
+                   os.path.join(hs_config.PPOAgent.save_dir, str(hs_config.VanillaHS.get_game_mode()) + ".pt"))
 
-    total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
+      total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
 
-    if ppo_update_num % hs_config.log_interval == 0 and len(episode_rewards) > 1:
-      end = time.time()
-      print(
-        "updates {}, num timesteps {}, fps {} \n last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
-        "min/max reward {:.1f}/{:.1f}\n".
-          format(ppo_update_num, total_num_steps,
-                 int(total_num_steps / (end - start)),
-                 len(episode_rewards),
-                 np.mean(episode_rewards),
-                 np.median(episode_rewards),
-                 np.min(episode_rewards),
-                 np.max(episode_rewards), dist_entropy,
-                 value_loss, action_loss))
+      if ppo_update_num % hs_config.log_interval == 0 and len(episode_rewards) > 1:
+        end = time.time()
+        print(
+          "updates {}, num timesteps {}, fps {} \n last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
+          "min/max reward {:.1f}/{:.1f}\n".
+            format(ppo_update_num, total_num_steps,
+                   int(total_num_steps / (end - start)),
+                   len(episode_rewards),
+                   np.mean(episode_rewards),
+                   np.median(episode_rewards),
+                   np.min(episode_rewards),
+                   np.max(episode_rewards), dist_entropy,
+                   value_loss, action_loss))
 
-    if hs_config.PPOAgent.eval_interval and len(episode_rewards) > 1 and ppo_update_num % hs_config.PPOAgent.eval_interval == 0:
-      eval_envs = make_vec_envs(load_env, seed, num_processes, gamma, self.log_dir, add_timestep, hs_config.device,
-                                allow_early_resets=True)
+      if hs_config.PPOAgent.eval_interval and len(
+        episode_rewards) > 1 and ppo_update_num % hs_config.PPOAgent.eval_interval == 0:
+        eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                                  hs_config.PPOAgent.add_timestep, hs_config.device, allow_early_resets=True)
 
-      vec_norm = get_vec_normalize(eval_envs)
-      if vec_norm is not None:
-        vec_norm.eval()
-        vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
+        vec_norm = get_vec_normalize(eval_envs)
+        if vec_norm is not None:
+          vec_norm.eval()
+          vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
 
-      eval_episode_rewards = []
+        eval_episode_rewards = []
 
-      obs = eval_envs.reset()
-      eval_recurrent_hidden_states = torch.zeros(hs_config.PPOAgent.num_processes,
-                                                 self.actor.actor_critic.recurrent_hidden_state_size,
-                                                 device=hs_config.device)
-      eval_masks = torch.zeros(hs_config.PPOAgent.num_processes, 1, device=hs_config.device)
+        obs, _, _, infos = eval_envs.reset()
+        possible_actionss = torch.zeros(size=(len(info),) + infos[0]['possible_actions'].shape)
 
-      while len(eval_episode_rewards) < 10:
-        with torch.no_grad():
-          _, action, _, eval_recurrent_hidden_states = self.actor.actor_critic.act(
-            obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
+        for num, info in enumerate(infos):
+          possible_actionss[num] = info['possible_actions']
 
-        # obser reward and next obs
-        obs, reward, done, infos = eval_envs.step(action)
+        eval_recurrent_hidden_states = torch.zeros(hs_config.PPOAgent.num_processes,
+                                                   self.agent.actor_critic.recurrent_hidden_state_size,
+                                                   device=hs_config.device)
+        eval_masks = torch.zeros(hs_config.PPOAgent.num_processes, 1, device=hs_config.device)
 
-        eval_masks = torch.tensor([[0.0] if done_ else [1.0]
-                                   for done_ in done],
-                                  dtype=torch.float32,
-                                  device=hs_config.device)
+        while len(eval_episode_rewards) < 10:
+          with torch.no_grad():
+            _, action, _, eval_recurrent_hidden_states = self.agent.actor_critic.act(
+              obs, eval_recurrent_hidden_states, eval_masks, possible_actionss, deterministic=True)
+          # obser reward and next obs
+          obs, reward, done, infos = eval_envs.step(action)
 
-        for info in infos:
-          if 'episode' in info.keys():
-            eval_episode_rewards.append(info['episode']['r'])
+          for num, info in enumerate(infos):
+            possible_actionss[num] = torch.from_numpy(info['possible_actions'])
+          eval_masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done], dtype=torch.float32,
+                                    device=hs_config.device)
 
-      eval_envs.close()
+          for info in infos:
+            if 'episode' in info.keys():
+              eval_episode_rewards.append(info['episode']['r'])
 
-      print(" evaluation using {} episodes: mean reward {:.5f}\n".
-            format(len(eval_episode_rewards),
-                   np.mean(eval_episode_rewards)))
+        eval_envs.close()
+
+        print(" evaluation using {} episodes: mean reward {:.5f}\n".
+              format(len(eval_episode_rewards),
+                     np.mean(eval_episode_rewards)))
 
     # if args.vis and ppo_update_num % args.vis_interval == 0:
     #   try:
@@ -374,4 +386,3 @@ class PPOAgent(agents.base_agent.Agent):
 #   for _ in range(batch_size // mini_batch_size):
 #     rand_ids = np.random.randint(0, batch_size, mini_batch_size)
 #     yield states[rand_ids, :], actions[rand_ids, :], log_probs[rand_ids, :], returns[rand_ids, :], advantage[rand_ids,
-
