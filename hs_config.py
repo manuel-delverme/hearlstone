@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Type
 import gym
 
 import torch
@@ -12,29 +12,31 @@ use_gpu = False
 seed = 1337
 benchmark = False
 
-
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
 log_interval = 100
+BIG_NUMBER = 9999999999999
 
 
 class VanillaHS:
+  sort_decks = False
   debug = False
   normalize = True
   starting_hp = 30
   max_cards_in_board = 5
   max_cards_in_hand = 5
+  always_first_player = True
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:
-    import environments.trading_hs
-    return environments.trading_hs.TradingHS
+    import environments.tutorial_environments
+    return environments.tutorial_environments.TradingHS
 
   @staticmethod
-  def get_opponent() -> agents.base_agent.Agent:
+  def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
-    return agents.heuristic.hand_coded.HeuristicAgent
+    return agents.heuristic.hand_coded.PassingAgent
 
 
 class DQNAgent:
@@ -77,7 +79,7 @@ class PPOAgent:
   use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 1#6  # number of CPU processes
+  num_processes = 1  # 6  # number of CPU processes
   num_steps = 20
   ppo_epoch = 4  # times ppo goes over the data
 

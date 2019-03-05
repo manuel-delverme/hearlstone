@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import hs_config
 from agents.learning.a2c_ppo_acktr.utils import AddBias, init
 
 """
@@ -60,8 +61,9 @@ class Categorical(nn.Module):
 
         self.linear = init_(nn.Linear(num_inputs, num_outputs))
 
-    def forward(self, x):
+    def forward(self, x, possible_actions):
         x = self.linear(x)
+        x -= (1 - possible_actions) * hs_config.BIG_NUMBER
         return FixedCategorical(logits=x)
 
 

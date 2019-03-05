@@ -59,7 +59,7 @@ def arena_fight(
   opponent_policy: Agent,
   nr_games: int = 100,
 ):
-  player_order: List[Agent] = [player_policy, opponent_policy]
+  player_order = [player_policy, opponent_policy]
   random.shuffle(player_order)
   active_player, passive_player = player_order  # type: (Agent, Agent)
 

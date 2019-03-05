@@ -7,10 +7,10 @@ import shelve
 from fireplace.player import Player
 from hearthstone.enums import CardClass
 
-import config
+import hs_config
 from shared import utils
 import string
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 
 class CoinRules:
@@ -20,7 +20,7 @@ class CoinRules:
   """
 
   def pick_first_player(self):
-    if config.VanillaHS.player_first:
+    if hs_config.VanillaHS.always_first_player:
       winner = self.players[0]
       self.log("[FORCED] Player starts", winner)
     else:
@@ -43,11 +43,12 @@ class HSsimulation(object):
   _DECK_SIZE = 30
   _MAX_CARDS_IN_HAND = 10
   _MAX_CARDS_IN_BOARD = 7
-  _card_dict = {
-    'atk': None,
+  _card_dict = OrderedDict((
+    ('atk', None),
     # character
-    'health': None,
-  }
+    ('health', None),
+    ('can_attack', None),
+  ))
   _skipped = {
     'damage': None,
     'cost': None,
@@ -102,18 +103,33 @@ class HSsimulation(object):
     'silenced': None,
   }
 
-  def __init__(self, skip_mulligan=False, cheating_opponent=False, shuffle_deck=True, starting_hp=None):
+  def __init__(self, skip_mulligan=False, cheating_opponent=False, sort_decks=True, starting_hp=None):
     player1_class = CardClass.MAGE.default_hero
     player2_class = CardClass.MAGE.default_hero
-    deck1, deck2 = self.generate_decks(self._DECK_SIZE, player1_class, player2_class)
+
+    if self._MAX_CARDS_IN_HAND == 0:
+      deck1, deck2 = [], []
+    else:
+      deck1, deck2 = self.generate_decks(self._DECK_SIZE, player1_class, player2_class)
 
     # NOTE: both players play the same deck
     self.player1 = Player("Agent", deck1, player1_class)
     self.player2 = Player("Opponent", deck1, player2_class)
     # self.player2 = Player("Opponent", deck2, CardClass.WARRIOR.default_hero)
 
-    self.player1.max_hand_size = self._MAX_CARDS_IN_HAND
-    self.player2.max_hand_size = self._MAX_CARDS_IN_HAND
+    if self._MAX_CARDS_IN_HAND == 0:
+      # allow for coin
+      self.player1.max_hand_size = 1
+      self.player1._start_hand_size = 1
+
+      self.player2.max_hand_size = 1
+      self.player2._start_hand_size = 1
+    else:
+      self.player1.max_hand_size = self._MAX_CARDS_IN_HAND
+      self.player1._start_hand_size = self._MAX_CARDS_IN_HAND - 1
+
+      self.player2.max_hand_size = self._MAX_CARDS_IN_HAND
+      self.player2._start_hand_size = self._MAX_CARDS_IN_HAND - 1
 
     self.cheating_opponent = cheating_opponent
 
@@ -127,7 +143,7 @@ class HSsimulation(object):
     self.player = new_game.players[0]
     self.opponent = new_game.players[1]
 
-    if shuffle_deck:
+    if sort_decks:
       self.player.deck = sorted(self.player.deck, key=lambda x: x.cost)
       self.opponent.deck = sorted(self.opponent.deck, key=lambda x: x.cost)
 
@@ -153,7 +169,7 @@ class HSsimulation(object):
   @staticmethod
   @functools.lru_cache()
   def generate_decks(deck_size, player1_class=CardClass.MAGE,
-                     player2_class=CardClass.WARRIOR):
+    player2_class=CardClass.WARRIOR):
     while True:
       deck1 = utils.random_draft(player1_class, max_mana=5)
       deck2 = utils.random_draft(player2_class, max_mana=5)
@@ -282,7 +298,7 @@ class HSsimulation(object):
 
     player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_HAND
     ents = [self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]]
-    player_hand = np.hstack(ents)
+    player_hand = np.hstack(ents) if ents else np.array(ents)
 
     # the player hero itself is not in the board
     player_board = player.characters[1:]
@@ -337,7 +353,7 @@ class HSsimulation(object):
   def encode_to_numerical(k, val):
     if k == "power" and val:
       val = val.data.id
-    if isinstance(val, int):
+    if isinstance(val, int):  # also bool is int
       pass
     elif val is None:
       val = -1
@@ -409,7 +425,7 @@ class HSsimulation(object):
       card_dict['can_attack'] = None
 
     # crash if skipping important data
-    if config.VanillaHS.debug:
+    if hs_config.VanillaHS.debug:
       for k in self._skipped:
         try:
           value = card_obj.__getattribute__(k)
@@ -421,7 +437,7 @@ class HSsimulation(object):
     # card_dict['description'] = ''
 
     card_lst = []
-    for k in sorted(card_dict.keys()):
+    for k in card_dict.keys():
       val = card_dict[k]
       # print(k, val)
 

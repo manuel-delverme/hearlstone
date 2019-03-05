@@ -98,6 +98,8 @@ class VecPyTorch(VecEnvWrapper):
   def reset(self):
     obs, _, _, info = self.venv.reset()
     obs = torch.from_numpy(obs).float().to(self.device)
+    for i in info:
+      i['possible_actions'] = torch.from_numpy(i['possible_actions']).long().to(self.device)
     return obs, None, None, info
 
   def step_async(self, actions):

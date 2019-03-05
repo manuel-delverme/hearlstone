@@ -6,9 +6,9 @@ import numpy as np
 class DummyVecEnv(_DummyVecEnv):
   def reset(self):
     for e in range(self.num_envs):
-      obs, _, _, info = self.envs[e].reset()
+      obs, _, _, self.buf_infos[e] = self.envs[e].reset()
       self._save_obs(e, obs)
-    return self._obs_from_buf(), _, _, info
+    return self._obs_from_buf(), _, _, self.buf_infos.copy()
 
 
 class VecNormalize(_VecNormalize):

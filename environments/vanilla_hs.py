@@ -1,3 +1,4 @@
+import agents.base_agent
 import hs_config
 
 import logging
@@ -22,6 +23,9 @@ from baselines.common.running_mean_std import RunningMeanStd
 
 
 def episodic_log(func):
+  if not hs_config.VanillaHS.debug:
+    return func
+
   def wrapper(*args, **kwargs):
     self = args[0]
     if self.log is None:
@@ -61,8 +65,7 @@ class VanillaHS(base_env.BaseEnv):
     skip_mulligan=True,
     cheating_opponent=False,
     starting_hp=hs_config.VanillaHS.starting_hp,
-    shuffle_deck=hs_config.VanillaHS.shuffle_deck,
-    game_mode=hs_config.VanillaHS.game_mode,
+    sort_decks=hs_config.VanillaHS.sort_decks,
   ):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -71,7 +74,7 @@ class VanillaHS(base_env.BaseEnv):
     Args:
       starting_hp:
     """
-    self.game_mode = game_mode
+    self.opponent = None
     self.id_to_action = [(-1, -1), ]
     for src_idx in range(max_cards_in_hand):
       self.id_to_action.append((src_idx, -1))
@@ -107,21 +110,16 @@ class VanillaHS(base_env.BaseEnv):
     self.skip_mulligan = skip_mulligan
     self.lookup_action_id_to_obj = {}
     self.cheating_opponent = cheating_opponent
-    self.shuffle_deck = shuffle_deck
+    self.sort_decks = sort_decks
     self.starting_hp = starting_hp
     self.minions_in_board = 0
 
     self.reinit_game()
 
-    self.ob_rms = None
-
     obs, _, _, _ = self.gather_transition()
     # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
     self.observation_space = gym.spaces.Box(low=-1, high=10, shape=obs.shape, dtype=np.int)
     self.action_space = gym.spaces.Discrete(self.num_actions)
-
-    if config.VanillaHS.normalize:
-      self.ob_rms = RunningMeanStd(shape=self.observation_space.shape)
 
   def dump_log(self, log_file):
     if self.log is None:
@@ -179,26 +177,13 @@ class VanillaHS(base_env.BaseEnv):
       raise e
 
   @episodic_log
-  def reinit_game(self, shuffle_deck=False):
+  def reinit_game(self, sort_decks=False):
     self.simulation = simulator.HSsimulation(
       skip_mulligan=self.skip_mulligan,
       cheating_opponent=self.cheating_opponent,
       starting_hp=self.starting_hp,
+      sort_decks=sort_decks,
     )
-    cards = []
-    for player in (self.simulation.player1, self.simulation.player2):
-      for c in player.hand:
-        if c.id == "GAME_005":  # "The Coin"
-          c.discard()
-
-      for card in player.deck:
-        cards.append((card.atk, card.health))
-      for card in player.hand:
-        cards.append((card.atk, card.health))
-    cards = np.array(cards)
-
-    card_max = list(cards.max(axis=0) + [1])
-
     try:
       self.opponent.set_simulation(self.simulation)
     except AttributeError:
@@ -257,34 +242,26 @@ class VanillaHS(base_env.BaseEnv):
     return board
 
   @episodic_log
-  def reset(self, shuffle_deck=config.VanillaHS.shuffle_deck):
+  def reset(self, shuffle_deck=hs_config.VanillaHS.sort_decks):
     self.reinit_game(shuffle_deck)
 
     self.games_played += 1
     return self.gather_transition()
 
   @episodic_log
-  def calculate_reward(self, action):
-    if self.game_mode == 'normal':
-      if self.simulation.game.ended:
-        reward = self.game_value()
-      else:
-        reward = 0.0
-        # board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
-        #   (c.cost + 1 for c in self.simulation.opponent.characters))
-        # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
-        # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health) / self.starting_hp
-    elif self.game_mode == 'board_control':
-      if len(self.simulation.opponent.characters[1:]) > 0:
-        reward = -1.0
-      else:
-        reward = 1.0
+  def calculate_reward(self):
+    if self.simulation.game.ended:
+      reward = self.game_value()
     else:
-      raise ValueError("invalid game mode")
+      reward = 0.0
+      # board_mana_adv = sum((c.cost + 1 for c in self.simulation.player.characters)) - sum(
+      #   (c.cost + 1 for c in self.simulation.opponent.characters))
+      # reward = np.clip(board_mana_adv/10, -0.99, 0.99)
+      # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health) / self.starting_hp
     return np.array(reward, dtype=np.float32)
 
   @episodic_log
-  def set_opponent(self, opponent):
+  def set_opponent(self, opponent: agents.base_agent.Agent):
     self.opponent = opponent
 
   @episodic_log
@@ -296,10 +273,12 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def play_opponent_action(self):
     assert self.simulation.game.current_player.controller.name == 'Opponent'
-    observation, _, terminal, info = self.gather_transition(pickle=False)
+    observation, _, terminal, _ = self.gather_transition()
+    info = self.game_info()
+
     action = self.opponent.choose(observation, info)
     self.step(action)
-    trans = self.gather_transition(pickle=False)
+    trans = self.gather_transition()
     return trans
 
   @episodic_log
@@ -323,7 +302,7 @@ class VanillaHS(base_env.BaseEnv):
       if not self.simulation.game.ended:
         raise e
 
-    game_observation, reward, terminal, info = self.gather_transition(action)
+    game_observation, reward, terminal, info = self.gather_transition()
 
     if terminal:
       info['game_statistics'] = {
@@ -346,14 +325,8 @@ class VanillaHS(base_env.BaseEnv):
     # stats = np.array([board_adv, hand_adv, board_mana_adv])
     # game_observation = np.concatenate((game_observation, stats), axis=0)
 
-    if self.ob_rms is not None:
-      self.ob_rms.update(game_observation)
-      game_observation = (game_observation - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + 1e-8)
-
-    reward = self.calculate_reward(action)
+    reward = self.calculate_reward()
     terminal = self.simulation.game.ended
-    if self.game_mode == 'normal' and (reward != 0 and terminal is not True):
-      raise Exception
 
     enc_possible_actions = self.encode_actions(possible_actions)
 
@@ -363,8 +336,8 @@ class VanillaHS(base_env.BaseEnv):
     }
     return game_observation, reward, terminal, info
 
+  @episodic_log
   def game_info(self):
-    self.episodic_log('game_info')
     possible_actions = self.simulation.actions()
     info = {
       'possible_actions': self.encode_actions(possible_actions),
