@@ -8,7 +8,7 @@ import tensorboardX
 from deep_rl.component import env_utils
 from deep_rl.component import replay
 
-import config
+import hs_config
 import torch
 import numpy as np
 import os
@@ -24,9 +24,9 @@ class A2CAgent(agents.base_agent.Agent):
     self.model_path = model_path
     self.network = actor_critic.A2C(num_inputs, num_actions)
     self.network.build_network()
-    self.optimizer = config.A2CAgent.optimizer(
+    self.optimizer = hs_config.A2CAgent.optimizer(
       self.network.parameters(),
-      lr=config.A2CAgent.lr
+      lr=hs_config.A2CAgent.lr
     )
     experiment_name = time.strftime("%Y_%m_%d-%H_%M_%S")
     log_dir = 'runs/{}'.format(experiment_name)
@@ -48,19 +48,19 @@ class A2CAgent(agents.base_agent.Agent):
     return returns
 
   def train(self, make_env):
-    envs = env_utils.Task(make_env, config.A2CAgent.num_workers, single_process=False)
-    progress_bar = tqdm.tqdm(total=config.A2CAgent.training_steps)
+    envs = env_utils.Task(make_env, hs_config.A2CAgent.num_workers, single_process=False)
+    progress_bar = tqdm.tqdm(total=hs_config.A2CAgent.training_steps)
     states, _, _, possible_actions = envs.reset()
 
     frame_idx = 0
-    while frame_idx < config.A2CAgent.training_steps:
+    while frame_idx < hs_config.A2CAgent.training_steps:
       log_probs = []
       values = []
       rewards = []
       masks = []
       entropy = 0
 
-      for _ in range(config.A2CAgent.rollout_length):
+      for _ in range(hs_config.A2CAgent.rollout_length):
         dist, value = self.network(states, possible_actions)
         actions = dist.sample()
         next_state, reward, done, possible_actions = envs.step(actions)
@@ -80,12 +80,12 @@ class A2CAgent(agents.base_agent.Agent):
           if env_done:
             game_value = (int(env_reward) + 1) / 2
             self.summary_writer.add_scalar('game_stats/game_value', game_value,
-                                           frame_idx * config.A2CAgent.num_workers + env_idx)
+                                           frame_idx * hs_config.A2CAgent.num_workers + env_idx)
 
         states = next_state
         progress_bar.update(len(states))
 
-        if frame_idx % config.A2CAgent.checkpoint_every == 0 and frame_idx > 0:
+        if frame_idx % hs_config.A2CAgent.checkpoint_every == 0 and frame_idx > 0:
           torch.save(self.network.state_dict(), self.model_path)
 
         frame_idx += 1
@@ -104,15 +104,15 @@ class A2CAgent(agents.base_agent.Agent):
       actor_loss = -(log_probs * advantage.detach()).mean()
       critic_loss = advantage.pow(2).mean()
 
-      loss = actor_loss + 0.5 * critic_loss - config.A2CAgent.entropy_weight * entropy
+      loss = actor_loss + 0.5 * critic_loss - hs_config.A2CAgent.entropy_weight * entropy
 
-      self.summary_writer.add_scalar('loss/actor_loss', actor_loss, (frame_idx + 1) * config.A2CAgent.num_workers)
+      self.summary_writer.add_scalar('loss/actor_loss', actor_loss, (frame_idx + 1) * hs_config.A2CAgent.num_workers)
       self.summary_writer.add_scalar('loss/critic_loss', 0.5 * critic_loss,
-                                     (frame_idx + 1) * config.A2CAgent.num_workers)
-      self.summary_writer.add_scalar('loss/entropy', config.A2CAgent.entropy_weight * entropy,
-                                     (frame_idx + 1) * config.A2CAgent.num_workers)
-      self.summary_writer.add_scalar('loss/total_loss', loss, (frame_idx + 1) * config.A2CAgent.num_workers)
-      progress_bar.set_description(str((frame_idx + 1) * config.A2CAgent.num_workers))
+                                     (frame_idx + 1) * hs_config.A2CAgent.num_workers)
+      self.summary_writer.add_scalar('loss/entropy', hs_config.A2CAgent.entropy_weight * entropy,
+                                     (frame_idx + 1) * hs_config.A2CAgent.num_workers)
+      self.summary_writer.add_scalar('loss/total_loss', loss, (frame_idx + 1) * hs_config.A2CAgent.num_workers)
+      progress_bar.set_description(str((frame_idx + 1) * hs_config.A2CAgent.num_workers))
 
       self.optimizer.zero_grad()
       loss.backward()

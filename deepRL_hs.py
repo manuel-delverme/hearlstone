@@ -3,7 +3,7 @@ import baselines
 import agents.evolutionary.cmaes
 import agents.search.classical
 
-import config
+import hs_config
 import environments.gym_wrapper
 import environments.trading_hs
 import environments.vanilla_hs
@@ -12,7 +12,7 @@ import environments.vanilla_hs
 def train(level) -> None:
   def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
     hs_game = environments.vanilla_hs.VanillaHS()
-    opponent = config.VanillaHS.opponent(level)
+    opponent = hs_config.VanillaHS.opponent(level)
     hs_game.set_opponent(opponent)
     return hs_game
 
@@ -22,13 +22,13 @@ def train(level) -> None:
   player = agent(
     dummy_hs_env.observation_space.shape[0],
     dummy_hs_env.action_space.n,
-    record=not config.enjoy,
+    record=not hs_config.enjoy,
     experiment_name='lvl:{}_'.format(level),
   )
   del dummy_hs_env
 
   # player.load_model()
-  if config.enjoy:
+  if hs_config.enjoy:
     # player.render(make_env())
     player.train(make_env)
   else:
