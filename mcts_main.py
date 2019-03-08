@@ -22,36 +22,60 @@ class Action(object):
         return "card: {}, usage: {}, vector: {}".format(self.card_obj, self.params, self.vector)
 
 
-def play_against_yourself(environment, player_policy):
-    new_experiences = []
-    return new_experiences
-
-
-def arena_fight(environment, player_policy, opponent_policy, nr_games=1000):
-    state, possible_actions = environment.reset()
-    active_player, passive_player = random.shuffle((player_policy, opponent_policy))
+def arena_fight(environment, player_policy, opponent_policy, nr_games=1, gather_experiences=False):
     scoreboard = [0, 0, 0]
-    terminal = False
+    experiences = []
+    players = (player_policy, opponent_policy)
+    game_experiences = []
 
-    while not terminal:
-        action = active_player.choose_action(state, possible_actions)
-        state, reward, terminal, info = environment.step(action)
+    for game_nr in range(nr_games):
+        state, info = environment.reset()
         possible_actions = info['possible_actions']
-        if action == envs.simple_HSenv.GameActions.PASS_TURN or len(possible_actions) == 0:
-            active_player, passive_player = passive_player, active_player
 
-    scoreboard[environment.winner] += 1
+        current_player = random.randint(0, 1)
+        active_player = players[current_player]
+        passive_player = players[1-current_player]
+        game_experiences.clear()
+
+        terminal = False
+
+        while not terminal:
+            action = active_player.choose_action(state, possible_actions)
+
+            state, reward, terminal, info = environment.step(action)
+            possible_actions = info['possible_actions']
+
+            if gather_experiences:
+                game_experiences.append((state, current_player, action))
+
+            # if action == envs.simple_HSenv.GameActions.PASS_TURN or len(possible_actions) == 0:
+            if environment.active_player != current_player:
+                active_player, passive_player = passive_player, active_player
+                current_player = 1 - current_player
+                assert environment.active_player == current_player
+
+        if environment.winner is None:
+            scoreboard[2] += 1
+        else:
+            scoreboard[environment.winner] += 1
+
+        if gather_experiences:
+            for state, current_player, action in game_experiences:
+                value = 1 if current_player == environment.winner else -1
+                experiences.append((state, current_player, action, value))
+
     win_ratio = float(scoreboard[0]) / sum(scoreboard)
-    return win_ratio
+    return win_ratio, experiences
 
 
 def main():
     TRAINING_LEN = 10000
-    NUM_ITER = 100
-    NUMBER_EPISODES = 100
+    NUM_ITER = 2
+    NUMBER_EPISODES = 2
     UPDATE_THRESHOLD = 0.55
 
-    environment = envs.simple_HSenv.simple_HSEnv()
+    # environment = envs.simple_HSenv.simple_HSEnv()
+    environment = envs.simple_HSenv.fake_HSEnv()
     player_neural_network = networks.NeuralNetwork(state_size=6, action_size=3*3)
     player_policy = mcts.MCTS(environment, player_neural_network)
 
@@ -60,13 +84,13 @@ def main():
     for iteration_number in range(NUM_ITER):
         for eps in range(NUMBER_EPISODES):
             player_policy.reset()
-            new_experiences = play_against_yourself(environment, player_policy)
+            _, new_experiences = arena_fight(environment, player_policy, player_policy, nr_games=1, gather_experiences=True)
             training_samples.extend(new_experiences)
 
         opponent_neural_netwrok = copy.deepcopy(player_neural_network)
         opponent_policy = mcts.MCTS(environment, opponent_neural_netwrok)
 
-        player_neural_network.train(training_samples)
+        player_neural_network.train_on_samples(training_samples, nr_epochs=100, batch_size=16)
         win_ratio = arena_fight(environment, player_policy, opponent_policy)
 
         if win_ratio < UPDATE_THRESHOLD:

@@ -484,7 +484,12 @@ if __name__ == "__main__":
 
 class MCTS(object):
     def __init__(self, environment, player_neural_network):
-        return None
+        self.network = player_neural_network
+        self.environment = environment
+
+    def choose_action(self, state, possible_actions):
+        print("choose_action(state, possible_actions) is FAKE")
+        return possible_actions[0]
 
     def reset(self):
         pass

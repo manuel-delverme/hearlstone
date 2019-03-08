@@ -106,6 +106,45 @@ class simple_HSEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
+
+class fake_HSEnv(gym.Env):
+    def __init__(self, skip_mulligan=False):
+        self.winner = None
+        self.active_player = None
+
+    def reset(self):
+        self.winner = None
+        self.active_player = random.randint(0, 1)
+        info = {
+            'possible_actions': self.generate_random_actions(random.randint(1, 3))
+        }
+        return np.random.rand(10), info
+
+    def step(self, action):
+        assert self.active_player is not None
+
+        if np.all(action[0] == GameActions.PASS_TURN):
+            self.active_player = 1 - self.active_player
+
+        info = {
+            'possible_actions': self.generate_random_actions(random.randint(1, 3))
+        }
+        state = np.random.rand(10)
+
+        if random.random() < 0.01:
+            terminal = True
+            self.winner = random.randint(0, 1)
+        else:
+            terminal = False
+        return state, 0, terminal, info
+
+    def generate_random_actions(self, nr_of_actions):
+        random_actions = []
+        for action_idx in range(nr_of_actions):
+            random_actions.append(action_idx * np.random.rand(3))
+        return random_actions
+
+
 def HSenv_test():
     env = simple_HSEnv(skip_mulligan=True)
     s0, reward, terminal, info = env.reset()
