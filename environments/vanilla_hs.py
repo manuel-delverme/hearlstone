@@ -5,7 +5,6 @@ import logging
 import gym.spaces
 import pprint
 import collections
-import functools
 import numpy as np
 
 import fireplace
@@ -20,6 +19,15 @@ from shared import utils
 
 from typing import Tuple, List, Dict, Text, Any
 from baselines.common.running_mean_std import RunningMeanStd
+import gui
+
+
+def get_hp(card):
+  try:
+    return card.hp
+  except AttributeError:
+    return card.health
+  raise AttributeError
 
 
 def episodic_log(func):
@@ -74,8 +82,10 @@ class VanillaHS(base_env.BaseEnv):
     Args:
       starting_hp:
     """
+    self.gui = None
     self.opponent = None
     self.id_to_action = [(-1, -1), ]
+    self.action_history = collections.deque(maxlen=5)
     for src_idx in range(max_cards_in_hand):
       self.id_to_action.append((src_idx, -1))
     for src_idx in range(max_cards_in_board):
@@ -223,28 +233,47 @@ class VanillaHS(base_env.BaseEnv):
   def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
 
-  def render(self, mode='human', info={}):
-    board = ""
-    board += "-" * 100
-    board += "\nYOU:{player_hp}\n[{player_hand}]\n{player_board}\n{separator}\nboard:{o_board}\nENEMY:{o_hp}\n[{o_hand}]".format(
-      player_hp=self.simulation.player.hero.health,
-      player_hand="\t".join(c.data.name for c in self.simulation.player.hand),
-      player_board="\t \t".join(
-        c.data.name for c in self.simulation.player.characters[1:]),
-      separator="_" * 100,
-      o_hp=self.simulation.opponent.hero.health,
-      o_hand="\t".join(
-        c.data.name for c in self.simulation.player.characters[1:]),
-      o_board="\t \t".join(
-        c.data.name for c in self.simulation.opponent.characters[1:]),
-    )
-    board += "\n" + "*" * 100 + "\n" * 3
-    return board
+  def render(self, mode='human', info=None):
+    if self.gui is None:
+      self.gui = gui.GUI()
+
+    obs = info['observation']
+    offset, board, hand, mana = self.render_player(obs)
+    self.gui.draw_agent(board=board, hand=hand)
+
+    offset, board, hand, mana = self.render_player(obs, offset)
+    self.gui.draw_opponent(board=board, hand=hand)
+
+    info = info.copy()
+    info['possible_actions'] = np.argwhere(info['possible_actions']).flatten()
+    action_history = info['action_history']
+    del info['action_history']
+    del info['observation']
+    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())))
+    self.gui.log(action_history, row=2)
+
+  def render_player(self, obs, offset=0):
+    board = []
+    for minion_number in range(self.max_cards_in_board + 1):
+      card = obs[offset: offset + 3]
+      if card.max() > -1:
+        board.append(list(int(c) for c in card))
+      offset += 3
+    mana = obs[offset]
+    offset += 1
+    hand = []
+    for minion_number in range(self.simulation._MAX_CARDS_IN_HAND):
+      card = obs[offset: offset + 3]
+      if card.max() > -1:
+        hand.append(list(int(c) for c in card))
+      offset += 3
+    return offset, [board[-1], ] + board[:-1], hand, mana
 
   @episodic_log
   def reset(self, shuffle_deck=hs_config.VanillaHS.sort_decks):
     self.reinit_game(shuffle_deck)
 
+    self.action_history.clear()
     self.games_played += 1
     return self.gather_transition()
 
@@ -284,6 +313,7 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def step(self, encoded_action):
     action = self.decode_action(int(encoded_action))
+    self.action_history.append(repr(action))
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
       if encoded_action == 0:
@@ -332,7 +362,10 @@ class VanillaHS(base_env.BaseEnv):
 
     possible_actions = utils.one_hot_actions((enc_possible_actions,), self.num_actions)
     info = {
-      'possible_actions': possible_actions.squeeze()
+      'possible_actions': possible_actions.squeeze(),
+      'observation': game_observation,
+      'reward': reward,
+      'action_history': ", ".join(reversed(self.action_history)),
     }
     return game_observation, reward, terminal, info
 
@@ -363,3 +396,7 @@ class VanillaHS(base_env.BaseEnv):
       actor.give(MOONFIRE).play(target=opponent.hero)
 
     return self.gather_transition()
+
+  def close(self):
+    super(VanillaHS, self).close()
+    del self._gui

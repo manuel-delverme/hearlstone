@@ -1,7 +1,5 @@
-# !/usr/bin/env python
 import time
 import curses
-import random
 import enum
 
 
@@ -22,20 +20,18 @@ class GUI:
     (self.game_height, self.game_width) = self.screen.getmaxyx()
     # if self.game_height < 60 or self.game_width < 180:
     # print "\x1b[8;60;180t" #resize terminal
-    # (self.game_height, self.game_width) = self.screen.getmaxyx()
-    # (self.game_height, self.game_width) = (58, 180)
 
-    opponent_rows = int(self.game_height / 3)
-    player_rows = int(self.game_height / 3)
-    log_rows = int(self.game_height / 3)
+    opponent_rows = (CARD_HEIGHT + 2) * 2 + 1
+    player_rows = (CARD_HEIGHT + 2) * 2 + 1
+    log_rows = int(self.game_height - (opponent_rows + player_rows))
+    assert log_rows >= 3
 
-    opponent_bottom = int(self.game_height / 3)
-    player_bottom = int(self.game_height * 2 / 3)
-    log_bottom = int(self.game_height)
+    opponent_bottom = opponent_rows
+    player_bottom = opponent_rows + player_rows
 
     opponent_top = 0
-    player_top = opponent_bottom + 1
-    log_top = player_bottom + 1
+    player_top = opponent_bottom
+    log_top = player_bottom
 
     self.windows = {
       Players.OPPONENT: curses.newwin(opponent_rows, self.game_width - 1, opponent_top, 0),
@@ -43,10 +39,11 @@ class GUI:
       Players.LOG: curses.newwin(log_rows, self.game_width - 1, log_top, 0),
     }
     for k in self.windows:
-        self.windows[k].immedok(True)
-        self.windows[k].box()
-        # print('window:', k)
-        time.sleep(1)
+      self.windows[k].immedok(True)
+      self.windows[k].box()
+
+    self.opponent_addstr(0, self.game_width - 1 - len('Opponent'), 'Opponent')
+    self.player_addstr(0, self.game_width - 1 - len('Agent'), 'Agent')
 
   def __del__(self):
     curses.endwin()
@@ -79,43 +76,31 @@ class GUI:
   def opponent_addstr(self, y, x, message, options=0):
     self.windows[Players.OPPONENT].addstr(y, x, message, options)
 
-  def draw_player_side(self, player, board_cards, hand_cards):
-    self.draw_zone(board_cards, player, offset_row=1, offset_column=1)
-    self.draw_zone(hand_cards, player, offset_row=CARD_HEIGHT + 3, offset_column=1)
+  def draw_opponent(self, board, hand):
+    board = ((hp, atk, ready) for atk, hp, ready in board)
+    hand = ((hp, atk, ready) for atk, hp, ready in hand)  # opponent is mirrored
+    self.draw_player_side(Players.OPPONENT, top_row=hand, bottom_row=board)
+
+  def draw_agent(self, board, hand):
+    self.draw_player_side(Players.AGENT, top_row=board, bottom_row=hand)
+
+  def draw_player_side(self, player, top_row, bottom_row):
+    self.draw_zone(top_row, player, offset_row=1, offset_column=1)
+    self.draw_zone(bottom_row, player, offset_row=CARD_HEIGHT + 2, offset_column=1)
+    self.windows[player].refresh()
+    # self.windows[player].addstr(0, 0, "HP:{}".format(hp))
 
   def draw_zone(self, cards_to_draw, player, offset_column, offset_row):
     for offset, card in enumerate(cards_to_draw):
       pixel_offset = offset * (CARD_WIDTH + 4)
       self.draw_rectangle(player, offset_row, offset_column + pixel_offset, CARD_HEIGHT, CARD_WIDTH)
-      self.windows[player].addstr(offset_row + 1, offset_column + 1 + pixel_offset, str(card))
-      self.windows[player].addstr(offset_row + CARD_HEIGHT, offset_column + 1 + CARD_WIDTH - len(str(card)) + pixel_offset, str(card))
+      atk, hp, ready = card
+      ready = '+' if ready else 'z'
+      self.windows[player].addstr(offset_row + 0, offset_column + 2 + pixel_offset, str(ready))
+      self.windows[player].addstr(offset_row + 1, offset_column + 1 + pixel_offset, str(atk))
+      self.windows[player].addstr(offset_row + CARD_HEIGHT, offset_column + 1 + CARD_WIDTH - len(str(hp)) + pixel_offset, str(hp))
 
-
-if __name__ == "__main__":
-  gui = GUI()
-
-  card_value = 3
-  gui.opponent_addstr(0, 0, 'opponent')
-  gui.player_addstr(0, 0, 'player')
-  # if self.revealed:
-  #   gui.opponent_addstr(y + 2, x - 15, "Card value: " + card_value)
-  # else:
-  #   gui.opponent_addstr(y + 2, x - 15, "Cards:")
-  def log(txt):
-      time.sleep(1)
-      gui.windows[Players.LOG].addstr( 1,  1 , txt)
-
-  board = range(7)
-  hand = range(10)
-  log('draw1')
-  gui.draw_player_side(Players.OPPONENT, board, hand)
-  log('draw2')
-  gui.draw_player_side(Players.AGENT, board, hand)
-  for i in range(5):
-    log('sleep %s' % i)
-  # print('sleep')
-
-  # g = Game()
-  # while g.play():
-  del gui
-  # print("Played a total of " + str(round_count) + " rounds.")
+  def log(self, txt, row=1):
+    time.sleep(1)
+    self.windows[Players.LOG].addstr(row, 1, txt)
+    self.windows[Players.LOG].clrtoeol()  # clear the rest of the line

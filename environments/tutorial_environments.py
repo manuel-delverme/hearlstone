@@ -17,6 +17,8 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       starting_hp=hs_config.VanillaHS.starting_hp,
       sort_decks=hs_config.VanillaHS.sort_decks,
     )
+    self.level = 0
+
     immunity = fireplace.cards.utils.buff(immune=True)
     self.simulation.player.hero.set_current_health(hs_config.VanillaHS.starting_hp)
     self.simulation.player.hero.tags.update(immunity.tags)
@@ -50,3 +52,8 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       return -1
     else:
       return num_player_minions
+
+  def __str__(self):
+    return 'TradingHS:{}'.format(
+      self.level,
+    )

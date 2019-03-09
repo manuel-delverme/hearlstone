@@ -8,7 +8,7 @@ import torch.optim as optim
 import agents.base_agent
 
 enjoy = False
-use_gpu = True
+use_gpu = False
 seed = 1337
 benchmark = False
 make_deterministic = False # Supposedly slows by a lot
@@ -68,7 +68,7 @@ class DQNAgent:
 
 class PPOAgent:
   # Monitoring
-  eval_interval = 100
+  eval_interval = 10
   save_interval = 100
   save_dir = "ppo_save_dir/"
   add_timestep = False  # Adds the time step to observations

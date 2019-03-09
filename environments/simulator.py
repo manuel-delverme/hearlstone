@@ -256,8 +256,10 @@ class HSsimulation(object):
       self.usage(**self.params)
 
     def __repr__(self):
-      return "card: {}, usage: {}, vector: {}".format(self.card, self.params,
-                                                      None)
+      if self.card is None:
+        return "PASS"
+      return "{}({},{})->{}".format(
+        self.card.data.name, self.card.atk, self.card.health, self.params['target'].data.name)
 
     def encode(self):
       state = {

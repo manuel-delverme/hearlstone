@@ -170,6 +170,7 @@ class PPOAgent(agents.base_agent.Agent):
 
       value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
       rollouts.after_update()
+      total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
 
       # save for every interval-th episode or for the last epoch
       if (
@@ -185,10 +186,10 @@ class PPOAgent(agents.base_agent.Agent):
           save_model = copy.deepcopy(self.agent.actor_critic).cpu()
 
         save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
-        torch.save(save_model,
-                   os.path.join(hs_config.PPOAgent.save_dir, str(hs_config.VanillaHS.get_game_mode()) + ".pt"))
 
-      total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
+        checkpoint_name = "{}-{}.pt".format(str(envs.venv.venv.envs[0].env), total_num_steps)
+        checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
+        torch.save(save_model, checkpoint_file)
 
       if ppo_update_num % hs_config.log_interval == 0 and len(episode_rewards) > 1:
         end = time.time()
@@ -206,9 +207,9 @@ class PPOAgent(agents.base_agent.Agent):
 
       if hs_config.PPOAgent.eval_interval and len(
         episode_rewards) > 1 and ppo_update_num % hs_config.PPOAgent.eval_interval == 0:
+
         eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                                   hs_config.PPOAgent.add_timestep, hs_config.device, allow_early_resets=True)
-
         vec_norm = get_vec_normalize(eval_envs)
         if vec_norm is not None:
           vec_norm.eval()
@@ -217,7 +218,7 @@ class PPOAgent(agents.base_agent.Agent):
         eval_episode_rewards = []
 
         obs, _, _, infos = eval_envs.reset()
-        possible_actionss = torch.zeros(size=(len(info),) + infos[0]['possible_actions'].shape)
+        possible_actionss = torch.zeros(size=(len(infos),) + infos[0]['possible_actions'].shape)
 
         for num, info in enumerate(infos):
           possible_actionss[num] = info['possible_actions']
@@ -256,6 +257,38 @@ class PPOAgent(agents.base_agent.Agent):
     #                       args.algo, args.num_env_steps)
     #   except ioerror:
     #     pass
+
+  def enjoy(self, make_env, checkpoint_file):
+    env = make_vec_envs(make_env, hs_config.seed, 1, None, None, hs_config.PPOAgent.add_timestep, 'cpu', False)
+    # We need to use the same statistics for normalization as used in training
+    actor_critic, ob_rms = torch.load(checkpoint_file)
+
+    vec_norm = get_vec_normalize(env)
+    if vec_norm is not None:
+      vec_norm.eval()
+      vec_norm.ob_rms = ob_rms
+
+    obs, _, _, infos = env.reset()
+    possible_actionss = torch.zeros(size=(len(infos),) + infos[0]['possible_actions'].shape)
+
+    for num, info in enumerate(infos):
+      possible_actionss[num] = info['possible_actions']
+
+    env.render(info={
+      'action': None,
+      **infos[0]
+    })
+    while True:
+      with torch.no_grad():
+        value, action, _, _ = self.agent.actor_critic.act(obs, None, None, possible_actionss)
+      obs, reward, done, infos = env.step(action)
+      for num, info in enumerate(infos):
+        possible_actionss[num] = torch.from_numpy(info['possible_actions'])
+
+      env.render(info={
+        'action': action,
+        **infos[0]
+      })
 
 # class PPOAgent(agents.base_agent.Agent):
 #   def choose(self, observation, possible_actions):
