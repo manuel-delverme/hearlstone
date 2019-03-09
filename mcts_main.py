@@ -18,7 +18,7 @@ def train():
     torch.manual_seed(hs_config.seed)
     torch.cuda.manual_seed_all(hs_config.seed)
 
-    if hs_config.use_gpu and torch.cuda.is_available():
+    if hs_config.use_gpu and torch.cuda.is_available() and hs_config.make_deterministic:
       torch.backends.cudnn.benchmark = False
       torch.backends.cudnn.deterministic = True
 
@@ -42,5 +42,4 @@ def train():
 
 
 if __name__ == "__main__":
-  torch.set_num_threads(1)
   train()
