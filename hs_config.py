@@ -7,7 +7,7 @@ import torch.optim as optim
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
 
-enjoy = False
+enjoy = True
 use_gpu = False
 seed = 1337
 benchmark = False

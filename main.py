@@ -35,7 +35,7 @@ def train():
   del dummy_hs_env
 
   if hs_config.enjoy:
-    player.enjoy(make_env, checkpoint_file="/home/awok/Projects/hearlstone/ppo_save_dir/<class 'environments.tutorial_environments.TradingHS'>-2020.pt")
+    player.enjoy(make_env, checkpoint_file="/home/awok/Projects/hearlstone/ppo_save_dir/TradingHS:0-8020.pt")
   else:
     player.train(make_env, hs_config.seed)
 

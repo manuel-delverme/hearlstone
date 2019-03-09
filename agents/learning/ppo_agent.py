@@ -261,7 +261,7 @@ class PPOAgent(agents.base_agent.Agent):
   def enjoy(self, make_env, checkpoint_file):
     env = make_vec_envs(make_env, hs_config.seed, 1, None, None, hs_config.PPOAgent.add_timestep, 'cpu', False)
     # We need to use the same statistics for normalization as used in training
-    actor_critic, ob_rms = torch.load(checkpoint_file)
+    self.agent.actor_critic, ob_rms = torch.load(checkpoint_file)
 
     vec_norm = get_vec_normalize(env)
     if vec_norm is not None:
@@ -285,10 +285,7 @@ class PPOAgent(agents.base_agent.Agent):
       for num, info in enumerate(infos):
         possible_actionss[num] = torch.from_numpy(info['possible_actions'])
 
-      env.render(info={
-        'action': action,
-        **infos[0]
-      })
+      env.render(info=infos[0])
 
 # class PPOAgent(agents.base_agent.Agent):
 #   def choose(self, observation, possible_actions):
