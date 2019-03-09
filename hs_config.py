@@ -8,15 +8,17 @@ import torch.optim as optim
 import agents.base_agent
 
 enjoy = False
-use_gpu = False
+use_gpu = True
 seed = 1337
 benchmark = False
+make_deterministic = False # Supposedly slows by a lot
 
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
 log_interval = 10
 BIG_NUMBER = 9999999999999
+
 
 
 class VanillaHS:
@@ -115,3 +117,5 @@ class A2CAgent:
 
   # Hyper params:
   hidden_size = 32
+
+
