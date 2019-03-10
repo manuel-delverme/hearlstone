@@ -13,7 +13,7 @@ class PassingAgent(agents.base_agent.Agent):
   def __init__(self):
     super().__init__()
 
-  def _choose(self, observation: np.array, info: Dict[Text, Any]):
+  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     return 0
 
 
@@ -34,7 +34,7 @@ class HeuristicAgent(agents.base_agent.Agent):
     self.random_agent = agents.heuristic.random_agent.RandomAgent()
     self.passing_agent = PassingAgent()
 
-  def _choose(self, observation: np.array, info: Dict[Text, Any]):
+  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     if self.level == 0:
       return self.passing_agent.choose(observation, info)
 

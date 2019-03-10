@@ -6,10 +6,10 @@ import numpy as np
 
 class Agent(ABC):
   @abstractmethod
-  def _choose(self, observation: np.array, info: Dict[Text, Any]):
+  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     raise NotImplemented
 
-  def choose(self, observation: np.array, info: Dict[Text, Any]):
+  def choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     import specs
     specs.check_info_spec(info)
     return self._choose(observation, info)
