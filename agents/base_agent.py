@@ -1,14 +1,18 @@
 from abc import ABC, abstractmethod
-import torch
+from typing import Dict, Text, Any
+
+import numpy as np
 
 
 class Agent(ABC):
-    @abstractmethod
-    def choose(self, observation, possible_actions):
-        raise NotImplemented
+  @abstractmethod
+  def _choose(self, observation: np.array, info: Dict[Text, Any]):
+    raise NotImplemented
 
-    def load_model(self, model_path=None):
-      if model_path is None:
-        model_path = self.model_path
-      self.network.load_state_dict(torch.load(model_path))
-      print('loaded', model_path)
+  def choose(self, observation: np.array, info: Dict[Text, Any]):
+    import specs
+    specs.check_info_spec(info)
+    return self._choose(observation, info)
+
+  def load_model(self, model_path=None):
+    raise NotImplemented

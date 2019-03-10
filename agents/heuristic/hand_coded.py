@@ -1,10 +1,11 @@
+import collections
 import random
+from typing import Dict, Text, Any
+
+import numpy as np
 
 import agents.base_agent
-import numpy as np
 import agents.heuristic.random_agent
-import collections
-
 import hs_config
 
 
@@ -12,29 +13,29 @@ class PassingAgent(agents.base_agent.Agent):
   def __init__(self):
     super().__init__()
 
-  def choose(self, observation: np.array, info: dict):
+  def _choose(self, observation: np.array, info: Dict[Text, Any]):
     return 0
 
 
 class HeuristicAgent(agents.base_agent.Agent):
-  def __init__(self, level=hs_config.VanillaHS.level):
-    assert -1 <= level <= 5
+  def __init__(self, level: int = hs_config.VanillaHS.level):
+    assert -1 < level < 6
+    super().__init__()
     self.randomness = [
+      None,
       1,
       0.75,
       0.5,
       0.25,
       0.125,
       0,
-      None,
     ][level]
     self.level = level
-    super().__init__()
     self.random_agent = agents.heuristic.random_agent.RandomAgent()
     self.passing_agent = PassingAgent()
 
-  def choose(self, observation: np.array, info: dict):
-    if self.level == -1:
+  def _choose(self, observation: np.array, info: Dict[Text, Any]):
+    if self.level == 0:
       return self.passing_agent.choose(observation, info)
 
     if random.random() < self.randomness:
@@ -87,24 +88,8 @@ class HeuristicAgent(agents.base_agent.Agent):
       else:
         selected_action = actions[0]
 
-    for enc_action, action_obj in zip(info['possible_actions'], info['original_info'][ 'possible_actions']):
+    for enc_action, action_obj in zip(info['possible_actions'], info['original_info']['possible_actions']):
       if action_obj == selected_action:
         return enc_action
     else:
       raise Exception
-
-
-def main():
-  import agents.heuristic.random_agent
-  agent = agents.heuristic.random_agent()
-  opponent = HeuristicAgent()
-
-  from environments import simple_hs
-  from shared import utils
-  env = simple_hs.VanillaHS()
-  scoreboard = utils.arena_fight(env, agent, opponent, nr_games=1000)
-  print('winning ratio', scoreboard)
-
-
-if __name__ == "__main__":
-  main()

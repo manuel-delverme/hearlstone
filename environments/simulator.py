@@ -513,7 +513,7 @@ class Agent(object):
     state_id = str(state)
     self.Q_table[state_id][action_id] = q_value
 
-  def choose_action(self, state, possible_actions):
+  def _choose_action(self, state, possible_actions):
     if random.random() < self.epsilon:
       best_action = random.choice(possible_actions)
     else:

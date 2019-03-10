@@ -38,7 +38,7 @@ class DepthFirstSearchAgent(object):
         assert reward < 1
       print(rs)
 
-  def choose(self, original_env, obs, possible_actions):
+  def _choose(self, original_env, obs, possible_actions):
     self.search_depth = 0
     try:
       a, r = self._choose(original_env, obs, possible_actions, 0)

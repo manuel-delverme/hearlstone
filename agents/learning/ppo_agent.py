@@ -20,7 +20,7 @@ from agents.learning.a2c_ppo_acktr.utils import get_vec_normalize, update_linear
 
 
 class PPOAgent(agents.base_agent.Agent):
-  def choose(self, observation, possible_actions):
+  def _choose(self, observation, possible_actions):
     raise NotImplementedError
 
   def __init__(self, num_inputs, action_space, log_dir: str, should_flip_board=False,

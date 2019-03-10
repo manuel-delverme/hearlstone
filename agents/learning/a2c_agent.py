@@ -16,7 +16,7 @@ import tqdm
 
 
 class A2CAgent(agents.base_agent.Agent):
-  def choose(self, observation, possible_actions):
+  def _choose(self, observation, possible_actions):
     pass
 
   def __init__(self, num_inputs, num_actions, should_flip_board=False, model_path="checkpoints/checkpoint.pth.tar",
