@@ -35,7 +35,7 @@ class VecNormalize(_VecNormalize):
     """
     Reset all environments
     """
-    obs, _, _, info = self.venv.reset()
+    obs, rewards, dones, infos = self.venv.reset()
     filtered_obs = self._obfilt(obs)
-    return filtered_obs, None, None, info
+    return filtered_obs, rewards, dones, infos
 

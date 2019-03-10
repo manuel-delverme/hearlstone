@@ -5,7 +5,7 @@ import torch
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
 
-enjoy = True
+enjoy = False
 use_gpu = False
 seed = 1337
 benchmark = False
@@ -30,7 +30,7 @@ class VanillaHS:
 
   always_first_player = True
 
-  level = 5
+  level = 1
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:
