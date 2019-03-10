@@ -1,8 +1,8 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
-import agents.learning.a2c_ppo_acktr.distributions
+import hs_config
 from agents.learning.a2c_ppo_acktr.utils import init
 
 
@@ -12,25 +12,18 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-  def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
+  def __init__(self, obs_shape, action_space, base_kwargs=None):
     super(Policy, self).__init__()
     if base_kwargs is None:
       base_kwargs = {}
-    if base is None:
-      if len(obs_shape) == 3:
-        base = CNNBase
-      elif len(obs_shape) == 1:
-        base = MLPBase
-      else:
-        raise NotImplementedError
 
-    self.base = base(obs_shape[0], **base_kwargs)
+    self.base = MLPBase(obs_shape[0], **base_kwargs)
 
-    if action_space.__class__.__name__ == "Discrete":
-      num_outputs = action_space.n
-      self.dist = agents.learning.a2c_ppo_acktr.distributions.Categorical(self.base.output_size, num_outputs)
-    else:
-      raise NotImplementedError
+    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
+    self.linear = init_(nn.Linear(self.base.output_size, action_space.n))
+
+    self.distribution = torch.distributions.Categorical
+
 
   @property
   def is_recurrent(self):
@@ -49,16 +42,24 @@ class Policy(nn.Module):
       raise ValueError("no action possible")
 
     value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
-    dist = self.dist(actor_features, possible_actions)
+
+    x = self.linear(actor_features)
+
+    dist = self.get_action_distribution(possible_actions, x)
+
     if deterministic:
-      action = dist.mode()
+      action = dist.probs.argmax(dim=-1, keepdim=True)  # dist.mode()
     else:
-      action = dist.sample()
+      action = dist.sample().unsqueeze(-1)
 
-    action_log_probs = dist.log_probs(action)
-    # dist_entropy = dist.entropy().mean()
-
+    action_log_probs = dist.log_prob(action.squeeze(-1)).view(action.size(0), -1).sum(-1).unsqueeze(
+      -1)  # TODO: simplify
     return value, action, action_log_probs, rnn_hxs
+
+  def get_action_distribution(self, possible_actions, logits):
+    logits -= (1 - possible_actions) * hs_config.BIG_NUMBER
+    dist = self.distribution(logits=logits)
+    return dist
 
   def get_value(self, inputs, rnn_hxs, masks):
     value, _, _ = self.base(inputs, rnn_hxs, masks)
@@ -66,9 +67,11 @@ class Policy(nn.Module):
 
   def evaluate_actions(self, inputs, rnn_hxs, masks, action, possible_actions):
     value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
-    dist = self.dist(actor_features, possible_actions)
+    logits = self.linear(actor_features)
+    dist = self.get_action_distribution(possible_actions, logits)
 
-    action_log_probs = dist.log_probs(action)
+    action_log_probs = dist.log_prob(action.squeeze(-1)).view(action.size(0), -1).sum(-1).unsqueeze(
+      -1)  # TODO: simplify
     dist_entropy = dist.entropy().mean()
 
     return value, action_log_probs, dist_entropy, rnn_hxs
@@ -161,44 +164,6 @@ class NNBase(nn.Module):
       hxs = hxs.squeeze(0)
 
     return x, hxs
-
-
-class CNNBase(NNBase):
-  def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-    super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
-
-    init_ = lambda m: init(m,
-                           nn.init.orthogonal_,
-                           lambda x: nn.init.constant_(x, 0),
-                           nn.init.calculate_gain('relu'))
-
-    self.main = nn.Sequential(
-      init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
-      nn.ReLU(),
-      init_(nn.Conv2d(32, 64, 4, stride=2)),
-      nn.ReLU(),
-      init_(nn.Conv2d(64, 32, 3, stride=1)),
-      nn.ReLU(),
-      Flatten(),
-      init_(nn.Linear(32 * 7 * 7, hidden_size)),
-      nn.ReLU()
-    )
-
-    init_ = lambda m: init(m,
-                           nn.init.orthogonal_,
-                           lambda x: nn.init.constant_(x, 0))
-
-    self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
-    self.train()
-
-  def forward(self, inputs, rnn_hxs, masks):
-    x = self.main(inputs / 255.0)
-
-    if self.is_recurrent:
-      x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-    return self.critic_linear(x), x, rnn_hxs
 
 
 class MLPBase(NNBase):
