@@ -7,7 +7,7 @@ import torch.optim as optim
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
 
-enjoy = 1
+enjoy = (3 % 2) == 0
 use_gpu = False
 seed = 1337
 benchmark = False
@@ -27,12 +27,12 @@ class VanillaHS:
   starting_hp = 30
 
   # this is now level
-  max_cards_in_board = 5
-  max_cards_in_hand = 5
+  max_cards_in_board = 7
+  max_cards_in_hand = 10
 
   always_first_player = True
 
-  level = 7
+  level = 3
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:
@@ -47,7 +47,7 @@ class VanillaHS:
 
 class PPOAgent:
   # Monitoring
-  eval_interval = print_every
+  eval_interval = print_every * 10
   save_interval = 100
   save_dir = "ppo_save_dir/"
   add_timestep = False  # Adds the time step to observations
@@ -78,21 +78,3 @@ class PPOAgent:
   use_joint_pol_val = True
 
   num_updates = int(num_env_steps) // num_steps // num_processes
-
-
-class A2CAgent:
-  num_workers = 64
-  optimizer = optim.Adam
-  lr = 1e-5
-  discount = 0.99
-  use_gae = True
-  gae_tau = 0.95
-  checkpoint_every = int(2e5)
-  entropy_weight = 0.001
-  rollout_length = 5
-  gradient_clip = 0.5
-  # defaults
-  training_steps = int(1e7)
-
-  # Hyper params:
-  hidden_size = 32
