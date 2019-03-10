@@ -5,6 +5,8 @@ import numpy as np
 import agents.heuristic.random_agent
 import collections
 
+import hs_config
+
 
 class PassingAgent(agents.base_agent.Agent):
   def __init__(self):
@@ -15,7 +17,7 @@ class PassingAgent(agents.base_agent.Agent):
 
 
 class HeuristicAgent(agents.base_agent.Agent):
-  def __init__(self, level):
+  def __init__(self, level=hs_config.VanillaHS.level):
     assert -1 <= level <= 5
     self.randomness = [
       1,

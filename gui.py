@@ -10,7 +10,7 @@ class Players(enum.Enum):
 
 
 CARD_WIDTH = 1  # width of box to draw card in
-CARD_HEIGHT = 2
+CARD_HEIGHT = 3
 
 
 class GUI:
@@ -19,8 +19,8 @@ class GUI:
     self.screen.immedok(True)
     (self.game_height, self.game_width) = self.screen.getmaxyx()
 
-    opponent_rows = (CARD_HEIGHT + 2) * 2 + 1
-    player_rows = (CARD_HEIGHT + 2) * 2 + 1
+    opponent_rows = (CARD_HEIGHT + 2) * 2 + 2
+    player_rows = (CARD_HEIGHT + 2) * 2 + 2
     log_rows = int(self.game_height - (opponent_rows + player_rows))
     assert log_rows >= 3
 
@@ -39,9 +39,6 @@ class GUI:
     for k in self.windows:
       self.windows[k].immedok(True)
       self.windows[k].box()
-
-    self.opponent_addstr(0, self.game_width - 1 - len('Opponent'), 'Opponent')
-    self.player_addstr(0, self.game_width - 1 - len('Agent'), 'Agent')
 
   def __del__(self):
     curses.endwin()
@@ -78,15 +75,17 @@ class GUI:
     board = [(hp, atk, ready) for atk, hp, ready in board]
     hand = [(hp, atk, ready) for atk, hp, ready in hand]  # opponent is mirrored
     self.draw_player_side(Players.OPPONENT, top_row=hand, bottom_row=board)
+    self.opponent_addstr(0, self.game_width - 1 - len('Opponent'), 'Opponent')
 
   def draw_agent(self, board, hand):
     self.draw_player_side(Players.AGENT, top_row=board, bottom_row=hand)
+    self.player_addstr(0, self.game_width - 1 - len('Agent'), 'Agent')
 
   def draw_player_side(self, player, top_row, bottom_row):
     self.windows[player].clear()
     self.windows[player].box()
     self.draw_zone(top_row, player, offset_row=1, offset_column=1)
-    self.draw_zone(bottom_row, player, offset_row=CARD_HEIGHT + 2, offset_column=1)
+    self.draw_zone(bottom_row, player, offset_row=CARD_HEIGHT + 3, offset_column=1)
 
   def draw_zone(self, cards_to_draw, player, offset_column, offset_row):
     for offset, card in enumerate(cards_to_draw):

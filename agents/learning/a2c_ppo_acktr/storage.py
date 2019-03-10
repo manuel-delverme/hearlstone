@@ -60,6 +60,7 @@ class RolloutStorage(object):
     self.obs[0].copy_(self.obs[-1])
     self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
     self.masks[0].copy_(self.masks[-1])
+    self.possible_actionss[0].copy_(self.possible_actionss[-1])
 
   def compute_returns(self, next_value, use_gae, gamma, tau):
     if use_gae:

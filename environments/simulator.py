@@ -258,8 +258,9 @@ class HSsimulation(object):
     def __repr__(self):
       if self.card is None:
         return "PASS"
+      target = None if self.params['target'] is None else self.params['target'].data.name
       return "{}({},{})->{}".format(
-        self.card.data.name, self.card.atk, self.card.health, self.params['target'].data.name)
+        self.card.data.name, self.card.atk, self.card.health, target)
 
     def encode(self):
       state = {
@@ -319,13 +320,13 @@ class HSsimulation(object):
   def observe(self):
     # TODO: encode the player's hand, right now the observation doesnt
     # include your own hand
-    if self.game.current_player == self.player:
-      active_player, passive_player = self.player, self.opponent
-    else:
-      active_player, passive_player = self.opponent, self.player
+    # if self.game.current_player == self.player:
+    #   active_player, passive_player = self.player, self.opponent
+    # else:
+    #   active_player, passive_player = self.opponent, self.player
 
-    player_observation = self.observe_player(active_player)
-    opponent_observation = self.observe_player(passive_player)
+    player_observation = self.observe_player(self.player)
+    opponent_observation = self.observe_player(self.opponent)
     observation = np.hstack((player_observation, opponent_observation))
     return observation
 

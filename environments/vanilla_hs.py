@@ -1,25 +1,22 @@
-import agents.base_agent
-import hs_config
-
-import logging
-import gym.spaces
-import pprint
 import collections
-import numpy as np
+import logging
+import pprint
+from typing import Tuple, Dict, Text, Any
 
 import fireplace
 import fireplace.logging
+import gym.spaces
 import hearthstone
+import numpy as np
 from fireplace.exceptions import GameOver
-from fireplace.game import Game, PlayState
+from fireplace.game import PlayState
 
-from environments import simulator
-from environments import base_env
-from shared import utils
-
-from typing import Tuple, List, Dict, Text, Any
-from baselines.common.running_mean_std import RunningMeanStd
+import agents.base_agent
 import gui
+import hs_config
+from environments import base_env
+from environments import simulator
+from shared import utils
 
 
 def get_hp(card):
@@ -36,8 +33,6 @@ def episodic_log(func):
 
   def wrapper(*args, **kwargs):
     self = args[0]
-    if self.log is None:
-      return func(*args, **kwargs)
 
     func_name = func.__name__
     new_episode = func_name == 'reinit_game'
@@ -45,10 +40,6 @@ def episodic_log(func):
     if new_episode:
       self.log.append([])
       self.log_call_depth = 0
-    try:
-      r = self.render()
-    except AttributeError:
-      r = 'Render not available'
     extra_info = tuple()  # (inspect.stack()[1:], r)
 
     pre = tuple(''.join((' ',) * self.log_call_depth))
@@ -234,6 +225,9 @@ class VanillaHS(base_env.BaseEnv):
     return self.simulation._MAX_CARDS_IN_HAND
 
   def render(self, mode='human', info=None):
+    if info is None:
+      raise ValueError
+
     if self.gui is None:
       self.gui = gui.GUI()
 
@@ -253,20 +247,22 @@ class VanillaHS(base_env.BaseEnv):
     self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=2, multiline=True)
 
   def render_player(self, obs, offset=0):
+    hand = []
+    for minion_number in range(self.simulation._MAX_CARDS_IN_HAND):
+      card = obs[offset: offset + 3]
+      if card[:2].max() > -1:
+        hand.append(list(int(c) for c in card))
+      offset += 3
+
     board = []
     for minion_number in range(self.max_cards_in_board + 1):
       card = obs[offset: offset + 3]
       if card.max() > -1:
         board.append(list(int(c) for c in card))
       offset += 3
+
     mana = obs[offset]
     offset += 1
-    hand = []
-    for minion_number in range(self.simulation._MAX_CARDS_IN_HAND):
-      card = obs[offset: offset + 3]
-      if card.max() > -1:
-        hand.append(list(int(c) for c in card))
-      offset += 3
     return offset, [board[-1], ] + board[:-1], hand, mana
 
   @episodic_log
@@ -306,12 +302,12 @@ class VanillaHS(base_env.BaseEnv):
     info = self.game_info()
 
     action = self.opponent.choose(observation, info)
-    self.step(action)
+    self.step(action, autoreset=False)
     trans = self.gather_transition()
     return trans
 
   @episodic_log
-  def step(self, encoded_action):
+  def step(self, encoded_action, autoreset=True):
     action = self.decode_action(int(encoded_action))
     self.action_history.append(repr(action))
     assert isinstance(action, simulator.HSsimulation.Action)
@@ -340,7 +336,11 @@ class VanillaHS(base_env.BaseEnv):
         'num_steps': self.episode_steps,
         'turn': self.simulation.game.turn,
       }
-      self.reset()
+      if autoreset:
+        new_obs, _, _, new_info = self.reset()
+        game_observation = new_obs
+        info['possible_actions'] = new_info['possible_actions']
+        info['observation'] = new_info['observation']
     return game_observation, reward, terminal, info
 
   @episodic_log
@@ -400,3 +400,6 @@ class VanillaHS(base_env.BaseEnv):
   def close(self):
     super(VanillaHS, self).close()
     del self._gui
+
+  def __str__(self):
+    return 'VanillaHS:{}'.format(self.opponent.level,)

@@ -6,7 +6,14 @@ import agents.heuristic.hand_coded
 
 
 class TradingHS(environments.vanilla_hs.VanillaHS):
-  def __init__(self, level, ):
+  def __init__(self, level=hs_config.VanillaHS.level, ):
+    super(TradingHS, self).__init__(
+      max_cards_in_hand=0,
+      skip_mulligan=True,
+      starting_hp=hs_config.VanillaHS.starting_hp,
+      sort_decks=hs_config.VanillaHS.sort_decks,
+    )
+
     if level == 0:
       self.player_board = [fireplace.cards.filter(name="Bloodfen Raptor", collectible=True), ] * 1
       self.opponent_board = [fireplace.cards.filter(name="Wisp", collectible=True), ] * 1  # Wisp
@@ -28,13 +35,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         fireplace.cards.filter(name="Magma Rager", collectible=True),
         fireplace.cards.filter(name="Magma Rager", collectible=True),
       ]
-
-    super(TradingHS, self).__init__(
-      max_cards_in_hand=0,
-      skip_mulligan=True,
-      starting_hp=hs_config.VanillaHS.starting_hp,
-      sort_decks=hs_config.VanillaHS.sort_decks,
-    )
+    self.level = level
 
     immunity = fireplace.cards.utils.buff(immune=True)
     self.simulation.player.hero.set_current_health(hs_config.VanillaHS.starting_hp)
@@ -73,6 +74,4 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       return num_player_minions
 
   def __str__(self):
-    return 'TradingHS:{}'.format(
-      self.minions_in_board,
-    )
+    return 'TradingHS:{}'.format(self.level,)

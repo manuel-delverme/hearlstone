@@ -1,31 +1,18 @@
-from typing import Callable
-
-import hs_config
-import numpy as np
-
-import torch
-import torch.nn.functional as F
-import torch.optim as optim
-import agents.learning.models.ppo
-import agents.base_agent
-from shared import utils
-
-import baselines.common.vec_env.dummy_vec_env
-
 import copy
 import glob
 import os
 import time
 from collections import deque
+from typing import Callable
 
-import gym
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as f
-import torch.optim as optim
+import collections
 
+import agents.base_agent
 import agents.learning.a2c_ppo_acktr.algo.ppo
+import agents.learning.models.ppo
+import hs_config
 from agents.learning.a2c_ppo_acktr.envs import make_vec_envs
 from agents.learning.a2c_ppo_acktr.model import Policy
 from agents.learning.a2c_ppo_acktr.storage import RolloutStorage
@@ -38,6 +25,7 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs, action_space, log_dir: str, should_flip_board=False,
     model_path="checkpoints/checkpoint.pth.tar", record=True, ) -> None:
+    self.log = collections.deque(maxlen=2)
     self.log_dir = log_dir
     self._setup_logs(log_dir)
 

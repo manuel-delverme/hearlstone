@@ -1,13 +1,11 @@
 from typing import Callable, Type
 import gym
-
 import torch
-import torch.optim as optim
 
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
 
-enjoy = (3 % 2) == 0
+enjoy = True
 use_gpu = False
 seed = 1337
 benchmark = False
@@ -32,22 +30,25 @@ class VanillaHS:
 
   always_first_player = True
 
-  level = 3
+  level = 5
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:
-    import environments.tutorial_environments
-    return environments.tutorial_environments.TradingHS
+    # import environments.tutorial_environments
+    # return environments.tutorial_environments.TradingHS
+    import environments.vanilla_hs
+    return environments.vanilla_hs.VanillaHS
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
-    return agents.heuristic.hand_coded.PassingAgent
+    # return agents.heuristic.hand_coded.PassingAgent
+    return agents.heuristic.hand_coded.HeuristicAgent
 
 
 class PPOAgent:
   # Monitoring
-  eval_interval = print_every * 10
+  eval_interval = print_every * 5
   save_interval = 100
   save_dir = "ppo_save_dir/"
   add_timestep = False  # Adds the time step to observations
