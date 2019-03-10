@@ -30,7 +30,7 @@ class VanillaHS:
 
   always_first_player = True
 
-  level = 5
+  level = 1
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:

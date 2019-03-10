@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
-from agents.learning.a2c_ppo_acktr.distributions import Categorical, DiagGaussian, Bernoulli
+import agents.learning.a2c_ppo_acktr.distributions
 from agents.learning.a2c_ppo_acktr.utils import init
 
 
@@ -29,13 +28,7 @@ class Policy(nn.Module):
 
     if action_space.__class__.__name__ == "Discrete":
       num_outputs = action_space.n
-      self.dist = Categorical(self.base.output_size, num_outputs)
-    elif action_space.__class__.__name__ == "Box":
-      num_outputs = action_space.shape[0]
-      self.dist = DiagGaussian(self.base.output_size, num_outputs)
-    elif action_space.__class__.__name__ == "MultiBinary":
-      num_outputs = action_space.shape[0]
-      self.dist = Bernoulli(self.base.output_size, num_outputs)
+      self.dist = agents.learning.a2c_ppo_acktr.distributions.Categorical(self.base.output_size, num_outputs)
     else:
       raise NotImplementedError
 

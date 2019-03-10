@@ -10,7 +10,7 @@ import torch
 import collections
 
 import agents.base_agent
-import agents.learning.a2c_ppo_acktr.algo.ppo
+import agents.learning.algo.ppo
 import agents.learning.models.ppo
 import hs_config
 from agents.learning.a2c_ppo_acktr.envs import make_vec_envs
@@ -35,7 +35,7 @@ class PPOAgent(agents.base_agent.Agent):
     actor_critic_network = Policy(num_inputs, action_space, base_kwargs={'recurrent': False})
     actor_critic_network.to(hs_config.device)
 
-    self.agent = agents.learning.a2c_ppo_acktr.algo.ppo.PPO(
+    self.agent = agents.learning.algo.ppo.PPO(
       actor_critic_network,
       hs_config.PPOAgent.clip_epsilon,
       hs_config.PPOAgent.ppo_epoch,
