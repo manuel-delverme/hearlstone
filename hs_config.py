@@ -7,18 +7,17 @@ import torch.optim as optim
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
 
-enjoy = True
+enjoy = 1
 use_gpu = False
 seed = 1337
 benchmark = False
-make_deterministic = False # Supposedly slows by a lot
+make_deterministic = False  # Supposedly slows by a lot
 
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
-log_interval = 10
+print_every = 20
 BIG_NUMBER = 9999999999999
-
 
 
 class VanillaHS:
@@ -26,9 +25,14 @@ class VanillaHS:
   debug = False
   normalize = True
   starting_hp = 30
+
+  # this is now level
   max_cards_in_board = 5
   max_cards_in_hand = 5
+
   always_first_player = True
+
+  level = 7
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:
@@ -41,34 +45,9 @@ class VanillaHS:
     return agents.heuristic.hand_coded.PassingAgent
 
 
-class DQNAgent:
-  nr_parallel_envs = 1
-  nr_epochs = nr_parallel_envs
-  tau = 1
-  gradient_clip = 1
-  silly = False
-  target_update = 1000
-  buffer_size = int(1e6)
-  training_steps = int(1e7)
-  # warmup_steps = int(5e3)
-  warmup_steps = 0
-
-  epsilon_decay = None
-  beta_decay = max(training_steps / 3, int(1e5))
-  # optimizer = optim.RMSprop
-
-  optimizer = optim.Adam
-  gamma = 0.99
-  # lr = 1e-5
-  lr = 1e-3
-  l2_decay = 0
-  # batch_size = 256
-  batch_size = 32
-
-
 class PPOAgent:
   # Monitoring
-  eval_interval = 10
+  eval_interval = print_every
   save_interval = 100
   save_dir = "ppo_save_dir/"
   add_timestep = False  # Adds the time step to observations
@@ -117,5 +96,3 @@ class A2CAgent:
 
   # Hyper params:
   hidden_size = 32
-
-

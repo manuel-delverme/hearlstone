@@ -6,18 +6,14 @@ import agents.heuristic.hand_coded
 
 
 class TradingHS(environments.vanilla_hs.VanillaHS):
-  def __init__(
-    self,
-    minions_in_board: int = 0,
-  ):
+  def __init__(self, minions_in_board,):
     super(TradingHS, self).__init__(
-      max_cards_in_board=hs_config.VanillaHS.max_cards_in_board,
+      max_cards_in_board=minions_in_board,
       max_cards_in_hand=0,
       skip_mulligan=True,
       starting_hp=hs_config.VanillaHS.starting_hp,
       sort_decks=hs_config.VanillaHS.sort_decks,
     )
-    self.level = 0
 
     immunity = fireplace.cards.utils.buff(immune=True)
     self.simulation.player.hero.set_current_health(hs_config.VanillaHS.starting_hp)
@@ -29,13 +25,12 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
 
   def reinit_game(self, sort_decks=False):
     super(TradingHS, self).reinit_game(sort_decks)
-    # self.opponent.give('CS2_231')
     # wisp = fireplace.cards.filter(name="Wisp")
-    self.simulation.opponent.summon('CS2_231')
     raptor = fireplace.cards.filter(name="Bloodfen Raptor", collectible=True)
-    self.simulation.player.summon(raptor)
-    # generate opponent minions
-    # generate player minions
+    wisp = 'CS2_231'
+    for _ in range(self.minions_in_board):
+      self.simulation.opponent.summon(wisp)
+      self.simulation.player.summon(raptor)
 
   def gather_transition(self):
     game_observation, reward, terminal, info = super(TradingHS, self).gather_transition()
@@ -55,5 +50,5 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
 
   def __str__(self):
     return 'TradingHS:{}'.format(
-      self.level,
+      self.minions_in_board,
     )

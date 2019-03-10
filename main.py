@@ -1,3 +1,5 @@
+import glob
+
 import torch
 
 import agents.base_agent
@@ -8,7 +10,7 @@ import hs_config
 
 
 def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
-  hs_game = hs_config.VanillaHS.get_game_mode()()
+  hs_game = hs_config.VanillaHS.get_game_mode()(hs_config.VanillaHS.level)
   hs_game.set_opponent(opponent=hs_config.VanillaHS.get_opponent()())
   return hs_game
 
@@ -25,7 +27,7 @@ def train():
   agent = agents.learning.ppo_agent.PPOAgent
   game_class = hs_config.VanillaHS.get_game_mode()
 
-  dummy_hs_env = game_class()
+  dummy_hs_env = game_class(hs_config.VanillaHS.level)
   player = agent(
     num_inputs=dummy_hs_env.observation_space.shape,
     action_space=dummy_hs_env.action_space,
@@ -35,7 +37,9 @@ def train():
   del dummy_hs_env
 
   if hs_config.enjoy:
-    player.enjoy(make_env, checkpoint_file="/home/awok/Projects/hearlstone/ppo_save_dir/TradingHS:0-8020.pt")
+    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*{}-*'.format(hs_config.VanillaHS.level))
+    latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.split("-")[-1][:-3]))[-1]
+    player.enjoy(make_env, checkpoint_file=latest_checkpoint)
   else:
     player.train(make_env, hs_config.seed)
 

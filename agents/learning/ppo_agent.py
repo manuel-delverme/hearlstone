@@ -191,7 +191,7 @@ class PPOAgent(agents.base_agent.Agent):
         checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
         torch.save(save_model, checkpoint_file)
 
-      if ppo_update_num % hs_config.log_interval == 0 and len(episode_rewards) > 1:
+      if ppo_update_num % hs_config.print_every == 0 and len(episode_rewards) > 1:
         end = time.time()
         print(
           "updates {}, num timesteps {}, fps {} \n last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
@@ -274,10 +274,7 @@ class PPOAgent(agents.base_agent.Agent):
     for num, info in enumerate(infos):
       possible_actionss[num] = info['possible_actions']
 
-    env.render(info={
-      'action': None,
-      **infos[0]
-    })
+    env.render(info=infos[0])
     while True:
       with torch.no_grad():
         value, action, _, _ = self.agent.actor_critic.act(obs, None, None, possible_actionss)

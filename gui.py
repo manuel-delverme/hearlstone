@@ -18,8 +18,6 @@ class GUI:
     self.screen = curses.initscr()
     self.screen.immedok(True)
     (self.game_height, self.game_width) = self.screen.getmaxyx()
-    # if self.game_height < 60 or self.game_width < 180:
-    # print "\x1b[8;60;180t" #resize terminal
 
     opponent_rows = (CARD_HEIGHT + 2) * 2 + 1
     player_rows = (CARD_HEIGHT + 2) * 2 + 1
@@ -77,30 +75,35 @@ class GUI:
     self.windows[Players.OPPONENT].addstr(y, x, message, options)
 
   def draw_opponent(self, board, hand):
-    board = ((hp, atk, ready) for atk, hp, ready in board)
-    hand = ((hp, atk, ready) for atk, hp, ready in hand)  # opponent is mirrored
+    board = [(hp, atk, ready) for atk, hp, ready in board]
+    hand = [(hp, atk, ready) for atk, hp, ready in hand]  # opponent is mirrored
     self.draw_player_side(Players.OPPONENT, top_row=hand, bottom_row=board)
 
   def draw_agent(self, board, hand):
     self.draw_player_side(Players.AGENT, top_row=board, bottom_row=hand)
 
   def draw_player_side(self, player, top_row, bottom_row):
+    self.windows[player].clear()
+    self.windows[player].box()
     self.draw_zone(top_row, player, offset_row=1, offset_column=1)
     self.draw_zone(bottom_row, player, offset_row=CARD_HEIGHT + 2, offset_column=1)
-    self.windows[player].refresh()
-    # self.windows[player].addstr(0, 0, "HP:{}".format(hp))
 
   def draw_zone(self, cards_to_draw, player, offset_column, offset_row):
     for offset, card in enumerate(cards_to_draw):
       pixel_offset = offset * (CARD_WIDTH + 4)
-      self.draw_rectangle(player, offset_row, offset_column + pixel_offset, CARD_HEIGHT, CARD_WIDTH)
       atk, hp, ready = card
       ready = '+' if ready else 'z'
+      self.draw_rectangle(player, offset_row, offset_column + pixel_offset, CARD_HEIGHT, CARD_WIDTH)
       self.windows[player].addstr(offset_row + 0, offset_column + 2 + pixel_offset, str(ready))
       self.windows[player].addstr(offset_row + 1, offset_column + 1 + pixel_offset, str(atk))
-      self.windows[player].addstr(offset_row + CARD_HEIGHT, offset_column + 1 + CARD_WIDTH - len(str(hp)) + pixel_offset, str(hp))
+      self.windows[player].addstr(offset_row + CARD_HEIGHT,
+                                  offset_column + 1 + CARD_WIDTH - len(str(hp)) + pixel_offset, str(hp))
 
-  def log(self, txt, row=1):
-    time.sleep(1)
+  def log(self, txt, row=1, multiline=False):
     self.windows[Players.LOG].addstr(row, 1, txt)
-    self.windows[Players.LOG].clrtoeol()  # clear the rest of the line
+
+    if multiline:
+      self.windows[Players.LOG].clrtobot()  # clear the rest of the line
+    else:
+      self.windows[Players.LOG].clrtoeol()  # clear the rest of the line
+    self.windows[Players.LOG].box()

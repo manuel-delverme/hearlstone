@@ -68,8 +68,8 @@ def episodic_log(func):
 class VanillaHS(base_env.BaseEnv):
   def __init__(
     self,
-    max_cards_in_board=hs_config.VanillaHS.max_cards_in_board,
-    max_cards_in_hand=hs_config.VanillaHS.max_cards_in_hand,
+    max_cards_in_board=simulator.HSsimulation._MAX_CARDS_IN_BOARD,
+    max_cards_in_hand=simulator.HSsimulation._MAX_CARDS_IN_HAND,
     skip_mulligan=True,
     cheating_opponent=False,
     starting_hp=hs_config.VanillaHS.starting_hp,
@@ -249,8 +249,8 @@ class VanillaHS(base_env.BaseEnv):
     action_history = info['action_history']
     del info['action_history']
     del info['observation']
-    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())))
-    self.gui.log(action_history, row=2)
+    self.gui.log(action_history, row=1)
+    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=2, multiline=True)
 
   def render_player(self, obs, offset=0):
     board = []
