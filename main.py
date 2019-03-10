@@ -10,7 +10,7 @@ import hs_config
 
 
 def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
-  hs_game = hs_config.VanillaHS.get_game_mode()()
+  hs_game = hs_config.VanillaHS.get_game_mode()(seed=seed)
   hs_game.set_opponent(opponent=hs_config.VanillaHS.get_opponent()())
   return hs_game
 

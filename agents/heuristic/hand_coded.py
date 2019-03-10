@@ -17,7 +17,7 @@ class PassingAgent(agents.base_agent.Agent):
     return 0
 
 
-class HeuristicAgent(agents.base_agent.Agent):
+class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self, level: int = hs_config.VanillaHS.level):
     assert -1 < level < 6
     super().__init__()

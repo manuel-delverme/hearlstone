@@ -1,7 +1,6 @@
-import torch
 import torch.nn as nn
 
-from agents.learning.a2c_ppo_acktr.envs import VecNormalize
+import shared.env_utils
 
 
 # Get a render function
@@ -17,7 +16,7 @@ def get_render_func(venv):
 
 
 def get_vec_normalize(venv):
-  if isinstance(venv, VecNormalize):
+  if isinstance(venv, shared.env_utils.VecNormalize):
     return venv
   elif hasattr(venv, 'venv'):
     return get_vec_normalize(venv.venv)

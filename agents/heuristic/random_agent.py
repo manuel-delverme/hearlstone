@@ -6,7 +6,7 @@ import numpy as np
 import agents.base_agent
 
 
-class RandomAgent(agents.base_agent.Agent):
+class RandomAgent(agents.base_agent.Bot):
   def __init__(self):
     super().__init__()
 

@@ -1,4 +1,5 @@
 import collections
+import warnings
 import logging
 import pprint
 from typing import Tuple, Dict, Text, Any
@@ -65,6 +66,7 @@ class VanillaHS(base_env.BaseEnv):
     cheating_opponent=False,
     starting_hp=hs_config.VanillaHS.starting_hp,
     sort_decks=hs_config.VanillaHS.sort_decks,
+    seed=None,
   ):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -73,6 +75,8 @@ class VanillaHS(base_env.BaseEnv):
     Args:
       starting_hp:
     """
+    if seed is not None:
+      warnings.warn('seed not implemented')
     self.gui = None
     self.opponent = None
     self.id_to_action = [(-1, -1), ]
@@ -402,4 +406,4 @@ class VanillaHS(base_env.BaseEnv):
     del self._gui
 
   def __str__(self):
-    return 'VanillaHS:{}'.format(self.opponent.level,)
+    return 'VanillaHS:{}'.format(self.opponent.level, )

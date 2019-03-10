@@ -1,3 +1,4 @@
+import collections
 import copy
 import glob
 import os
@@ -7,13 +8,12 @@ from typing import Callable
 
 import numpy as np
 import torch
-import collections
 
 import agents.base_agent
 import agents.learning.algo.ppo
 import agents.learning.models.ppo
 import hs_config
-from agents.learning.a2c_ppo_acktr.envs import make_vec_envs
+from shared.env_utils import make_vec_envs
 from agents.learning.a2c_ppo_acktr.model import Policy
 from agents.learning.a2c_ppo_acktr.storage import RolloutStorage
 from agents.learning.a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
@@ -92,8 +92,7 @@ class PPOAgent(agents.base_agent.Agent):
   def train(self, load_env: Callable, seed: int, num_processes: int = hs_config.PPOAgent.num_processes):
 
     envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                         hs_config.PPOAgent.add_timestep, hs_config.device,
-                         allow_early_resets=False)
+                         hs_config.device, allow_early_resets=False)
 
     assert envs.observation_space.shape == self.num_inputs
     assert envs.action_space.n == self.num_actions
@@ -135,11 +134,10 @@ class PPOAgent(agents.base_agent.Agent):
             rollouts.possible_actionss[step],
           )
 
-        # obser reward and next obs
-        obs, reward, done, infos = envs.step(action)
+        obs, reward, done, infos = envs.step(action.squeeze(-1))
 
         for num, info in enumerate(infos):
-          possible_actionss[num] = torch.from_numpy(info['possible_actions'])
+          possible_actionss[num] = info['possible_actions']
 
           if 'episode' in info.keys():
             episode_rewards.append(info['episode']['r'])
@@ -175,7 +173,7 @@ class PPOAgent(agents.base_agent.Agent):
 
         save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
 
-        checkpoint_name = "{}-{}.pt".format(str(envs.venv.venv.envs[0].env), total_num_steps)
+        checkpoint_name = "{}-{}.pt".format(hs_config.VanillaHS.get_game_mode().__name__, total_num_steps)
         checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
         torch.save(save_model, checkpoint_file)
 

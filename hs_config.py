@@ -40,7 +40,7 @@ class VanillaHS:
     return environments.vanilla_hs.VanillaHS
 
   @staticmethod
-  def get_opponent() -> Type[agents.base_agent.Agent]:
+  def get_opponent() -> Type[agents.base_agent.Bot]:
     import agents.heuristic.hand_coded
     # return agents.heuristic.hand_coded.PassingAgent
     return agents.heuristic.hand_coded.HeuristicAgent
@@ -51,8 +51,6 @@ class PPOAgent:
   eval_interval = print_every * 5
   save_interval = 100
   save_dir = "ppo_save_dir/"
-  add_timestep = False  # Adds the time step to observations
-
   # Optimizer
   adam_lr = 2.5e-4  # 7e-4 in reference implementation
 
