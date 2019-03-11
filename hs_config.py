@@ -48,6 +48,7 @@ class VanillaHS:
 
 class PPOAgent:
   # Monitoring
+  hidden_size = 64
   eval_interval = print_every * 5
   save_interval = 100
   save_dir = "ppo_save_dir/"

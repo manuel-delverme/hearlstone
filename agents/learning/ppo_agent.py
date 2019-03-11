@@ -14,7 +14,7 @@ import agents.learning.algo.ppo
 import agents.learning.models.ppo
 import hs_config
 from shared.env_utils import make_vec_envs
-from agents.learning.a2c_ppo_acktr.model import Policy
+from agents.learning.models.randomized_policy import Policy
 from agents.learning.a2c_ppo_acktr.storage import RolloutStorage
 from agents.learning.a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 
@@ -32,7 +32,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.num_inputs = num_inputs
     self.num_actions = action_space.n
 
-    actor_critic_network = Policy(num_inputs, action_space, base_kwargs={'recurrent': False})
+    actor_critic_network = Policy(num_inputs, action_space)
     actor_critic_network.to(hs_config.device)
 
     self.agent = agents.learning.algo.ppo.PPO(
@@ -127,12 +127,8 @@ class PPOAgent(agents.base_agent.Agent):
       for step in range(hs_config.PPOAgent.num_steps):
         # sample actions
         with torch.no_grad():
-          value, action, action_log_prob, recurrent_hidden_states = self.agent.actor_critic.act(
-            rollouts.obs[step],
-            rollouts.recurrent_hidden_states[step],
-            rollouts.masks[step],
-            rollouts.possible_actionss[step],
-          )
+          value, action, action_log_prob = self.agent.actor_critic.forward(rollouts.obs[step],
+                                                                           rollouts.possible_actionss[step])
 
         obs, reward, done, infos = envs.step(action.squeeze(-1))
 
@@ -143,14 +139,10 @@ class PPOAgent(agents.base_agent.Agent):
             episode_rewards.append(info['episode']['r'])
 
         # if done then clean the history of observations.
-        dones = [[0.0] if done_ else [1.0] for done_ in done]
-        masks = torch.FloatTensor(dones)
-        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, possible_actionss)
+        rollouts.insert(obs, action, action_log_prob, value, reward, possible_actionss)
 
       with torch.no_grad():
-        next_value = self.agent.actor_critic.get_value(rollouts.obs[-1],
-                                                       rollouts.recurrent_hidden_states[-1],
-                                                       rollouts.masks[-1]).detach()
+        next_value = self.agent.actor_critic.critic(rollouts.obs[-1]).detach()
 
       rollouts.compute_returns(next_value, hs_config.PPOAgent.use_gae, hs_config.PPOAgent.gamma, hs_config.PPOAgent.tau)
 
@@ -194,8 +186,7 @@ class PPOAgent(agents.base_agent.Agent):
       if hs_config.PPOAgent.eval_interval and len(
         episode_rewards) > 1 and ppo_update_num % hs_config.PPOAgent.eval_interval == 0:
 
-        eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                                  hs_config.PPOAgent.add_timestep, hs_config.device, allow_early_resets=True)
+        eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device, allow_early_resets=True)
         vec_norm = get_vec_normalize(eval_envs)
         if vec_norm is not None:
           vec_norm.eval()
@@ -209,22 +200,14 @@ class PPOAgent(agents.base_agent.Agent):
         for num, info in enumerate(infos):
           possible_actionss[num] = info['possible_actions']
 
-        eval_recurrent_hidden_states = torch.zeros(hs_config.PPOAgent.num_processes,
-                                                   self.agent.actor_critic.recurrent_hidden_state_size,
-                                                   device=hs_config.device)
-        eval_masks = torch.zeros(hs_config.PPOAgent.num_processes, 1, device=hs_config.device)
-
         while len(eval_episode_rewards) < 10:
           with torch.no_grad():
-            _, action, _, eval_recurrent_hidden_states = self.agent.actor_critic.act(
-              obs, eval_recurrent_hidden_states, eval_masks, possible_actionss, deterministic=True)
+            _, action, _ = self.agent.actor_critic.forward(obs, possible_actionss, deterministic=True)
           # obser reward and next obs
           obs, reward, done, infos = eval_envs.step(action)
 
           for num, info in enumerate(infos):
             possible_actionss[num] = torch.from_numpy(info['possible_actions'])
-          eval_masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done], dtype=torch.float32,
-                                    device=hs_config.device)
 
           for info in infos:
             if 'episode' in info.keys():
@@ -263,7 +246,7 @@ class PPOAgent(agents.base_agent.Agent):
     env.render(info=infos[0])
     while True:
       with torch.no_grad():
-        value, action, _, _ = self.agent.actor_critic.act(obs, None, None, possible_actionss)
+        value, action, _, _ = self.agent.actor_critic.forward(obs, None, None, possible_actionss)
       obs, reward, done, infos = env.step(action)
       for num, info in enumerate(infos):
         possible_actionss[num] = torch.from_numpy(info['possible_actions'])
