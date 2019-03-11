@@ -1,10 +1,13 @@
 import pickle
+import warnings
 from contextlib import contextmanager
 import sys
 import os
 
 import numpy as np
 import tqdm
+
+import shared.env_utils
 from environments import base_env
 import sys
 import os
@@ -143,3 +146,26 @@ def one_hot_actions(actions: Union[Tuple[Tuple[int, int]], Tuple[Tuple[int, int,
     for pa in pas:
       possible_actions[row, pa] = 1
   return possible_actions
+
+
+def get_vec_normalize(venv):
+  if isinstance(venv, shared.env_utils.VecNormalize):
+    return venv
+  elif hasattr(venv, 'venv'):
+    return get_vec_normalize(venv.venv)
+
+  return None
+
+
+def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
+  """Decreases the learning rate linearly"""
+  lr = initial_lr - (initial_lr * (epoch / float(total_num_epochs)))
+  for param_group in optimizer.param_groups:
+    param_group['lr'] = lr
+
+
+def init(module, weight_init, bias_init, gain=1):
+  warnings.warn("TODO: refactor away initializations")
+  weight_init(module.weight.data, gain=gain)
+  bias_init(module.bias.data)
+  return module

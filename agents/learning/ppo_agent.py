@@ -10,13 +10,12 @@ import numpy as np
 import torch
 
 import agents.base_agent
-import agents.learning.algo.ppo
 import agents.learning.models.ppo
 import hs_config
 from shared.env_utils import make_vec_envs
 from agents.learning.models.randomized_policy import Policy
 from agents.learning.shared.storage import RolloutStorage
-from agents.learning.a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
+from shared.utils import get_vec_normalize, update_linear_schedule
 
 
 class PPOAgent(agents.base_agent.Agent):
@@ -35,15 +34,21 @@ class PPOAgent(agents.base_agent.Agent):
     actor_critic_network = Policy(num_inputs, action_space)
     actor_critic_network.to(hs_config.device)
 
-    self.agent = agents.learning.algo.ppo.PPO(
-      actor_critic_network,
-      hs_config.PPOAgent.clip_epsilon,
-      hs_config.PPOAgent.ppo_epoch,
-      hs_config.PPOAgent.num_mini_batches,
-      hs_config.PPOAgent.value_loss_coeff,
-      hs_config.PPOAgent.entropy_coeff,
+    self.actor_critic = actor_critic_network
+
+    self.clip_param = hs_config.PPOAgent.clip_epsilon
+    self.ppo_epoch = hs_config.PPOAgent.ppo_epoch
+
+    self.num_mini_batch = hs_config.PPOAgent.num_mini_batches
+    self.value_loss_coef = hs_config.PPOAgent.value_loss_coeff
+    self.entropy_coef = hs_config.PPOAgent.entropy_coeff
+
+    self.max_grad_norm = hs_config.PPOAgent.max_grad_norm
+    self.use_clipped_value_loss = hs_config.PPOAgent.clip_value_loss
+
+    self.optimizer = torch.optim.Adam(
+      self.actor_critic.parameters(),
       lr=hs_config.PPOAgent.adam_lr,
-      max_grad_norm=hs_config.PPOAgent.max_grad_norm
     )
 
   def _setup_logs(self, log_dir):
@@ -63,32 +68,6 @@ class PPOAgent(agents.base_agent.Agent):
       for f in files:
         os.remove(f)
 
-  #   envs = [load_env for _ in range(config.PPOAgent.num_processes)]
-  #   envs = baselines.common.vec_env.dummy_vec_env.DummyVecEnv(envs)
-
-  #   states, rewards, dones, infos = envs.reset()
-
-  #   for frame_idx in range(config.PPOAgent.max_frames):
-  #     actions, log_probs, masks, next_state, rewards, states, values = self.gather_trajectories(envs, states, infos)
-
-  #     if (frame_idx + 1) % 1000 == 0:
-  #       test_reward = np.mean([test_env() for _ in range(10)])
-  #       self.summary_writer.add_scalar('game_stats/test_rewards', test_reward, step_nr)
-
-  #     next_state = torch.Tensor(next_state)
-  #     _mu, _std, next_value = self.model(next_state)
-
-  #     returns = compute_gae(next_value, rewards, masks, values)
-
-  #     returns = torch.cat(returns).detach()
-  #     log_probs = torch.cat(log_probs).detach()
-  #     values = torch.cat(values).detach()
-  #     states = torch.cat(states)
-  #     actions = torch.cat(actions)
-  #     advantage = returns - values
-
-  #     self.ppo_update(states, actions, log_probs, returns, advantage)
-
   def train(self, load_env: Callable, seed: int, num_processes: int = hs_config.PPOAgent.num_processes):
 
     envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
@@ -97,12 +76,8 @@ class PPOAgent(agents.base_agent.Agent):
     assert envs.observation_space.shape == self.num_inputs
     assert envs.action_space.n == self.num_actions
 
-    rollouts = RolloutStorage(
-      hs_config.PPOAgent.num_steps,
-      hs_config.PPOAgent.num_processes,
-      envs.observation_space.shape,
-      envs.action_space,
-    )
+    rollouts = RolloutStorage(hs_config.PPOAgent.num_steps, hs_config.PPOAgent.num_processes,
+                              envs.observation_space.shape, envs.action_space)
 
     obs, _, _, info = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -117,7 +92,7 @@ class PPOAgent(agents.base_agent.Agent):
     for ppo_update_num in range(hs_config.PPOAgent.num_updates):
       if hs_config.PPOAgent.use_linear_lr_decay:
         # decrease learning rate linearly
-        update_linear_schedule(self.agent.optimizer, ppo_update_num, hs_config.PPOAgent.num_updates,
+        update_linear_schedule(self.optimizer, ppo_update_num, hs_config.PPOAgent.num_updates,
                                hs_config.PPOAgent.lr)
       if hs_config.PPOAgent.use_linear_clip_decay:
         self.agent.clip_param = hs_config.PPOAgent.clip_param * (
@@ -126,10 +101,7 @@ class PPOAgent(agents.base_agent.Agent):
       for step in range(hs_config.PPOAgent.num_steps):
         # sample actions
         with torch.no_grad():
-          value, action, action_log_prob = self.agent.actor_critic(
-            rollouts.obs[step],
-            rollouts.possible_actionss[step],
-          )
+          value, action, action_log_prob = self.actor_critic(rollouts.obs[step], rollouts.possible_actionss[step])
 
         obs, reward, done, infos = envs.step(action)
 
@@ -145,11 +117,11 @@ class PPOAgent(agents.base_agent.Agent):
         rollouts.insert(obs, action, action_log_prob, value, reward, masks, possible_actionss)
 
       with torch.no_grad():
-        next_value = self.agent.actor_critic.critic(rollouts.obs[-1]).detach()
+        next_value = self.actor_critic.critic(rollouts.obs[-1]).detach()
 
       rollouts.compute_returns(next_value, hs_config.PPOAgent.use_gae, hs_config.PPOAgent.gamma, hs_config.PPOAgent.tau)
 
-      value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+      value_loss, action_loss, dist_entropy = self.update(rollouts)
       rollouts.update_for_new_rollouts()
       total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
 
@@ -162,9 +134,9 @@ class PPOAgent(agents.base_agent.Agent):
           pass
 
         # a really ugly way to save a model to cpu
-        save_model = self.agent.actor_critic
+        save_model = self.actor_critic
         if hs_config.use_gpu:
-          save_model = copy.deepcopy(self.agent.actor_critic).cpu()
+          save_model = copy.deepcopy(self.actor_critic).cpu()
 
         save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
 
@@ -189,7 +161,8 @@ class PPOAgent(agents.base_agent.Agent):
       if hs_config.PPOAgent.eval_interval and len(
         episode_rewards) > 1 and ppo_update_num % hs_config.PPOAgent.eval_interval == 0:
 
-        eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device, allow_early_resets=True)
+        eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                                  hs_config.device, allow_early_resets=True)
         vec_norm = get_vec_normalize(eval_envs)
         if vec_norm is not None:
           vec_norm.eval()
@@ -203,16 +176,14 @@ class PPOAgent(agents.base_agent.Agent):
         for num, info in enumerate(infos):
           possible_actionss[num] = info['possible_actions']
 
-        eval_masks = torch.zeros(hs_config.PPOAgent.num_processes, 1, device=hs_config.device)
         while len(eval_episode_rewards) < 10:
           with torch.no_grad():
-            _, action, _ = self.agent.actor_critic.forward(obs, possible_actionss, eval_masks, deterministic=True)
+            _, action, _ = self.actor_critic(obs, possible_actionss, deterministic=True)
           # obser reward and next obs
           obs, reward, done, infos = eval_envs.step(action)
 
           for num, info in enumerate(infos):
             possible_actionss[num] = torch.from_numpy(info['possible_actions'])
-          eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done], dtype=torch.float32, device=hs_config.device)
 
           for info in infos:
             if 'episode' in info.keys():
@@ -233,9 +204,9 @@ class PPOAgent(agents.base_agent.Agent):
     #     pass
 
   def enjoy(self, make_env, checkpoint_file):
-    env = make_vec_envs(make_env, hs_config.seed, 1, None, None, hs_config.PPOAgent.add_timestep, 'cpu', False)
+    env = make_vec_envs(make_env, hs_config.seed, 1, None, None, 'cpu', allow_early_resets=False)
     # We need to use the same statistics for normalization as used in training
-    self.agent.actor_critic, ob_rms = torch.load(checkpoint_file)
+    self.actor_critic, ob_rms = torch.load(checkpoint_file)
 
     vec_norm = get_vec_normalize(env)
     if vec_norm is not None:
@@ -251,139 +222,59 @@ class PPOAgent(agents.base_agent.Agent):
     env.render(info=infos[0])
     while True:
       with torch.no_grad():
-        value, action, _, _ = self.agent.actor_critic.forward(obs, None, None, possible_actionss)
+        value, action, _, _ = self.actor_critic.forward(obs, None, None, possible_actionss)
       obs, reward, done, infos = env.step(action)
       for num, info in enumerate(infos):
         possible_actionss[num] = torch.from_numpy(info['possible_actions'])
 
       env.render(info=infos[0])
 
-# class PPOAgent(agents.base_agent.Agent):
-#   def choose(self, observation, possible_actions):
-#     raise NotImplementedError
-#
-#   def __init__(self, num_inputs, num_actions, should_flip_board=False,
-#     model_path="checkpoints/checkpoint.pth.tar", record=True) -> None:
-#     self.num_inputs = num_inputs
-#     self.num_actions = num_actions
-#     # Hyper params:
-#     self.hidden_size = 256
-#     self.num_steps = 20
-#     self.mini_batch_size = 5
-#     self.ppo_epochs = 4
-#     self.threshold_reward = 1
-#     self.model = agents.learning.models.ppo.ActorCritic(num_inputs, num_actions, self.hidden_size)
-#     self.optimizer = optim.Adam(
-#       self.model.parameters(),
-#       lr=config.PPOAgent.lr
-#     )
-#
-#   def load_model(self, model_path=None):
-#     pass
-#
-#   def ppo_update(self, states, actions, log_probs, returns, advantages, clip_param=0.2):
-#     ppo_epochs = self.ppo_epochs
-#     mini_batch_size = self.mini_batch_size
-#
-#     for _ in range(ppo_epochs):
-#       for state, action, old_log_probs, return_, advantage in ppo_iter(mini_batch_size, states, actions, log_probs,
-#                                                                        returns, advantages):
-#         action, dist, value = self.query_model(state, info)
-#
-#         entropy = dist.entropy().mean()
-#         new_log_probs = dist.log_prob(action)
-#
-#         ratio = (new_log_probs - old_log_probs).exp()
-#         surr1 = ratio * advantage
-#         surr2 = torch.clamp(ratio, 1.0 - clip_param, 1.0 + clip_param) * advantage
-#
-#         actor_loss = - torch.min(surr1, surr2).mean()
-#         critic_loss = (return_ - value).pow(2).mean()
-#
-#         loss = 0.5 * critic_loss + actor_loss - 0.001 * entropy
-#
-#         self.optimizer.zero_grad()
-#         loss.backward()
-#         self.optimizer.step()
-#
-#   def gather_trajectories(self, envs, state, info):
-#     log_probs = []
-#     values = []
-#     states = []
-#     actions = []
-#     infos = []
-#     rewards = []
-#     masks = []
-#     entropy = 0
-#
-#     for traj_step in range(config.PPOAgent.num_steps):
-#       # TODO: multi env
-#       assert state.shape[0] == 1
-#       info, = info
-#
-#       action, dist, value = self.query_model(state, info)
-#
-#       next_state, reward, done, info = envs.step(action)
-#
-#       log_prob = dist.log_prob(action.float())
-#       entropy += dist.entropy().mean()
-#
-#       log_probs.append(log_prob)
-#       values.append(value)
-#       rewards.append(torch.Tensor(reward).unsqueeze(1))
-#       masks.append(torch.Tensor(1 - done).unsqueeze(1))
-#
-#       states.append(state)
-#       actions.append(action)
-#       infos.append(info)
-#
-#       state = next_state
-#     return actions, log_probs, masks, next_state, rewards, states, values
-#
-#   def query_model(self, state, info):
-#     mu, std, value = self.model(state)
-#     dist = torch.distributions.Normal(mu, std)
-#     action_distr = dist.sample()
-#     possible_actions = self.one_hot_actions((info['possible_actions'],))
-#     possible_actions = torch.Tensor(possible_actions)
-#     action_prob = F.softmax(action_distr, dim=1)
-#     action_prob = action_prob * possible_actions
-#     act_cat = torch.distributions.Categorical(action_prob)
-#     action = act_cat.sample()
-#     return action, dist, value
-#
-#   def one_hot_actions(self, actions):
-#     return utils.one_hot_actions(actions, self.num_actions)
-#
-#
-# def test_env(vis=False):
-#   state = env.reset()
-#   if vis: env.render()
-#   done = False
-#   total_reward = 0
-#   while not done:
-#     state = torch.FloatTensor(state).unsqueeze(0).to(device)
-#     dist, _ = model(state)
-#     next_state, reward, done, _ = env.step(dist.sample().cpu().numpy()[0])
-#     state = next_state
-#     if vis: env.render()
-#     total_reward += reward
-#   return total_reward
-#
-#
-# def compute_gae(next_value, rewards, masks, values, gamma=0.99, tau=0.95):
-#   values = values + [next_value]
-#   gae = 0
-#   returns = []
-#   for step in reversed(range(len(rewards))):
-#     delta = rewards[step] + gamma * values[step + 1] * masks[step] - values[step]
-#     gae = delta + gamma * tau * masks[step] * gae
-#     returns.insert(0, gae + values[step])
-#   return returns
-#
-#
-# def ppo_iter(mini_batch_size, states, actions, log_probs, returns, advantage):
-#   batch_size = states.size(0)
-#   for _ in range(batch_size // mini_batch_size):
-#     rand_ids = np.random.randint(0, batch_size, mini_batch_size)
-#     yield states[rand_ids, :], actions[rand_ids, :], log_probs[rand_ids, :], returns[rand_ids, :], advantage[rand_ids,
+  def update(self, rollouts):
+    advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
+    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
+
+    value_loss_epoch = 0
+    action_loss_epoch = 0
+    dist_entropy_epoch = 0
+
+    for e in range(self.ppo_epoch):
+      data_generator = rollouts.feed_forward_generator(advantages, self.num_mini_batch)
+
+      for sample in data_generator:
+        (obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ,
+         possible_actions) = sample
+
+        # Reshape to do in a single forward pass for all steps
+        values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(obs_batch, actions_batch,
+                                                                                    possible_actions)
+
+        ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+        surr1 = ratio * adv_targ
+        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+
+        action_loss = -torch.min(surr1, surr2).mean()
+
+        if self.use_clipped_value_loss:
+          value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+          value_losses = (values - return_batch).pow(2)
+          value_losses_clipped = (value_pred_clipped - return_batch).pow(2)
+          value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
+        else:
+          value_loss = 0.5 * (return_batch - values).pow(2).mean()
+
+        self.optimizer.zero_grad()
+        (value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef).backward()
+        torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+        self.optimizer.step()
+
+        value_loss_epoch += value_loss.item()
+        action_loss_epoch += action_loss.item()
+        dist_entropy_epoch += dist_entropy.item()
+
+    num_updates = self.ppo_epoch * self.num_mini_batch
+
+    value_loss_epoch /= num_updates
+    action_loss_epoch /= num_updates
+    dist_entropy_epoch /= num_updates
+
+    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch

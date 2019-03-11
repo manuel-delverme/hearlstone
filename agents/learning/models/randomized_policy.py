@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 import hs_config
-from agents.learning.a2c_ppo_acktr.utils import init
+from shared.utils import init
 import specs
 
 

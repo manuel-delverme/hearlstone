@@ -48,6 +48,7 @@ class VanillaHS:
 
 class PPOAgent:
   # Monitoring
+  clip_value_loss = True
   hidden_size = 64
   eval_interval = print_every * 5
   save_interval = 100
