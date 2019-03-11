@@ -182,9 +182,6 @@ class PPOAgent(agents.base_agent.Agent):
           # obser reward and next obs
           obs, reward, done, infos = eval_envs.step(action)
 
-          for num, info in enumerate(infos):
-            possible_actionss[num] = torch.from_numpy(info['possible_actions'])
-
           for info in infos:
             if 'episode' in info.keys():
               eval_episode_rewards.append(info['episode']['r'])
