@@ -29,10 +29,9 @@ def train():
 
   dummy_hs_env = game_class()
   player = agent(
-    num_inputs=dummy_hs_env.observation_space.shape,
+    observation_space=dummy_hs_env.observation_space,
     action_space=dummy_hs_env.action_space,
     log_dir='/tmp/ppo_log/',
-    record=not hs_config.enjoy,
   )
   del dummy_hs_env
 

@@ -22,9 +22,9 @@ def check_info_spec(info: Info):
   assert info['reward'].dtype in (np.float32,)
 
 
-def check_inputs(observation_shape, inputs):
-  assert len(inputs.size()) == 2
-  assert inputs.size()[1:] == observation_shape
+def check_inputs(num_inputs, inputs):
+  assert len(inputs.size()) == 2  # batch_size, num_inputs
+  assert inputs.size(1) == num_inputs
 
 
 def check_possible_actions(num_possible_actions, possible_actions):

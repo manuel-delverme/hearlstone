@@ -6,20 +6,20 @@ from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
 
 class RolloutStorage(object):
-  def __init__(self, num_steps: int, num_processes: int, obs_shape: Sequence[int], action_space: gym.spaces.Discrete):
+  def __init__(self, num_steps: int, num_processes: int, num_inputs: int, num_actions):
     assert num_steps > 0
     assert num_processes > 0
-    assert len(obs_shape) == 1
-    assert isinstance(action_space, gym.spaces.Discrete)
+    assert num_inputs > 0
+    assert num_actions > 0
 
-    self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
+    self.obs = torch.zeros(num_steps + 1, num_processes, num_inputs)
     self.rewards = torch.zeros(num_steps, num_processes, 1)
     self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
     self.returns = torch.zeros(num_steps + 1, num_processes, 1)
     self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
 
     self.actions = torch.zeros(num_steps, num_processes, 1, dtype=torch.long)
-    self.possible_actionss = torch.zeros(num_steps + 1, num_processes, action_space.n)
+    self.possible_actionss = torch.zeros(num_steps + 1, num_processes, num_actions)
 
     self.masks = torch.ones(num_steps + 1, num_processes, 1)
     self.num_steps = num_steps

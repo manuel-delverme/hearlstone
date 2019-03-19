@@ -11,25 +11,23 @@ import specs
 
 
 class Policy(nn.Module):
-  def __init__(self, obs_shape: Sequence[int], action_space: gym.spaces.Discrete):
-    assert len(obs_shape) == 1
-    assert action_space.shape == tuple()
-
+  def __init__(self, num_inputs: int, num_actions: int):
     super(Policy, self).__init__()
+    assert num_inputs > 0
+    assert num_actions > 0
 
-    self.observation_shape = obs_shape
-    self.action_shape = (1,)
-    self.num_possible_actions = action_space.n
+    self.num_inputs = num_inputs
+    self.num_possible_actions = num_actions
 
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
     self.actor = nn.Sequential(
-      init_(nn.Linear(self.observation_shape[0], hs_config.PPOAgent.hidden_size)),
+      init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
       nn.Tanh(),
       init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
       nn.Tanh()
     )
     self.critic = nn.Sequential(
-      init_(nn.Linear(self.observation_shape[0], hs_config.PPOAgent.hidden_size)),
+      init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
       nn.Tanh(),
       init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
       nn.Tanh(),
@@ -39,12 +37,12 @@ class Policy(nn.Module):
     self.train()
 
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
-    self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, action_space.n))
+    self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions))
 
   def forward(self, inputs: torch.FloatTensor, possible_actions: torch.FloatTensor, deterministic: bool = False) -> (
     torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
 
-    specs.check_inputs(self.observation_shape, inputs)
+    specs.check_inputs(self.num_inputs, inputs)
     specs.check_possible_actions(self.num_possible_actions, possible_actions)
     assert inputs.size(0) == possible_actions.size(0)
     assert isinstance(deterministic, bool)
@@ -72,9 +70,9 @@ class Policy(nn.Module):
 
   def evaluate_actions(self, inputs: torch.FloatTensor, action: torch.LongTensor, possible_actions: torch.FloatTensor) -> (torch.FloatTensor, torch.FloatTensor, torch.FloatTensor):
 
-    specs.check_inputs(self.observation_shape, inputs)
+    specs.check_inputs(self.num_inputs, inputs)
     specs.check_possible_actions(self.num_possible_actions, possible_actions)
-    assert action.shape == (inputs.size(0), 1)
+    assert action.size() == (inputs.size(0), 1)
 
     value = self.critic(inputs)
     actor_features = self.actor(inputs)

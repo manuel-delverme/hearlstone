@@ -6,6 +6,7 @@ import time
 from collections import deque
 from typing import Callable
 
+import gym.spaces
 import numpy as np
 import torch
 
@@ -22,16 +23,16 @@ class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     raise NotImplementedError
 
-  def __init__(self, num_inputs, action_space, log_dir: str, should_flip_board=False,
-    model_path="checkpoints/checkpoint.pth.tar", record=True, ) -> None:
-    self.log = collections.deque(maxlen=2)
-    self.log_dir = log_dir
-    self._setup_logs(log_dir)
+  def __init__(self, observation_space: gym.spaces.box.Box, action_space: gym.spaces.Discrete, log_dir: str) -> None:
+    assert len(observation_space.shape) == 1
 
-    self.num_inputs = num_inputs
+    self._setup_logs(log_dir)
+    self.log_dir = log_dir
+
+    self.num_inputs = observation_space.shape[0]
     self.num_actions = action_space.n
 
-    actor_critic_network = Policy(num_inputs, action_space)
+    actor_critic_network = Policy(self.num_inputs, self.num_actions)
     actor_critic_network.to(hs_config.device)
 
     self.actor_critic = actor_critic_network
@@ -73,11 +74,11 @@ class PPOAgent(agents.base_agent.Agent):
     envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                          hs_config.device, allow_early_resets=False)
 
-    assert envs.observation_space.shape == self.num_inputs
+    assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
 
     rollouts = RolloutStorage(hs_config.PPOAgent.num_steps, hs_config.PPOAgent.num_processes,
-                              envs.observation_space.shape, envs.action_space)
+                              self.num_inputs, self.num_actions)
 
     obs, _, _, info = envs.reset()
     rollouts.obs[0].copy_(obs)

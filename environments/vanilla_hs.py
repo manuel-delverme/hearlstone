@@ -122,8 +122,7 @@ class VanillaHS(base_env.BaseEnv):
     self.reinit_game()
 
     obs, _, _, _ = self.gather_transition()
-    # 2 board of MAX_CARDS_IN_BOARD + hero, 2 stats per card
-    self.observation_space = gym.spaces.Box(low=-1, high=10, shape=obs.shape, dtype=np.int)
+    self.observation_space = gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
     self.action_space = gym.spaces.Discrete(self.num_actions)
 
   def dump_log(self, log_file):
