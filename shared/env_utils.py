@@ -4,7 +4,7 @@ from typing import Callable, Text
 import baselines
 import numpy as np
 import torch
-from baselines import bench
+from baselines.common import monitor
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
@@ -93,7 +93,7 @@ def _make_env(
   def _thunk():
     env = load_env(seed=seed + rank)
     if log_dir is not None:
-      env = bench.Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
+      env = monitor.Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
     return env
 
   return _thunk
