@@ -42,7 +42,7 @@ class Policy(nn.Module):
   def forward(self, inputs: torch.FloatTensor, possible_actions: torch.FloatTensor, deterministic: bool = False) -> (
     torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
 
-    specs.check_inputs(self.num_inputs, inputs)
+    specs.check_observation(self.num_inputs, inputs)
     specs.check_possible_actions(self.num_possible_actions, possible_actions)
     assert inputs.size(0) == possible_actions.size(0)
     assert isinstance(deterministic, bool)
@@ -70,7 +70,7 @@ class Policy(nn.Module):
 
   def evaluate_actions(self, inputs: torch.FloatTensor, action: torch.LongTensor, possible_actions: torch.FloatTensor) -> (torch.FloatTensor, torch.FloatTensor, torch.FloatTensor):
 
-    specs.check_inputs(self.num_inputs, inputs)
+    specs.check_observation(self.num_inputs, inputs)
     specs.check_possible_actions(self.num_possible_actions, possible_actions)
     assert action.size() == (inputs.size(0), 1)
 
@@ -93,5 +93,5 @@ class Policy(nn.Module):
 
   @staticmethod
   def _get_action_distribution(possible_actions, logits):
-    logits -= (1 - possible_actions) * hs_config.BIG_NUMBER
+    logits -= ((1 - possible_actions) * hs_config.BIG_NUMBER).float()
     return torch.distributions.Categorical(logits=logits)

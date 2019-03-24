@@ -1,84 +1,100 @@
-from typing import Sequence
-import gym.spaces
+from typing import List
 
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
+import hs_config
+import specs
+
 
 class RolloutStorage(object):
-  def __init__(self, num_steps: int, num_processes: int, num_inputs: int, num_actions):
-    assert num_steps > 0
-    assert num_processes > 0
-    assert num_inputs > 0
-    assert num_actions > 0
+  def __init__(self, num_inputs: int, num_actions: int):
+    assert specs.check_positive_type(num_inputs, int)
+    assert specs.check_positive_type(num_actions, int)
 
-    self.obs = torch.zeros(num_steps + 1, num_processes, num_inputs)
-    self.rewards = torch.zeros(num_steps, num_processes, 1)
-    self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
-    self.returns = torch.zeros(num_steps + 1, num_processes, 1)
-    self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
+    num_steps = hs_config.PPOAgent.num_steps
+    num_processes = hs_config.PPOAgent.num_processes
+    device = hs_config.device
 
-    self.actions = torch.zeros(num_steps, num_processes, 1, dtype=torch.long)
-    self.possible_actionss = torch.zeros(num_steps + 1, num_processes, num_actions)
+    self.gamma = hs_config.PPOAgent.gamma
+    self.tau = hs_config.PPOAgent.tau
 
-    self.masks = torch.ones(num_steps + 1, num_processes, 1)
+    assert specs.check_positive_type(num_steps, int)
+    assert specs.check_positive_type(num_processes, int)
+    assert isinstance(device, torch.device)
+    assert specs.check_positive_type(self.gamma, float)
+    assert specs.check_positive_type(self.tau, float)
+
+    self._observations = torch.zeros(num_steps + 1, num_processes, num_inputs, dtype=torch.float)
+    self._rewards = torch.zeros(num_steps, num_processes, 1)
+    self._value_predictions = torch.zeros(num_steps + 1, num_processes, 1)
+    self._returns = torch.zeros(num_steps + 1, num_processes, 1)
+    self._action_log_probabilities = torch.zeros(num_steps, num_processes, 1)
+
+    self._actions = torch.zeros(num_steps, num_processes, 1, dtype=torch.long)
+    self._possible_actionss = torch.zeros(num_steps + 1, num_processes, num_actions)
+
+    self._not_dones = torch.ones(num_steps + 1, num_processes, 1)
     self.num_steps = num_steps
     self.step = 0
+    self.device = device
 
   def to(self, device: torch.device):
-    self.obs = self.obs.to(device)
-    self.rewards = self.rewards.to(device)
-    self.value_preds = self.value_preds.to(device)
-    self.returns = self.returns.to(device)
-    self.action_log_probs = self.action_log_probs.to(device)
-    self.actions = self.actions.to(device)
-    self.possible_actionss = self.possible_actionss.to(device)
-    self.masks = self.masks.to(device)
+    self._observations = self._observations.to(device)
+    self._rewards = self._rewards.to(device)
+    self._value_predictions = self._value_predictions.to(device)
+    self._returns = self._returns.to(device)
+    self._action_log_probabilities = self._action_log_probabilities.to(device)
+    self._actions = self._actions.to(device)
+    self._possible_actionss = self._possible_actionss.to(device)
+    self._not_dones = self._not_dones.to(device)
+
+  def store_first_transition(self, observations: torch.FloatTensor, possible_actions: List[torch.FloatTensor],
+                             not_done: torch.FloatTensor = None):
+    assert len(possible_actions) == 1
+
+    self._observations[0].copy_(observations)
+    self._possible_actionss[0].copy_(possible_actions)
+    if not_done is not None:
+      self._not_dones[0].copy_(not_done)
+
+    self.to(self.device)
+
+  def roll_over_last_transition(self):
+    self.store_first_transition(self._observations[-1], self._possible_actionss[-1], self._not_dones[-1])
 
   def insert(self, observations: torch.FloatTensor, actions: torch.LongTensor, action_log_probs: torch.FloatTensor,
-    value_preds: torch.FloatTensor, rewards: torch.FloatTensor, masks: torch.FloatTensor,
-    possible_actions: torch.FloatTensor):
+             value_preds: torch.FloatTensor, rewards: torch.FloatTensor, not_dones: torch.FloatTensor,
+             possible_actions: List[torch.FloatTensor]):
 
-    self.obs[self.step + 1].copy_(observations)
-    self.possible_actionss[self.step + 1].copy_(possible_actions)
+    self._observations[self.step + 1].copy_(observations)
+    self._possible_actionss[self.step + 1].copy_(possible_actions)
 
-    self.actions[self.step].copy_(actions)
-    self.action_log_probs[self.step].copy_(action_log_probs)
-    self.value_preds[self.step].copy_(value_preds)
-    self.rewards[self.step].copy_(rewards)
-    self.masks[self.step + 1].copy_(masks)
+    self._actions[self.step].copy_(actions)
+    self._action_log_probabilities[self.step].copy_(action_log_probs)
+    self._value_predictions[self.step].copy_(value_preds)
+    self._rewards[self.step].copy_(rewards)
+    self._not_dones[self.step + 1].copy_(not_dones)
 
     self.step = (self.step + 1) % self.num_steps
 
-  def update_for_new_rollouts(self):
-    self.obs[0].copy_(self.obs[-1])
-    self.masks[0].copy_(self.masks[-1])
-    self.possible_actionss[0].copy_(self.possible_actionss[-1])
-
-  def compute_returns(self, next_value: torch.FloatTensor, use_gae: bool, gamma: float, tau: float):
+  def compute_returns(self, next_value: torch.FloatTensor):
     assert isinstance(next_value, torch.FloatTensor)
     assert next_value.size(1) == 1
-    assert isinstance(use_gae, bool)
-    assert isinstance(gamma, float)
-    assert isinstance(tau, float)
-    if use_gae:
-      self.value_preds[-1] = next_value
-      gae = 0
-      for step in reversed(range(self.rewards.size(0))):
-        delta = self.rewards[step] + gamma * self.value_preds[step + 1] * self.masks[step + 1] - self.value_preds[step]
-        gae = delta + gamma * tau * self.masks[step + 1] * gae
-        self.returns[step] = gae + self.value_preds[step]
-    else:
-      self.returns[-1] = next_value
-      for step in reversed(range(self.rewards.size(0))):
-        self.returns[step] = self.returns[step + 1] * gamma * self.masks[step + 1] + self.rewards[step]
+    self._value_predictions[-1] = next_value
+    gae = 0
+    for step in reversed(range(self._rewards.size(0))):
+      delta = self._rewards[step] + self.gamma * self._value_predictions[step + 1] * self._not_dones[step + 1] - \
+              self._value_predictions[step]
+      gae = delta + self.gamma * self.tau * self._not_dones[step + 1] * gae
+      self._returns[step] = gae + self._value_predictions[step]
 
   def feed_forward_generator(self, advantages: torch.FloatTensor, num_mini_batch: int) -> (
     torch.FloatTensor, torch.LongTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor,
     torch.FloatTensor, torch.FloatTensor):
-    assert advantages.size() == self.rewards.size()
+    assert advantages.size() == self._rewards.size()
     assert num_mini_batch > 0
-    num_steps, num_processes = self.rewards.size()[:2]
+    num_steps, num_processes = self._rewards.size()[:2]
     batch_size = num_processes * num_steps
     assert batch_size >= num_mini_batch, (
       "PPO requires the number of processes ({}) "
@@ -89,14 +105,24 @@ class RolloutStorage(object):
     mini_batch_size = batch_size // num_mini_batch
     sampler = BatchSampler(SubsetRandomSampler(range(batch_size)), mini_batch_size, drop_last=False)
     for indices in sampler:
-      obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
-      actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
-      value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
-      return_batch = self.returns[:-1].view(-1, 1)[indices]
-      old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
+      obs_batch = self._observations[:-1].view(-1, *self._observations.size()[2:])[indices]
+      actions_batch = self._actions.view(-1, self._actions.size(-1))[indices]
+      value_preds_batch = self._value_predictions[:-1].view(-1, 1)[indices]
+      return_batch = self._returns[:-1].view(-1, 1)[indices]
+      old_action_log_probs_batch = self._action_log_probabilities.view(-1, 1)[indices]
       adv_targ = advantages.view(-1, 1)[indices]
 
-      possible_actions = self.possible_actionss[:-1].view(-1, *self.possible_actionss.size()[2:])[indices]
+      possible_actions = self._possible_actionss[:-1].view(-1, *self._possible_actionss.size()[2:])[indices]
 
       yield (obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ,
              possible_actions)
+
+  def get_observation(self, step) -> (torch.FloatTensor, torch.FloatTensor):
+    assert specs.check_positive_type(step, int, strict=False)
+    return self._observations[step], self._possible_actionss[step]
+
+  def get_last_observation(self) -> torch.FloatTensor:
+    return self._observations[-1]
+
+  def get_advantages(self):
+    return self._returns[:-1] - self._value_predictions[:-1]

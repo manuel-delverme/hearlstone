@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from typing import Callable, Text
 
 import baselines
@@ -82,9 +83,25 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
 
     obs = torch.from_numpy(obs).float().to(self.device)
     rewards = torch.from_numpy(rewards).unsqueeze(dim=1).float()
-    for i in infos:
-      i['possible_actions'] = torch.from_numpy(i['possible_actions']).long().to(self.device)
-    return obs, rewards, dones, infos
+    dones = torch.from_numpy(dones.astype(np.int32))
+
+    new_infos = defaultdict(list)
+    new_infos['possible_actions'] = torch.zeros(size=(self.num_envs, self.action_space.n), dtype=torch.long)
+
+    episode_rewards = []
+
+    for idx, info in enumerate(infos):
+      if 'episode' in info.keys():
+       episode_rewards.append(info['episode']['r'])
+
+      for k, v in info.items():
+        if k not in ('possible_actions', 'episode'):
+          new_infos[k].append(v)
+      new_infos['possible_actions'][idx] = torch.from_numpy(info['possible_actions']).long().to(self.device)
+
+    new_infos['episode_rewards'] = episode_rewards
+
+    return obs, rewards, dones, new_infos
 
 
 def _make_env(

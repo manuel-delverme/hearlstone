@@ -1,6 +1,7 @@
 import collections
 import copy
 import glob
+import itertools
 import os
 import time
 from collections import deque
@@ -17,14 +18,19 @@ from shared.env_utils import make_vec_envs
 from agents.learning.models.randomized_policy import Policy
 from agents.learning.shared.storage import RolloutStorage
 from shared.utils import get_vec_normalize, update_linear_schedule
+import specs
 
 
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     raise NotImplementedError
 
-  def __init__(self, observation_space: gym.spaces.box.Box, action_space: gym.spaces.Discrete, log_dir: str) -> None:
+  def __init__(self, observation_space: gym.spaces.Box, action_space: gym.spaces.Discrete, log_dir: str) -> None:
+    assert isinstance(observation_space, gym.spaces.Box)
     assert len(observation_space.shape) == 1
+
+    assert isinstance(action_space, gym.spaces.Discrete)
+    assert action_space.n > 1, 'the agent can only pass'
 
     self._setup_logs(log_dir)
     self.log_dir = log_dir
@@ -34,25 +40,49 @@ class PPOAgent(agents.base_agent.Agent):
 
     actor_critic_network = Policy(self.num_inputs, self.num_actions)
     actor_critic_network.to(hs_config.device)
-
     self.actor_critic = actor_critic_network
 
     self.clip_param = hs_config.PPOAgent.clip_epsilon
+    assert specs.check_positive_type(self.clip_param, float)
+
     self.ppo_epoch = hs_config.PPOAgent.ppo_epoch
+    assert specs.check_positive_type(self.ppo_epoch, int)
 
     self.num_mini_batch = hs_config.PPOAgent.num_mini_batches
+    assert specs.check_positive_type(self.num_mini_batch, int)
+
     self.value_loss_coef = hs_config.PPOAgent.value_loss_coeff
+    assert specs.check_positive_type(self.value_loss_coef, float)
+
     self.entropy_coef = hs_config.PPOAgent.entropy_coeff
+    assert specs.check_positive_type(self.entropy_coef, float)
 
     self.max_grad_norm = hs_config.PPOAgent.max_grad_norm
+    assert specs.check_positive_type(self.max_grad_norm, float)
+
     self.use_clipped_value_loss = hs_config.PPOAgent.clip_value_loss
+    assert isinstance(self.use_clipped_value_loss, bool)
+
+    self.num_processes = hs_config.PPOAgent.num_processes
+    assert specs.check_positive_type(self.num_processes, int)
+
+    self.model_dir = hs_config.PPOAgent.save_dir
+    assert isinstance(self.model_dir, str)
+
+    self.save_every = hs_config.PPOAgent.save_interval
+    assert specs.check_positive_type(self.save_every, int)
+    self.num_updates = hs_config.PPOAgent.num_updates
+    assert specs.check_positive_type(self.num_updates, int)
+    self.eval_every = hs_config.PPOAgent.eval_interval
+    assert specs.check_positive_type(self.eval_every, int)
 
     self.optimizer = torch.optim.Adam(
       self.actor_critic.parameters(),
       lr=hs_config.PPOAgent.adam_lr,
     )
 
-  def _setup_logs(self, log_dir):
+  @staticmethod
+  def _setup_logs(log_dir):
     try:
       os.makedirs(log_dir)
     except OSError:
@@ -69,137 +99,123 @@ class PPOAgent(agents.base_agent.Agent):
       for f in files:
         os.remove(f)
 
-  def train(self, load_env: Callable, seed: int, num_processes: int = hs_config.PPOAgent.num_processes):
+  def train(self, load_env: Callable, seed: int):
 
-    envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+    envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                          hs_config.device, allow_early_resets=False)
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
 
-    rollouts = RolloutStorage(hs_config.PPOAgent.num_steps, hs_config.PPOAgent.num_processes,
-                              self.num_inputs, self.num_actions)
-
+    rollouts = RolloutStorage(self.num_inputs, self.num_actions)
     obs, _, _, info = envs.reset()
-    rollouts.obs[0].copy_(obs)
-    rollouts.possible_actionss[0].copy_(info[0]['possible_actions'])
-    rollouts.to(hs_config.device)
-
+    rollouts.store_first_transition(obs, info['possible_actions'])
     episode_rewards = deque(maxlen=10)
-    possible_actionss = torch.zeros(size=(len(info),) + info[0]['possible_actions'].shape)
 
     start = time.time()
 
     for ppo_update_num in range(hs_config.PPOAgent.num_updates):
-      if hs_config.PPOAgent.use_linear_lr_decay:
-        # decrease learning rate linearly
-        update_linear_schedule(self.optimizer, ppo_update_num, hs_config.PPOAgent.num_updates,
-                               hs_config.PPOAgent.lr)
-      if hs_config.PPOAgent.use_linear_clip_decay:
-        self.agent.clip_param = hs_config.PPOAgent.clip_param * (
-          1 - ppo_update_num / float(hs_config.PPOAgent.num_updates))
 
-      for step in range(hs_config.PPOAgent.num_steps):
-        # sample actions
-        with torch.no_grad():
-          value, action, action_log_prob = self.actor_critic(rollouts.obs[step], rollouts.possible_actionss[step])
+      def stop_training(rews, step):
+        return step >= hs_config.PPOAgent.num_steps
 
-        obs, reward, done, infos = envs.step(action)
-
-        for num, info in enumerate(infos):
-          possible_actionss[num] = info['possible_actions']
-
-          if 'episode' in info.keys():
-            episode_rewards.append(info['episode']['r'])
-
-        # if done then clean the history of observations.
-        dones = [[0.0] if done_ else [1.0] for done_ in done]
-        masks = torch.FloatTensor(dones)
-        rollouts.insert(obs, action, action_log_prob, value, reward, masks, possible_actionss)
+      self.gather_rollouts(rollouts, episode_rewards, envs, stop_training, False)
 
       with torch.no_grad():
-        next_value = self.actor_critic.critic(rollouts.obs[-1]).detach()
+        next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
 
-      rollouts.compute_returns(next_value, hs_config.PPOAgent.use_gae, hs_config.PPOAgent.gamma, hs_config.PPOAgent.tau)
+      rollouts.compute_returns(next_value)
 
       value_loss, action_loss, dist_entropy = self.update(rollouts)
-      rollouts.update_for_new_rollouts()
+      rollouts.roll_over_last_transition()
       total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
 
-      # save for every interval-th episode or for the last epoch
-      if (
-        ppo_update_num % hs_config.PPOAgent.save_interval == 0 or ppo_update_num == hs_config.PPOAgent.num_updates - 1) and hs_config.PPOAgent.save_dir != "":
-        try:
-          os.makedirs(hs_config.PPOAgent.save_dir)
-        except OSError:
-          pass
+      if self.model_dir and (ppo_update_num % self.save_every == 0 or ppo_update_num == self.num_updates - 1):
+        self.save_model(envs, total_num_steps)
 
-        # a really ugly way to save a model to cpu
-        save_model = self.actor_critic
-        if hs_config.use_gpu:
-          save_model = copy.deepcopy(self.actor_critic).cpu()
+      if ppo_update_num % hs_config.print_every == 0:
+        self.print_stats(action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss)
 
-        save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
+      if ppo_update_num % self.eval_every == 0:
+        # TODO: this info should not be here!
+        info = self.eval_agent(envs, info, load_env, seed)
 
-        checkpoint_name = "{}-{}.pt".format(hs_config.VanillaHS.get_game_mode().__name__, total_num_steps)
-        checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
-        torch.save(save_model, checkpoint_file)
+  def eval_agent(self, envs, info, load_env, seed):
+    eval_envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                              hs_config.device, allow_early_resets=True)
+    vec_norm = get_vec_normalize(eval_envs)
+    if vec_norm is not None:
+      vec_norm.eval()
+      vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
 
-      if ppo_update_num % hs_config.print_every == 0 and len(episode_rewards) > 1:
-        end = time.time()
-        print(
-          "updates {}, num timesteps {}, fps {} \n last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
+    rewards = []
+
+    def stop_eval(rews, step):
+      return len(rews) >= 10
+
+    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval)
+
+    eval_envs.close()
+    print(" evaluation using {} episodes: mean reward {:.5f}\n".
+          format(len(rewards), np.mean(rewards)))
+    return info
+
+  def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False):
+    if rollouts is None:
+      obs, _, _, infos = envs.reset()
+    # else:
+    #   obs, infos = rollouts.get_observation(0)
+    #   rollouts.store_first_transition(obs, infos)
+    #   del obs
+    #   del infos
+
+    for step in itertools.count():
+      if exit_condition(rewards, step):
+        break
+
+      if rollouts is not None:
+        obs, possible_actions = rollouts.get_observation(step)
+      else:
+        possible_actions = infos['possible_actions']
+
+      with torch.no_grad():
+        value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
+
+      obs, reward, done, infos = envs.step(action)
+
+      if rollouts is not None:
+        rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
+                        rewards=reward, not_dones=done, possible_actions=infos['possible_actions'])
+
+      rewards.extend(infos['episode_rewards'])
+
+  def print_stats(self, action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss):
+    end = time.time()
+    print("updates {}, num timesteps {}, fps {} \n last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
           "min/max reward {:.1f}/{:.1f}\n".
-            format(ppo_update_num, total_num_steps,
-                   int(total_num_steps / (end - start)),
-                   len(episode_rewards),
-                   np.mean(episode_rewards),
-                   np.median(episode_rewards),
-                   np.min(episode_rewards),
-                   np.max(episode_rewards), dist_entropy,
-                   value_loss, action_loss))
+          format(ppo_update_num, total_num_steps,
+                 int(total_num_steps / (end - start)),
+                 len(episode_rewards),
+                 np.mean(episode_rewards),
+                 np.median(episode_rewards),
+                 np.min(episode_rewards) if episode_rewards else float('nan'),
+                 np.max(episode_rewards) if episode_rewards else float('nan'),
+                 dist_entropy,
+                 value_loss, action_loss))
 
-      if hs_config.PPOAgent.eval_interval and len(
-        episode_rewards) > 1 and ppo_update_num % hs_config.PPOAgent.eval_interval == 0:
-
-        eval_envs = make_vec_envs(load_env, seed, num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                                  hs_config.device, allow_early_resets=True)
-        vec_norm = get_vec_normalize(eval_envs)
-        if vec_norm is not None:
-          vec_norm.eval()
-          vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
-
-        eval_episode_rewards = []
-
-        obs, _, _, infos = eval_envs.reset()
-        possible_actionss = torch.zeros(size=(len(infos),) + infos[0]['possible_actions'].shape)
-
-        for num, info in enumerate(infos):
-          possible_actionss[num] = info['possible_actions']
-
-        while len(eval_episode_rewards) < 10:
-          with torch.no_grad():
-            _, action, _ = self.actor_critic(obs, possible_actionss, deterministic=True)
-          # obser reward and next obs
-          obs, reward, done, infos = eval_envs.step(action)
-
-          for info in infos:
-            if 'episode' in info.keys():
-              eval_episode_rewards.append(info['episode']['r'])
-
-        eval_envs.close()
-
-        print(" evaluation using {} episodes: mean reward {:.5f}\n".
-              format(len(eval_episode_rewards),
-                     np.mean(eval_episode_rewards)))
-
-    # if args.vis and ppo_update_num % args.vis_interval == 0:
-    #   try:
-    #     # sometimes monitor doesn't properly flush the outputs
-    #     win = visdom_plot(viz, win, args.log_dir, args.env_name,
-    #                       args.algo, args.num_env_steps)
-    #   except ioerror:
-    #     pass
+  def save_model(self, envs, total_num_steps):
+    try:
+      os.makedirs(hs_config.PPOAgent.save_dir)
+    except OSError:
+      pass
+    # a really ugly way to save a model to cpu
+    save_model = self.actor_critic
+    if hs_config.use_gpu:
+      save_model = copy.deepcopy(self.actor_critic).cpu()
+    save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
+    checkpoint_name = "{}-{}.pt".format(hs_config.VanillaHS.get_game_mode().__name__, total_num_steps)
+    checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
+    torch.save(save_model, checkpoint_file)
 
   def enjoy(self, make_env, checkpoint_file):
     env = make_vec_envs(make_env, hs_config.seed, 1, None, None, 'cpu', allow_early_resets=False)
@@ -227,9 +243,10 @@ class PPOAgent(agents.base_agent.Agent):
 
       env.render(info=infos[0])
 
-  def update(self, rollouts):
-    advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
-    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
+  def update(self, rollouts: RolloutStorage):
+    advantages = rollouts.get_advantages()
+    advantages -= advantages.mean()
+    advantages /= advantages.std() + 1e-5
 
     value_loss_epoch = 0
     action_loss_epoch = 0

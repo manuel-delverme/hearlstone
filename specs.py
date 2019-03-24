@@ -22,10 +22,19 @@ def check_info_spec(info: Info):
   assert info['reward'].dtype in (np.float32,)
 
 
-def check_inputs(num_inputs, inputs):
-  assert len(inputs.size()) == 2  # batch_size, num_inputs
-  assert inputs.size(1) == num_inputs
+def check_observation(num_inputs, observation):
+  assert len(observation.size()) == 2  # batch_size, num_inputs
+  assert observation.size(1) == num_inputs
 
 
 def check_possible_actions(num_possible_actions, possible_actions):
   assert possible_actions.shape[1:] == (num_possible_actions,)
+
+
+def check_positive_type(value, type_, strict=True):
+  assert isinstance(value, type_)
+  if strict:
+    assert value > 0
+  else:
+    assert value > -1
+  return True

@@ -56,9 +56,7 @@ class PPOAgent:
   # Optimizer
   adam_lr = 2.5e-4  # 7e-4 in reference implementation
 
-  # Algorithm
-  use_gae = True
-  use_linear_clip_decay = False
+  # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
   num_processes = 1  # 6  # number of CPU processes
