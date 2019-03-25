@@ -6,7 +6,7 @@ import torch
 import agents.base_agent
 
 enjoy = False
-use_gpu = False
+use_gpu = True
 seed = 1337
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot

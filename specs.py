@@ -2,6 +2,7 @@ from typing import Text, Union, Dict
 from typing import NewType
 
 import numpy as np
+import torch
 
 Info = NewType('Info', Dict[Text, Union[np.ndarray, Text]])
 
@@ -23,11 +24,13 @@ def check_info_spec(info: Info):
 
 
 def check_observation(num_inputs, observation):
+  assert observation.dtype == torch.float32
   assert len(observation.size()) == 2  # batch_size, num_inputs
   assert observation.size(1) == num_inputs
 
 
 def check_possible_actions(num_possible_actions, possible_actions):
+  assert possible_actions.dtype == torch.float32
   assert possible_actions.shape[1:] == (num_possible_actions,)
 
 

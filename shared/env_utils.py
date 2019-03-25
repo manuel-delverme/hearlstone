@@ -86,18 +86,19 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     dones = torch.from_numpy(dones.astype(np.int32))
 
     new_infos = defaultdict(list)
-    new_infos['possible_actions'] = torch.zeros(size=(self.num_envs, self.action_space.n), dtype=torch.long)
+    new_infos['possible_actions'] = torch.zeros(
+      size=(self.num_envs, self.action_space.n), dtype=torch.float, device=self.device)
 
     episode_rewards = []
 
     for idx, info in enumerate(infos):
       if 'episode' in info.keys():
-       episode_rewards.append(info['episode']['r'])
+        episode_rewards.append(info['episode']['r'])
 
       for k, v in info.items():
         if k not in ('possible_actions', 'episode'):
           new_infos[k].append(v)
-      new_infos['possible_actions'][idx] = torch.from_numpy(info['possible_actions']).long().to(self.device)
+      new_infos['possible_actions'][idx] = torch.from_numpy(info['possible_actions']).float().to(self.device)
 
     new_infos['episode_rewards'] = episode_rewards
 
