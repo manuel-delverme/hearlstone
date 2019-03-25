@@ -1,4 +1,5 @@
 from typing import Callable, Type
+
 import gym
 import torch
 
@@ -6,7 +7,7 @@ import torch
 import agents.base_agent
 
 enjoy = False
-use_gpu = True
+use_gpu = False
 seed = 1337
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
@@ -59,7 +60,7 @@ class PPOAgent:
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 1  # 6  # number of CPU processes
+  num_processes = 4  # number of CPU processes
   num_steps = 20
   ppo_epoch = 4  # times ppo goes over the data
 

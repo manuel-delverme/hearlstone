@@ -1,13 +1,10 @@
-from typing import Sequence
-
-import gym.spaces
 import numpy as np
 import torch
 import torch.nn as nn
 
 import hs_config
-from shared.utils import init
 import specs
+from shared.utils import init
 
 
 class Policy(nn.Module):
@@ -63,12 +60,18 @@ class Policy(nn.Module):
     # action_log_probs = action_log_probs.view(action.size(0), -1).sum(-1).unsqueeze(-1)  # TODO: simplify
     action_log_probs = action_distribution.log_prob(action)
 
-    assert value.shape == (inputs.size(0),)
-    assert action.shape == (inputs.size(0),)
-    assert action_log_probs.shape == (inputs.size(0),)
+    value = value.unsqueeze(-1)
+    action = action.unsqueeze(-1)
+    action_log_probs = action_log_probs.unsqueeze(-1)
+
+    assert value.shape == (inputs.size(0), 1)
+    assert action.shape == (inputs.size(0), 1)
+    assert action_log_probs.shape == (inputs.size(0), 1)
     return value, action, action_log_probs
 
-  def evaluate_actions(self, inputs: torch.FloatTensor, action: torch.LongTensor, possible_actions: torch.FloatTensor) -> (torch.FloatTensor, torch.FloatTensor, torch.FloatTensor):
+  def evaluate_actions(self, inputs: torch.FloatTensor, action: torch.LongTensor,
+                       possible_actions: torch.FloatTensor) -> (
+    torch.FloatTensor, torch.FloatTensor, torch.FloatTensor):
 
     specs.check_observation(self.num_inputs, inputs)
     specs.check_possible_actions(self.num_possible_actions, possible_actions)

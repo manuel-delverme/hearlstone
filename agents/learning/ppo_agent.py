@@ -1,4 +1,3 @@
-import collections
 import copy
 import glob
 import itertools
@@ -14,11 +13,11 @@ import torch
 import agents.base_agent
 import agents.learning.models.ppo
 import hs_config
-from shared.env_utils import make_vec_envs
+import specs
 from agents.learning.models.randomized_policy import Policy
 from agents.learning.shared.storage import RolloutStorage
-from shared.utils import get_vec_normalize, update_linear_schedule
-import specs
+from shared.env_utils import make_vec_envs
+from shared.utils import get_vec_normalize
 
 
 class PPOAgent(agents.base_agent.Agent):
@@ -133,7 +132,7 @@ class PPOAgent(agents.base_agent.Agent):
       if self.model_dir and (ppo_update_num % self.save_every == 0 or ppo_update_num == self.num_updates - 1):
         self.save_model(envs, total_num_steps)
 
-      if ppo_update_num % hs_config.print_every == 0:
+      if ppo_update_num % hs_config.print_every == 0 and ppo_update_num > 0:
         self.print_stats(action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss)
 
       if ppo_update_num % self.eval_every == 0:
@@ -163,31 +162,29 @@ class PPOAgent(agents.base_agent.Agent):
   def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
-    # else:
-    #   obs, infos = rollouts.get_observation(0)
-    #   rollouts.store_first_transition(obs, infos)
-    #   del obs
-    #   del infos
+      possible_actions = infos['possible_actions']
+    else:
+      obs, possible_actions = rollouts.get_observation(0)
 
     for step in itertools.count():
+      if step == 1000:
+        raise TimeoutError
+
       if exit_condition(rewards, step):
         break
-
-      if rollouts is not None:
-        obs, possible_actions = rollouts.get_observation(step)
-      else:
-        possible_actions = infos['possible_actions']
 
       with torch.no_grad():
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
       obs, reward, done, infos = envs.step(action)
+      possible_actions = infos['possible_actions']
 
       if rollouts is not None:
         rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
-                        rewards=reward, not_dones=done, possible_actions=infos['possible_actions'])
+                        rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
 
-      rewards.extend(infos['episode_rewards'])
+      if 'end_episode_info' in infos:
+        rewards.extend(i['reward'] for i in infos['end_episode_info'])
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss):
     end = time.time()
@@ -218,7 +215,9 @@ class PPOAgent(agents.base_agent.Agent):
     torch.save(save_model, checkpoint_file)
 
   def enjoy(self, make_env, checkpoint_file):
-    env = make_vec_envs(make_env, hs_config.seed, 1, None, None, 'cpu', allow_early_resets=False)
+    env = make_vec_envs(make_env, hs_config.seed, num_processes=1, gamma=1, log_dir='/tmp/enjoy_log_dir',
+                        device=torch.device('cpu'), allow_early_resets=False)
+
     # We need to use the same statistics for normalization as used in training
     self.actor_critic, ob_rms = torch.load(checkpoint_file)
 

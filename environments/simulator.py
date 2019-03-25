@@ -1,16 +1,17 @@
-import fireplace.game
-import random
-from fireplace.game import PlayState
 import functools
-import numpy as np
+import random
 import shelve
+import string
+from collections import defaultdict, OrderedDict
+
+import fireplace.game
+import numpy as np
+from fireplace.game import PlayState
 from fireplace.player import Player
 from hearthstone.enums import CardClass
 
 import hs_config
 from shared import utils
-import string
-from collections import defaultdict, OrderedDict
 
 
 class CoinRules:
@@ -169,7 +170,7 @@ class HSsimulation(object):
   @staticmethod
   @functools.lru_cache()
   def generate_decks(deck_size, player1_class=CardClass.MAGE,
-    player2_class=CardClass.WARRIOR):
+                     player2_class=CardClass.WARRIOR):
     while True:
       deck1 = utils.random_draft(player1_class, max_mana=5)
       deck2 = utils.random_draft(player2_class, max_mana=5)
@@ -272,19 +273,14 @@ class HSsimulation(object):
       return state
 
   def card_to_vector(self, card):
-    try:
-      SPELL_TYPE = 5
-      WEAPON_TYPE = 7
-      if card.type == SPELL_TYPE:
-        features = [card.cost, 0, 0]
-      elif card.type == WEAPON_TYPE:
-        features = [card.cost, card.durability, card.atk]
-      else:
-        features = [card.cost, card.health, card.atk]
-    except Exception as e:
-      import ipdb
-      ipdb.set_trace()
-      print("warning", e)
+    SPELL_TYPE = 5
+    WEAPON_TYPE = 7
+    if card.type == SPELL_TYPE:
+      features = [card.cost, 0, 0]
+    elif card.type == WEAPON_TYPE:
+      features = [card.cost, card.durability, card.atk]
+    else:
+      features = [card.cost, card.health, card.atk]
     return features
 
   def observe_player(self, player):
@@ -309,7 +305,7 @@ class HSsimulation(object):
 
     assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
 
-    player_board = np.hstack(self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD])
+    player_board = np.hstack([self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD]])
 
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
@@ -335,18 +331,6 @@ class HSsimulation(object):
     observation = self.observe()
     terminal = self.terminal()
     return observation, terminal
-
-  def action_to_action_id(self, action):
-    if isinstance(action, Action):
-      action = action.vector
-    return self.possible_actions[tuple(action)]
-
-  def state_to_state_id(self, state):
-    player_state, opponent_state = state
-    # TODO: consider opponent state!
-    # state = len(self.possible_states) * player_state + opponent_state
-    state = player_state
-    return self.possible_states[state]
 
   def sudden_death(self):
     self.player.playstate = PlayState.LOSING

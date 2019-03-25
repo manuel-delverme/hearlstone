@@ -1,29 +1,23 @@
+import os
 import pickle
+import random
+import sys
 import warnings
 from contextlib import contextmanager
-import sys
-import os
+from functools import _lru_cache_wrapper
+from functools import lru_cache
+from typing import Callable, List, Tuple, Union
 
 import numpy as np
 import tqdm
+from hearthstone.enums import CardClass, CardType
+from numpy import ndarray
 
 import shared.env_utils
-from environments import base_env
-import sys
-import os
-from functools import lru_cache
-import hashlib
-from typing import List
-
-from agents import base_agent
-import random
-
 from agents.base_agent import Agent
-from hearthstone.enums import CardClass, CardType
+from environments import base_env
 
-from functools import _lru_cache_wrapper
-from numpy import ndarray
-from typing import Callable, List, Tuple, Union
+
 def to_tuples(list_of_lists):
   tuple_of_tuples = []
   for item in list_of_lists:
@@ -128,6 +122,7 @@ def random_draft(card_class: CardClass, exclude: Tuple = tuple(), deck_length: i
     if deck.count(card.id) < card.max_count_in_deck:
       deck.append(card.id)
   return deck
+
 
 @contextmanager
 def suppress_stdout():

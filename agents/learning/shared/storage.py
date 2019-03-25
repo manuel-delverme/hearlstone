@@ -51,8 +51,6 @@ class RolloutStorage(object):
 
   def store_first_transition(self, observations: torch.FloatTensor, possible_actions: List[torch.FloatTensor],
                              not_done: torch.FloatTensor = None):
-    assert len(possible_actions) == 1
-
     self._observations[0].copy_(observations)
     self._possible_actionss[0].copy_(possible_actions)
     if not_done is not None:

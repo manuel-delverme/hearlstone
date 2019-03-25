@@ -1,6 +1,8 @@
 import multiprocessing as mp
 
 import numpy as np
+
+import specs
 from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
 
 
@@ -12,8 +14,13 @@ def worker(remote, parent_remote, env_fn_wrapper):
       cmd, data = remote.recv()
       if cmd == 'step':
         ob, reward, done, info = env.step(data)
+        end_of_episode_reward = reward
         if done:
           ob, _, _, info = env.reset()
+          info['end_episode_info'] = {
+            'reward': end_of_episode_reward,
+          }
+        specs.check_info_spec(info)
         remote.send((ob, reward, done, info))
       elif cmd == 'reset':
         ob, reward, done, info = env.reset()
@@ -49,7 +56,7 @@ class SubprocVecEnv(VecEnv):
     self.closed = False
     nenvs = len(env_fns)
     ctx = mp.get_context(context)
-    self.remotes, self.work_remotes = zip(*[ctx.Pipe() for _ in range(nenvs)])
+    self.remotes, self.work_remotes = zip(*[ctx.Pipe(duplex=True) for _ in range(nenvs)])
     self.ps = [ctx.Process(target=worker, args=(work_remote, remote, CloudpickleWrapper(env_fn)))
                for (work_remote, remote, env_fn) in zip(self.work_remotes, self.remotes, env_fns)]
     for p in self.ps:

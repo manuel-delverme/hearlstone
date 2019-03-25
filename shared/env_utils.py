@@ -64,7 +64,7 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     return self._to_pytorch(*transition, reset=True)
 
   def step_async(self, actions: torch.Tensor):
-    assert actions.shape == (self.num_envs,)
+    assert actions.shape == (self.num_envs, 1)
     actions = actions.cpu().numpy()
     self.vectorized_env.step_async(actions)
 
@@ -78,29 +78,22 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     assert dones.shape == (self.num_envs,)
     assert len(infos) == self.num_envs
     assert not reset or np.all(rewards == 0)
-    assert not reset or np.all(not dones)
+    assert not reset or np.all(~dones)
     assert [specs.check_info_spec(info) for info in infos]
 
     obs = torch.from_numpy(obs).float().to(self.device)
     rewards = torch.from_numpy(rewards).unsqueeze(dim=1).float()
-    dones = torch.from_numpy(dones.astype(np.int32))
+    dones = torch.from_numpy(dones.astype(np.int32)).unsqueeze(dim=1)
 
     new_infos = defaultdict(list)
     new_infos['possible_actions'] = torch.zeros(
       size=(self.num_envs, self.action_space.n), dtype=torch.float, device=self.device)
 
-    episode_rewards = []
-
     for idx, info in enumerate(infos):
-      if 'episode' in info.keys():
-        episode_rewards.append(info['episode']['r'])
-
       for k, v in info.items():
-        if k not in ('possible_actions', 'episode'):
+        if k not in ('possible_actions',):
           new_infos[k].append(v)
       new_infos['possible_actions'][idx] = torch.from_numpy(info['possible_actions']).float().to(self.device)
-
-    new_infos['episode_rewards'] = episode_rewards
 
     return obs, rewards, dones, new_infos
 
