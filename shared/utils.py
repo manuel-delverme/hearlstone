@@ -146,10 +146,7 @@ def one_hot_actions(actions: Union[Tuple[Tuple[int, int]], Tuple[Tuple[int, int,
 def get_vec_normalize(venv):
   if isinstance(venv, shared.env_utils.VecNormalize):
     return venv
-  elif hasattr(venv, 'venv'):
-    return get_vec_normalize(venv.venv)
-
-  return None
+  return get_vec_normalize(venv.vectorized_env)
 
 
 def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):

@@ -7,11 +7,12 @@ import torch
 import agents.base_agent
 
 enjoy = False
-use_gpu = False
+use_gpu = True
 seed = 1337
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
 
+comment = ""
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
@@ -31,7 +32,7 @@ class VanillaHS:
 
   always_first_player = True
 
-  level = 1
+  level = 5
 
   @staticmethod
   def get_game_mode() -> Callable[[], gym.Env]:
@@ -49,8 +50,9 @@ class VanillaHS:
 
 class PPOAgent:
   # Monitoring
+  num_eval_games = 100
   clip_value_loss = True
-  hidden_size = 64
+  hidden_size = 256  # 64
   eval_interval = print_every * 5
   save_interval = 100
   save_dir = "ppo_save_dir/"
@@ -60,21 +62,18 @@ class PPOAgent:
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 4  # number of CPU processes
-  num_steps = 20
+  num_processes = 8  # number of CPU processes
+  num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
-  num_env_steps = 15000
+  num_env_steps = 100000
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  entropy_coeff = 0.01  # entropy weight in loss function
+  entropy_coeff = 1e-3  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
   max_grad_norm = 0.5  # any bigger gradient is clipped
-  num_mini_batches = 32 if num_processes > 1 else num_steps
+  num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
-
-  # batch_size = 5000
-  use_joint_pol_val = True
 
   num_updates = int(num_env_steps) // num_steps // num_processes

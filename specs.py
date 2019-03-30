@@ -25,17 +25,27 @@ def check_info_spec(info: Info):
   assert info['reward'].dtype in (np.float32,)
 
   assert 'end_episode_info' not in info or tuple(info['end_episode_info'].keys()) == ('reward',)
+  return True
 
 
 def check_observation(num_inputs, observation):
   assert observation.dtype == torch.float32
   assert len(observation.size()) == 2  # batch_size, num_inputs
   assert observation.size(1) == num_inputs
+  return True
+
+
+def check_action(action):
+  assert action.dtype == torch.int64
+  assert len(action.size()) == 2  # batch_size, 1
+  assert action.size(1) == 1
+  return True
 
 
 def check_possible_actions(num_possible_actions, possible_actions):
   assert possible_actions.dtype == torch.float32
   assert possible_actions.shape[1:] == (num_possible_actions,)
+  return True
 
 
 def check_positive_type(value, type_, strict=True):

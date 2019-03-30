@@ -1,4 +1,5 @@
 import glob
+import sys
 
 import torch
 
@@ -16,6 +17,17 @@ def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
 
 
 def train():
+  if '_pydev_bundle.pydev_log' in sys.modules.keys():
+    hs_config.PPOAgent.num_processes = 2
+    hs_config.comment = "DELETEME"
+
+  if not hs_config.comment:
+    import tkinter.simpledialog
+    # comment = "256h32bs"
+    root = tkinter.Tk()
+    hs_config.comment = tkinter.simpledialog.askstring("comment", "comment")
+    root.destroy()
+
   if hs_config.seed:
     torch.manual_seed(hs_config.seed)
     torch.cuda.manual_seed_all(hs_config.seed)
@@ -36,12 +48,12 @@ def train():
   del dummy_hs_env
 
   if hs_config.enjoy:
-    # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*{}-*'.format(hs_config.VanillaHS.level))
     checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
-    latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.split("-")[-1][:-3]))[-1]
+    latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.replace(":", "-").split("-")[-1][:-3]))[-1]
+    # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*{}-*'.format(hs_config.VanillaHS.level))
     player.enjoy(make_env, checkpoint_file=latest_checkpoint)
   else:
-    player.train(make_env, hs_config.seed)
+    player.train(make_env, hs_config.seed, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
 
 
 if __name__ == "__main__":

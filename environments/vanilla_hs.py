@@ -1,7 +1,7 @@
 import collections
-import warnings
 import logging
 import pprint
+import random
 from typing import Tuple, Dict, Text, Any
 
 import fireplace
@@ -76,7 +76,8 @@ class VanillaHS(base_env.BaseEnv):
       starting_hp:
     """
     if seed is not None:
-      warnings.warn('seed not implemented')
+      random.seed(seed)
+      np.random.seed(seed)
     self.gui = None
     self.opponent = None
     self.id_to_action = [(-1, -1), ]

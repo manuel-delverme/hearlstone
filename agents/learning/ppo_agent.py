@@ -1,20 +1,22 @@
 import copy
+import datetime
 import glob
 import itertools
 import os
+import tempfile
 import time
 from collections import deque
-from typing import Callable
+from typing import Callable, Text, Optional
 
 import gym.spaces
 import numpy as np
+import tensorboardX
 import torch
 
 import agents.base_agent
-import agents.learning.models.ppo
 import hs_config
 import specs
-from agents.learning.models.randomized_policy import Policy
+from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 from shared.utils import get_vec_normalize
@@ -25,6 +27,11 @@ class PPOAgent(agents.base_agent.Agent):
     raise NotImplementedError
 
   def __init__(self, observation_space: gym.spaces.Box, action_space: gym.spaces.Discrete, log_dir: str) -> None:
+    self.experiment_id = "-".join((
+      hs_config.VanillaHS.get_game_mode().__name__,
+      str(hs_config.VanillaHS.level),
+      hs_config.comment
+    ))
     assert isinstance(observation_space, gym.spaces.Box)
     assert len(observation_space.shape) == 1
 
@@ -33,11 +40,17 @@ class PPOAgent(agents.base_agent.Agent):
 
     self._setup_logs(log_dir)
     self.log_dir = log_dir
+    tensorboard_dir = os.path.join(self.log_dir, "tensorboard", "{}:{}.pt".format(
+      datetime.datetime.now().strftime('%b%d_%H-%M-%S'), self.experiment_id))
+    if "DELETEME" in tensorboard_dir:
+      tensorboard_dir = tempfile.mktemp()
+
+    self.tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
 
     self.num_inputs = observation_space.shape[0]
     self.num_actions = action_space.n
 
-    actor_critic_network = Policy(self.num_inputs, self.num_actions)
+    actor_critic_network = ActorCritic(self.num_inputs, self.num_actions)
     actor_critic_network.to(hs_config.device)
     self.actor_critic = actor_critic_network
 
@@ -98,10 +111,17 @@ class PPOAgent(agents.base_agent.Agent):
       for f in files:
         os.remove(f)
 
-  def train(self, load_env: Callable, seed: int):
+  def train(self, load_env: Callable, seed: int, checkpoint_file: Optional[Text]):
 
     envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                          hs_config.device, allow_early_resets=False)
+    eval_envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                              hs_config.device, allow_early_resets=True)
+
+    if checkpoint_file:
+      print('loading checkpoint:', checkpoint_file)
+      self.actor_critic, ob_rms = torch.load(checkpoint_file)
+      get_vec_normalize(envs).ob_rms = ob_rms
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
@@ -126,38 +146,38 @@ class PPOAgent(agents.base_agent.Agent):
       rollouts.compute_returns(next_value)
 
       value_loss, action_loss, dist_entropy = self.update(rollouts)
+
+      self.tensorboard.add_scalar('train/value_loss', value_loss, ppo_update_num)
+      self.tensorboard.add_scalar('train/action_loss', action_loss, ppo_update_num)
+
       rollouts.roll_over_last_transition()
       total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
+
+      self.print_stats(action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss)
 
       if self.model_dir and (ppo_update_num % self.save_every == 0 or ppo_update_num == self.num_updates - 1):
         self.save_model(envs, total_num_steps)
 
-      if ppo_update_num % hs_config.print_every == 0 and ppo_update_num > 0:
-        self.print_stats(action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss)
-
       if ppo_update_num % self.eval_every == 0:
-        # TODO: this info should not be here!
-        info = self.eval_agent(envs, info, load_env, seed)
+        eval_rewards = self.eval_agent(envs, eval_envs, seed)
+        self.tensorboard.add_scalar('eval/rewards', np.mean(eval_rewards), ppo_update_num)
 
-  def eval_agent(self, envs, info, load_env, seed):
-    eval_envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                              hs_config.device, allow_early_resets=True)
+    envs.close()
+    eval_envs.close()
+
+  def eval_agent(self, train_envs, eval_envs, seed):
     vec_norm = get_vec_normalize(eval_envs)
     if vec_norm is not None:
       vec_norm.eval()
-      vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
+      vec_norm.ob_rms = get_vec_normalize(train_envs).ob_rms
 
     rewards = []
 
     def stop_eval(rews, step):
-      return len(rews) >= 10
+      return len(rews) >= hs_config.PPOAgent.num_eval_games
 
     self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval)
-
-    eval_envs.close()
-    print(" evaluation using {} episodes: mean reward {:.5f}\n".
-          format(len(rewards), np.mean(rewards)))
-    return info
+    return rewards
 
   def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False):
     if rollouts is None:
@@ -167,7 +187,7 @@ class PPOAgent(agents.base_agent.Agent):
       obs, possible_actions = rollouts.get_observation(0)
 
     for step in itertools.count():
-      if step == 1000:
+      if step == 10000:
         raise TimeoutError
 
       if exit_condition(rewards, step):
@@ -188,17 +208,11 @@ class PPOAgent(agents.base_agent.Agent):
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss):
     end = time.time()
-    print("updates {}, num timesteps {}, fps {} \n last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
-          "min/max reward {:.1f}/{:.1f}\n".
-          format(ppo_update_num, total_num_steps,
-                 int(total_num_steps / (end - start)),
-                 len(episode_rewards),
-                 np.mean(episode_rewards),
-                 np.median(episode_rewards),
-                 np.min(episode_rewards) if episode_rewards else float('nan'),
-                 np.max(episode_rewards) if episode_rewards else float('nan'),
-                 dist_entropy,
-                 value_loss, action_loss))
+    self.tensorboard.add_scalar('train/steps_per_second', int(total_num_steps / (end - start)), ppo_update_num)
+    self.tensorboard.add_scalar('train/mean', np.mean(episode_rewards), ppo_update_num)
+    self.tensorboard.add_scalar('train/entropy', dist_entropy, ppo_update_num)
+    self.tensorboard.add_scalar('train/value_loss', value_loss, ppo_update_num)
+    self.tensorboard.add_scalar('train/action_loss', action_loss, ppo_update_num)
 
   def save_model(self, envs, total_num_steps):
     try:
@@ -206,11 +220,15 @@ class PPOAgent(agents.base_agent.Agent):
     except OSError:
       pass
     # a really ugly way to save a model to cpu
-    save_model = self.actor_critic
     if hs_config.use_gpu:
-      save_model = copy.deepcopy(self.actor_critic).cpu()
-    save_model = [save_model, getattr(get_vec_normalize(envs), 'ob_rms', None)]
-    checkpoint_name = "{}-{}.pt".format(hs_config.VanillaHS.get_game_mode().__name__, total_num_steps)
+      model = copy.deepcopy(self.actor_critic).cpu()
+    else:
+      model = self.actor_critic
+
+    # save_model = (self.actor_critic.state_dict(), self.optimizer, get_vec_normalize(envs).ob_rms)
+    save_model = (model, get_vec_normalize(envs).ob_rms)
+
+    checkpoint_name = "{}:{}.pt".format(self.experiment_id, total_num_steps)
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
 
@@ -219,12 +237,13 @@ class PPOAgent(agents.base_agent.Agent):
                         device=torch.device('cpu'), allow_early_resets=False)
 
     # We need to use the same statistics for normalization as used in training
-    self.actor_critic, ob_rms = torch.load(checkpoint_file)
+    if checkpoint_file:
+      self.actor_critic, ob_rms = torch.load(checkpoint_file)
 
-    vec_norm = get_vec_normalize(env)
-    if vec_norm is not None:
-      vec_norm.eval()
-      vec_norm.ob_rms = ob_rms
+      vec_norm = get_vec_normalize(env)
+      if vec_norm is not None:
+        vec_norm.eval()
+        vec_norm.ob_rms = ob_rms
 
     obs, _, _, infos = env.reset()
     possible_actionss = torch.zeros(size=(len(infos),) + infos[0]['possible_actions'].shape)
@@ -292,3 +311,6 @@ class PPOAgent(agents.base_agent.Agent):
     dist_entropy_epoch /= num_updates
 
     return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    self.tensorboard.close()
