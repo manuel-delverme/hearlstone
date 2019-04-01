@@ -67,6 +67,7 @@ class VanillaHS(base_env.BaseEnv):
     starting_hp=hs_config.VanillaHS.starting_hp,
     sort_decks=hs_config.VanillaHS.sort_decks,
     seed=None,
+    extra_seed=None,
   ):
     """
     A game with only vanilla monster cars, mage+warrior hero powers, 2 cards
@@ -76,8 +77,8 @@ class VanillaHS(base_env.BaseEnv):
       starting_hp:
     """
     if seed is not None:
-      random.seed(seed)
-      np.random.seed(seed)
+      random.seed(seed + extra_seed)
+      np.random.seed(seed + extra_seed)
     self.gui = None
     self.opponent = None
     self.id_to_action = [(-1, -1), ]

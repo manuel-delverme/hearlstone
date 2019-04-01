@@ -99,10 +99,10 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
 
 
 def _make_env(
-  load_env: Callable[[int], environments.base_env.BaseEnv], seed: int, rank: int, log_dir: Text,
+  load_env: Callable[[int], environments.base_env.BaseEnv], rank: int, log_dir: Text,
   allow_early_resets: bool) -> Callable[[], environments.base_env.BaseEnv]:
   def _thunk():
-    env = load_env(seed=seed + rank)
+    env = load_env(extra_seed=rank)
     if log_dir is not None:
       env = monitor.Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
     return env
@@ -110,10 +110,10 @@ def _make_env(
   return _thunk
 
 
-def make_vec_envs(
-  load_env: Callable[[int], environments.base_env.BaseEnv], seed: int, num_processes: int, gamma: float, log_dir: Text,
-  device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
-  envs = [_make_env(load_env, seed, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
+def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, gamma: float,
+                  log_dir: Text,
+                  device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
+  envs = [_make_env(load_env, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
 
   if len(envs) == 1 or hs_config.VanillaHS.debug:
     vectorized_envs = DummyVecEnv(envs)

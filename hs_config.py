@@ -48,16 +48,21 @@ class VanillaHS:
     return agents.heuristic.hand_coded.HeuristicAgent
 
 
+class SelfPlay:
+  num_opponent_updates = 3
+
+
 class PPOAgent:
   # Monitoring
   num_eval_games = 100
   clip_value_loss = True
   hidden_size = 256  # 64
-  eval_interval = print_every * 5
+  eval_interval = 50
   save_interval = 100
   save_dir = "ppo_save_dir/"
   # Optimizer
-  adam_lr = 2.5e-4  # 7e-4 in reference implementation
+  adam_lr = 7e-4
+  # adam_lr = 2.5e-4  # 7e-4 in reference implementation
 
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
@@ -66,7 +71,7 @@ class PPOAgent:
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
-  num_env_steps = 100000
+  num_env_steps = int(1e5)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 

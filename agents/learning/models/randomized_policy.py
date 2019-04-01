@@ -35,10 +35,14 @@ class ActorCritic(nn.Module):
       init_(nn.Linear(hs_config.PPOAgent.hidden_size, 1)),
     )
 
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
-    self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions))
+    self.actor_logits = None
+    self.reset_actor()
 
     self.train()
+
+  def reset_actor(self):
+    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
+    self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions))
 
   def forward(self, observations: torch.FloatTensor, possible_actions: torch.FloatTensor,
     deterministic: bool = False) -> (

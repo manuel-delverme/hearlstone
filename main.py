@@ -7,13 +7,8 @@ import agents.base_agent
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
 import agents.learning.ppo_agent
+import game_utils
 import hs_config
-
-
-def make_env(seed=None, env_id=None, log_dir=None, episode_life=None):
-  hs_game = hs_config.VanillaHS.get_game_mode()(seed=seed)
-  hs_game.set_opponent(opponent=hs_config.VanillaHS.get_opponent()())
-  return hs_game
 
 
 def train():
@@ -46,14 +41,15 @@ def train():
     log_dir='/tmp/ppo_log/',
   )
   del dummy_hs_env
+  game_manager = game_utils.GameManager(hs_config.seed)
 
   if hs_config.enjoy:
     checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
     latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.replace(":", "-").split("-")[-1][:-3]))[-1]
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*{}-*'.format(hs_config.VanillaHS.level))
-    player.enjoy(make_env, checkpoint_file=latest_checkpoint)
+    player.enjoy(game_manager, checkpoint_file=latest_checkpoint)
   else:
-    player.train(make_env, hs_config.seed, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
+    player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
 
 
 if __name__ == "__main__":

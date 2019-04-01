@@ -13,7 +13,7 @@ import numpy as np
 import tensorboardX
 import torch
 
-import agents.base_agent
+import agents.learning.self_play_agent
 import hs_config
 import specs
 from agents.learning.models.randomized_policy import ActorCritic
@@ -22,7 +22,7 @@ from shared.env_utils import make_vec_envs
 from shared.utils import get_vec_normalize
 
 
-class PPOAgent(agents.base_agent.Agent):
+class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
   def _choose(self, observation, possible_actions):
     raise NotImplementedError
 
@@ -38,14 +38,10 @@ class PPOAgent(agents.base_agent.Agent):
     assert isinstance(action_space, gym.spaces.Discrete)
     assert action_space.n > 1, 'the agent can only pass'
 
+    self.sequential_experiment_num = 0
     self._setup_logs(log_dir)
     self.log_dir = log_dir
-    tensorboard_dir = os.path.join(self.log_dir, "tensorboard", "{}:{}.pt".format(
-      datetime.datetime.now().strftime('%b%d_%H-%M-%S'), self.experiment_id))
-    if "DELETEME" in tensorboard_dir:
-      tensorboard_dir = tempfile.mktemp()
-
-    self.tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
+    self.tensorboard = None
 
     self.num_inputs = observation_space.shape[0]
     self.num_actions = action_space.n
@@ -63,11 +59,11 @@ class PPOAgent(agents.base_agent.Agent):
     self.num_mini_batch = hs_config.PPOAgent.num_mini_batches
     assert specs.check_positive_type(self.num_mini_batch, int)
 
-    self.value_loss_coef = hs_config.PPOAgent.value_loss_coeff
-    assert specs.check_positive_type(self.value_loss_coef, float)
+    self.value_loss_coeff = hs_config.PPOAgent.value_loss_coeff
+    assert specs.check_positive_type(self.value_loss_coeff, float)
 
-    self.entropy_coef = hs_config.PPOAgent.entropy_coeff
-    assert specs.check_positive_type(self.entropy_coef, float)
+    self.entropy_coeff = hs_config.PPOAgent.entropy_coeff
+    assert specs.check_positive_type(self.entropy_coeff, float)
 
     self.max_grad_norm = hs_config.PPOAgent.max_grad_norm
     assert specs.check_positive_type(self.max_grad_norm, float)
@@ -93,6 +89,19 @@ class PPOAgent(agents.base_agent.Agent):
       lr=hs_config.PPOAgent.adam_lr,
     )
 
+  def update_experiment_logging(self):
+    tensorboard_dir = os.path.join(self.log_dir, "tensorboard", "{}:{}:{}.pt".format(
+      datetime.datetime.now().strftime('%b%d_%H-%M-%S'), self.experiment_id, self.sequential_experiment_num))
+
+    if "DELETEME" in tensorboard_dir:
+      tensorboard_dir = tempfile.mktemp()
+
+    if self.tensorboard is not None:
+      self.tensorboard.close()
+
+    self.tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
+    self.sequential_experiment_num += 1
+
   @staticmethod
   def _setup_logs(log_dir):
     try:
@@ -111,17 +120,24 @@ class PPOAgent(agents.base_agent.Agent):
       for f in files:
         os.remove(f)
 
-  def train(self, load_env: Callable, seed: int, checkpoint_file: Optional[Text]):
+  def train(self, load_env: Callable, checkpoint_file: Optional[Text],
+            num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Text:
+    assert updates_offset >= 0
+    self.update_experiment_logging()
 
-    envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                         hs_config.device, allow_early_resets=False)
-    eval_envs = make_vec_envs(load_env, seed, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                              hs_config.device, allow_early_resets=True)
+    print("> Loading training environments")
+    envs = make_vec_envs(load_env, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device,
+                         allow_early_resets=False)
+    print("> Loading eval environments")
+    eval_envs = make_vec_envs(load_env, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device,
+                              allow_early_resets=True)
 
     if checkpoint_file:
       print('loading checkpoint:', checkpoint_file)
       self.actor_critic, ob_rms = torch.load(checkpoint_file)
       get_vec_normalize(envs).ob_rms = ob_rms
+
+      self.actor_critic.to(hs_config.device)
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
@@ -133,39 +149,39 @@ class PPOAgent(agents.base_agent.Agent):
 
     start = time.time()
 
-    for ppo_update_num in range(hs_config.PPOAgent.num_updates):
+    for ppo_update_num in range(updates_offset, updates_offset + num_updates):
 
-      def stop_training(rews, step):
+      def stop_gathering(rews, step):
         return step >= hs_config.PPOAgent.num_steps
 
-      self.gather_rollouts(rollouts, episode_rewards, envs, stop_training, False)
+      self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
 
       with torch.no_grad():
         next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
 
       rollouts.compute_returns(next_value)
 
-      value_loss, action_loss, dist_entropy = self.update(rollouts)
-
-      self.tensorboard.add_scalar('train/value_loss', value_loss, ppo_update_num)
-      self.tensorboard.add_scalar('train/action_loss', action_loss, ppo_update_num)
+      value_loss, action_loss, dist_entropy, policy_ratio, explained_variance = self.update(rollouts)
 
       rollouts.roll_over_last_transition()
-      total_num_steps = (ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps
+      total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps) - 1
 
-      self.print_stats(action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss)
+      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, total_num_steps, value_loss,
+                       policy_ratio, explained_variance)
 
-      if self.model_dir and (ppo_update_num % self.save_every == 0 or ppo_update_num == self.num_updates - 1):
+      if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
 
-      if ppo_update_num % self.eval_every == 0:
-        eval_rewards = self.eval_agent(envs, eval_envs, seed)
-        self.tensorboard.add_scalar('eval/rewards', np.mean(eval_rewards), ppo_update_num)
+      if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1:
+        eval_rewards = self.eval_agent(envs, eval_envs)
+        self.tensorboard.add_scalar('eval/rewards', np.mean(eval_rewards), ppo_update_num // self.eval_every)
 
+    checkpoint_file = self.save_model(envs, total_num_steps)
     envs.close()
     eval_envs.close()
+    return checkpoint_file
 
-  def eval_agent(self, train_envs, eval_envs, seed):
+  def eval_agent(self, train_envs, eval_envs):
     vec_norm = get_vec_normalize(eval_envs)
     if vec_norm is not None:
       vec_norm.eval()
@@ -206,13 +222,19 @@ class PPOAgent(agents.base_agent.Agent):
       if 'end_episode_info' in infos:
         rewards.extend(i['reward'] for i in infos['end_episode_info'])
 
-  def print_stats(self, action_loss, dist_entropy, episode_rewards, ppo_update_num, start, total_num_steps, value_loss):
+  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, total_num_steps, value_loss,
+                  policy_ratio, explained_variance):
     end = time.time()
-    self.tensorboard.add_scalar('train/steps_per_second', int(total_num_steps / (end - start)), ppo_update_num)
-    self.tensorboard.add_scalar('train/mean', np.mean(episode_rewards), ppo_update_num)
-    self.tensorboard.add_scalar('train/entropy', dist_entropy, ppo_update_num)
-    self.tensorboard.add_scalar('train/value_loss', value_loss, ppo_update_num)
-    self.tensorboard.add_scalar('train/action_loss', action_loss, ppo_update_num)
+    if episode_rewards:
+      self.tensorboard.add_scalar('debug/steps_per_second', int(total_num_steps / (end - start)), time_step)
+      self.tensorboard.add_scalar('train/mean_reward', np.mean(episode_rewards), time_step)
+
+    self.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
+    self.tensorboard.add_scalar('train/value_loss', value_loss, time_step)
+    self.tensorboard.add_scalar('train/action_loss', action_loss, time_step)
+    # too low, no learning, fix batch size
+    self.tensorboard.add_scalar('train/policy_ratio', policy_ratio, time_step)
+    self.tensorboard.add_scalar('train/explained_variance', explained_variance, time_step)
 
   def save_model(self, envs, total_num_steps):
     try:
@@ -231,6 +253,7 @@ class PPOAgent(agents.base_agent.Agent):
     checkpoint_name = "{}:{}.pt".format(self.experiment_id, total_num_steps)
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
+    return checkpoint_file
 
   def enjoy(self, make_env, checkpoint_file):
     env = make_vec_envs(make_env, hs_config.seed, num_processes=1, gamma=1, log_dir='/tmp/enjoy_log_dir',
@@ -269,6 +292,8 @@ class PPOAgent(agents.base_agent.Agent):
     value_loss_epoch = 0
     action_loss_epoch = 0
     dist_entropy_epoch = 0
+    explained_variance_epoch = 0
+    ratio_epoch = 0
 
     for e in range(self.ppo_epoch):
       data_generator = rollouts.feed_forward_generator(advantages, self.num_mini_batch)
@@ -296,21 +321,26 @@ class PPOAgent(agents.base_agent.Agent):
           value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
         self.optimizer.zero_grad()
-        (value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef).backward()
+        (value_loss * self.value_loss_coeff + action_loss - dist_entropy * self.entropy_coeff).backward()
         torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
         self.optimizer.step()
 
-        value_loss_epoch += value_loss.item()
+        value_loss_epoch += value_loss.item() * self.value_loss_coeff
         action_loss_epoch += action_loss.item()
-        dist_entropy_epoch += dist_entropy.item()
+        dist_entropy_epoch += dist_entropy.item() * self.entropy_coeff
+        raise Exception  # cannot just sum!
+        explained_variance_epoch += ((1 - (value_preds_batch - values).var()) / value_preds_batch.var()).item()
+        ratio_epoch += ratio.mean().item()
 
     num_updates = self.ppo_epoch * self.num_mini_batch
 
     value_loss_epoch /= num_updates
     action_loss_epoch /= num_updates
     dist_entropy_epoch /= num_updates
+    ratio_epoch /= num_updates
+    explained_variance_epoch /= num_updates
 
-    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.tensorboard.close()

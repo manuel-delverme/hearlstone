@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Text, Any
+from typing import Dict, Text, Any, Callable, Optional
 
 import numpy as np
 
@@ -15,6 +15,12 @@ class Agent(ABC):
     return self._choose(observation, info)
 
   def load_model(self, model_path=None):
+    raise NotImplemented
+
+  def train(self, load_env: Callable, checkpoint_file: Optional[Text], num_updates: int, updates_offset: int) -> Text:
+    raise NotImplemented
+
+  def self_play(self, game_manger, checkpoint_file):
     raise NotImplemented
 
 
