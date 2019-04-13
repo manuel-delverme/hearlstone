@@ -1,11 +1,9 @@
-import os
 from collections import defaultdict
 from typing import Callable, Text
 
 import baselines
 import numpy as np
 import torch
-from baselines.common import monitor
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
@@ -86,8 +84,8 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     dones = torch.from_numpy(dones.astype(np.int32)).unsqueeze(dim=1)
 
     new_infos = defaultdict(list)
-    new_infos['possible_actions'] = torch.zeros(
-      size=(self.num_envs, self.action_space.n), dtype=torch.float, device=self.device)
+    new_infos['possible_actions'] = torch.zeros(size=(self.num_envs, self.action_space.n), dtype=torch.float,
+                                                device=self.device)
 
     for idx, info in enumerate(infos):
       for k, v in info.items():
@@ -95,17 +93,14 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
           new_infos[k].append(v)
       new_infos['possible_actions'][idx] = torch.from_numpy(info['possible_actions']).float().to(self.device)
 
-    return obs, rewards, dones, new_infos
+    return obs, rewards, dones, dict(new_infos)
 
 
 def _make_env(
   load_env: Callable[[int], environments.base_env.BaseEnv], rank: int, log_dir: Text,
   allow_early_resets: bool) -> Callable[[], environments.base_env.BaseEnv]:
   def _thunk():
-    env = load_env(extra_seed=rank)
-    if log_dir is not None:
-      env = monitor.Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
-    return env
+    return load_env(extra_seed=rank)
 
   return _thunk
 

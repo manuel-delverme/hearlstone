@@ -3,48 +3,53 @@ import datetime
 import glob
 import itertools
 import os
+import shutil
 import tempfile
 import time
 from collections import deque
-from typing import Callable, Text, Optional
+from typing import Text, Optional
 
-import gym.spaces
 import numpy as np
 import tensorboardX
 import torch
+import tqdm
 
-import agents.learning.self_play_agent
+import agents.base_agent
+import game_utils
 import hs_config
+import shared.utils
 import specs
 from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
-from shared.utils import get_vec_normalize
 
 
-class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
+class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
-    raise NotImplementedError
+    with torch.no_grad():
+      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
+    return action
 
-  def __init__(self, observation_space: gym.spaces.Box, action_space: gym.spaces.Discrete, log_dir: str) -> None:
+  def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str) -> None:
     self.experiment_id = "-".join((
       hs_config.VanillaHS.get_game_mode().__name__,
       str(hs_config.VanillaHS.level),
       hs_config.comment
     ))
-    assert isinstance(observation_space, gym.spaces.Box)
-    assert len(observation_space.shape) == 1
+    # assert isinstance(observation_space, gym.spaces.Box)
+    # assert len(observation_space.shape) == 1
 
-    assert isinstance(action_space, gym.spaces.Discrete)
-    assert action_space.n > 1, 'the agent can only pass'
+    # assert isinstance(action_space, gym.spaces.Discrete)
+    # assert action_space.n > 1, 'the agent can only pass'
+    assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
     self.sequential_experiment_num = 0
     self._setup_logs(log_dir)
     self.log_dir = log_dir
     self.tensorboard = None
 
-    self.num_inputs = observation_space.shape[0]
-    self.num_actions = action_space.n
+    self.num_inputs = num_inputs
+    self.num_actions = num_possible_actions
 
     actor_critic_network = ActorCritic(self.num_inputs, self.num_actions)
     actor_critic_network.to(hs_config.device)
@@ -53,8 +58,8 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
     self.clip_param = hs_config.PPOAgent.clip_epsilon
     assert specs.check_positive_type(self.clip_param, float)
 
-    self.ppo_epoch = hs_config.PPOAgent.ppo_epoch
-    assert specs.check_positive_type(self.ppo_epoch, int)
+    self.num_ppo_epochs = hs_config.PPOAgent.ppo_epoch
+    assert specs.check_positive_type(self.num_ppo_epochs, int)
 
     self.num_mini_batch = hs_config.PPOAgent.num_mini_batches
     assert specs.check_positive_type(self.num_mini_batch, int)
@@ -120,24 +125,29 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
       for f in files:
         os.remove(f)
 
-  def train(self, load_env: Callable, checkpoint_file: Optional[Text],
+  def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
             num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Text:
     assert updates_offset >= 0
     self.update_experiment_logging()
 
-    print("> Loading training environments")
-    envs = make_vec_envs(load_env, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device,
+    print("[Train] Loading training environments")
+    envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device,
                          allow_early_resets=False)
-    print("> Loading eval environments")
-    eval_envs = make_vec_envs(load_env, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device,
+    print("[Train] Loading eval environments")
+    eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                              hs_config.device,
                               allow_early_resets=True)
 
     if checkpoint_file:
-      print('loading checkpoint:', checkpoint_file)
+      print('[Train] loading checkpoint:', checkpoint_file)
       self.actor_critic, ob_rms = torch.load(checkpoint_file)
-      get_vec_normalize(envs).ob_rms = ob_rms
+      shared.utils.get_vec_normalize(envs).ob_rms = ob_rms
 
       self.actor_critic.to(hs_config.device)
+      self.optimizer = torch.optim.Adam(
+        self.actor_critic.parameters(),
+        lr=hs_config.PPOAgent.adam_lr,
+      )
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
@@ -149,7 +159,7 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
 
     start = time.time()
 
-    for ppo_update_num in range(updates_offset, updates_offset + num_updates):
+    for ppo_update_num in tqdm.trange(updates_offset, updates_offset + num_updates):
 
       def stop_gathering(rews, step):
         return step >= hs_config.PPOAgent.num_steps
@@ -174,18 +184,31 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
 
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1:
         eval_rewards = self.eval_agent(envs, eval_envs)
-        self.tensorboard.add_scalar('eval/rewards', np.mean(eval_rewards), ppo_update_num // self.eval_every)
+        test_performance = np.mean(eval_rewards)
+        self.tensorboard.add_scalar('Zeval/rewards', test_performance, ppo_update_num // self.eval_every)
+        if test_performance > hs_config.PPOAgent.winratio_cutoff:
+          break
 
     checkpoint_file = self.save_model(envs, total_num_steps)
+
+    print("[Train] Loading heuristic environments")
+    game_manager.set_heuristic_opponent()
+    eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                              hs_config.device, allow_early_resets=True)
+
+    eval_rewards = self.eval_agent(envs, eval_envs)
+    test_performance = np.mean(eval_rewards)
+    self.tensorboard.add_scalar('Zeval/heuristic', test_performance, ppo_update_num // self.eval_every)
+
     envs.close()
     eval_envs.close()
     return checkpoint_file
 
   def eval_agent(self, train_envs, eval_envs):
-    vec_norm = get_vec_normalize(eval_envs)
+    vec_norm = shared.utils.get_vec_normalize(eval_envs)
     if vec_norm is not None:
       vec_norm.eval()
-      vec_norm.ob_rms = get_vec_normalize(train_envs).ob_rms
+      vec_norm.ob_rms = shared.utils.get_vec_normalize(train_envs).ob_rms
 
     rewards = []
 
@@ -219,14 +242,15 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
         rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
 
-      if 'end_episode_info' in infos:
-        rewards.extend(i['reward'] for i in infos['end_episode_info'])
+      assert 'game_statistics' in specs.OPTIONAL_INFO_KEYS
+      if 'game_statistics' in infos:
+        rewards.extend(i['outcome'].item() for i in infos['game_statistics'])
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, total_num_steps, value_loss,
                   policy_ratio, explained_variance):
     end = time.time()
     if episode_rewards:
-      self.tensorboard.add_scalar('debug/steps_per_second', int(total_num_steps / (end - start)), time_step)
+      self.tensorboard.add_scalar('zdebug/steps_per_second', int(total_num_steps / (end - start)), time_step)
       self.tensorboard.add_scalar('train/mean_reward', np.mean(episode_rewards), time_step)
 
     self.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
@@ -234,7 +258,13 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
     self.tensorboard.add_scalar('train/action_loss', action_loss, time_step)
     # too low, no learning, fix batch size
     self.tensorboard.add_scalar('train/policy_ratio', policy_ratio, time_step)
+
+    #  >= 1 good ev; =< 0 null predictor
     self.tensorboard.add_scalar('train/explained_variance', explained_variance, time_step)
+
+    self.tensorboard.add_scalar('losses/entropy', dist_entropy * self.entropy_coeff, time_step)
+    self.tensorboard.add_scalar('losses/value_loss', value_loss * self.value_loss_coeff, time_step)
+    self.tensorboard.add_scalar('losses/action_loss', action_loss, time_step)
 
   def save_model(self, envs, total_num_steps):
     try:
@@ -248,12 +278,31 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
       model = self.actor_critic
 
     # save_model = (self.actor_critic.state_dict(), self.optimizer, get_vec_normalize(envs).ob_rms)
-    save_model = (model, get_vec_normalize(envs).ob_rms)
+    save_model = (model, shared.utils.get_vec_normalize(envs).ob_rms)
 
     checkpoint_name = "{}:{}.pt".format(self.experiment_id, total_num_steps)
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
+
+  def get_latest_checkpoint_file(self):
+    checkpoint_name = "{}:{}.pt".format(self.experiment_id, "*")
+    checkpoint_files = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
+    checkpoints = glob.glob(checkpoint_files)
+
+    if not checkpoints:
+      return None
+
+    ids = {}
+    for file_name in checkpoints:
+      x = file_name.replace(":", "-")
+      last_part = x.split("-")[-1]
+      num_iters = last_part[:-3]
+      ids[file_name] = int(num_iters)
+
+    checkpoints = sorted(checkpoints, key=lambda xi: ids[xi])
+    latest_checkpoint = checkpoints[-1]
+    return latest_checkpoint
 
   def enjoy(self, make_env, checkpoint_file):
     env = make_vec_envs(make_env, hs_config.seed, num_processes=1, gamma=1, log_dir='/tmp/enjoy_log_dir',
@@ -263,7 +312,7 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
     if checkpoint_file:
       self.actor_critic, ob_rms = torch.load(checkpoint_file)
 
-      vec_norm = get_vec_normalize(env)
+      vec_norm = shared.utils.get_vec_normalize(env)
       if vec_norm is not None:
         vec_norm.eval()
         vec_norm.ob_rms = ob_rms
@@ -271,16 +320,11 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
     obs, _, _, infos = env.reset()
     possible_actionss = torch.zeros(size=(len(infos),) + infos[0]['possible_actions'].shape)
 
-    for num, info in enumerate(infos):
-      possible_actionss[num] = info['possible_actions']
-
     env.render(info=infos[0])
     while True:
       with torch.no_grad():
-        value, action, _, _ = self.actor_critic.forward(obs, None, None, possible_actionss)
+        value, action, _, _ = self.actor_critic(obs, None, None, possible_actionss)
       obs, reward, done, infos = env.step(action)
-      for num, info in enumerate(infos):
-        possible_actionss[num] = torch.from_numpy(info['possible_actions'])
 
       env.render(info=infos[0])
 
@@ -292,10 +336,11 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
     value_loss_epoch = 0
     action_loss_epoch = 0
     dist_entropy_epoch = 0
-    explained_variance_epoch = 0
+    values_pred = []
+    values_gt = []
     ratio_epoch = 0
 
-    for e in range(self.ppo_epoch):
+    for e in range(self.num_ppo_epochs):
       data_generator = rollouts.feed_forward_generator(advantages, self.num_mini_batch)
 
       for sample in data_generator:
@@ -325,14 +370,21 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
         torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
         self.optimizer.step()
 
-        value_loss_epoch += value_loss.item() * self.value_loss_coeff
+        value_loss_epoch += value_loss.item()
         action_loss_epoch += action_loss.item()
-        dist_entropy_epoch += dist_entropy.item() * self.entropy_coeff
-        raise Exception  # cannot just sum!
-        explained_variance_epoch += ((1 - (value_preds_batch - values).var()) / value_preds_batch.var()).item()
+        dist_entropy_epoch += dist_entropy.item()
+
+        values_pred.extend(value_preds_batch)
+        values_gt.extend(values)
+
         ratio_epoch += ratio.mean().item()
 
-    num_updates = self.ppo_epoch * self.num_mini_batch
+    num_updates = self.num_ppo_epochs * self.num_mini_batch
+
+    values_pred = torch.tensor(values_pred)
+    values_gt = torch.tensor(values_gt)
+
+    explained_variance_epoch = ((1 - (values_pred - values_gt).var()) / values_pred.var()).item()
 
     value_loss_epoch /= num_updates
     action_loss_epoch /= num_updates
@@ -341,6 +393,22 @@ class PPOAgent(agents.learning.self_play_agent.SelfPlayAgent):
     explained_variance_epoch /= num_updates
 
     return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch
+
+  def self_play(self, game_manger: game_utils.GameManager, checkpoint_file):
+    # checkpoint_file = self.get_latest_checkpoint_file()
+    checkpoint_file = None
+
+    # https://openai.com/blog/openai-five/
+    updates_so_far = 0
+    updates_schedule = [1, ] + [hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates
+
+    for self_play_iter, num_updates in enumerate(updates_schedule):
+      print("Iter", self_play_iter)
+      checkpoint_file = self.train(game_manger, checkpoint_file=checkpoint_file, num_updates=num_updates,
+                                   updates_offset=updates_so_far)
+
+      shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
+      game_manger.update_learning_opponent(checkpoint_file)
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.tensorboard.close()

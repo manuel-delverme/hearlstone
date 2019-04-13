@@ -14,12 +14,10 @@ def worker(remote, parent_remote, env_fn_wrapper):
       cmd, data = remote.recv()
       if cmd == 'step':
         ob, reward, done, info = env.step(data)
-        end_of_episode_reward = reward
         if done:
-          ob, _, _, info = env.reset()
-          info['end_episode_info'] = {
-            'reward': end_of_episode_reward,
-          }
+          ob, _, _, _info = env.reset()
+          info['possible_actions'] = _info['possible_actions']
+          info['observation'] = _info['observation']
         specs.check_info_spec(info)
         remote.send((ob, reward, done, info))
       elif cmd == 'reset':

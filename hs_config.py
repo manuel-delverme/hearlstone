@@ -1,3 +1,4 @@
+import sys
 from typing import Callable, Type
 
 import gym
@@ -12,7 +13,9 @@ seed = 1337
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
 
-comment = ""
+DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
+comment = "DELETEME" if DEBUG else ""
+
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
@@ -42,10 +45,12 @@ class VanillaHS:
     return environments.vanilla_hs.VanillaHS
 
   @staticmethod
-  def get_opponent() -> Type[agents.base_agent.Bot]:
+  def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
     # return agents.heuristic.hand_coded.PassingAgent
     return agents.heuristic.hand_coded.HeuristicAgent
+    # hs_config.VanillaHS.get_opponent = get_opponent
+    # return agents.learning.ppo_agent.PPOAgent
 
 
 class SelfPlay:
@@ -54,7 +59,8 @@ class SelfPlay:
 
 class PPOAgent:
   # Monitoring
-  num_eval_games = 100
+  winratio_cutoff = 0.7
+  num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256  # 64
   eval_interval = 50
@@ -67,7 +73,7 @@ class PPOAgent:
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 8  # number of CPU processes
+  num_processes = 2 if DEBUG else 8  # number of CPU processes
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
@@ -75,7 +81,7 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  entropy_coeff = 1e-3  # randomness, 1e-2 to 1e-4
+  entropy_coeff = 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
   max_grad_norm = 0.5  # any bigger gradient is clipped
   num_mini_batches = 5

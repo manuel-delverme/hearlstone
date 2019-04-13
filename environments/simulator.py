@@ -183,7 +183,6 @@ class HSsimulation(object):
 
   def actions(self):
     actions = []
-    # no_target = None
     if self.game.current_player.choice:
       for card in self.game.current_player.choice.cards:
         # if not card.is_playable():
@@ -202,7 +201,7 @@ class HSsimulation(object):
               'card': card
             }, self))
     else:
-      no_action = self.Action(None, lambda: None, {}, self)
+      actions.append(self.Action(None, lambda: None, {}, self))  # PASS
 
       for card in self.game.current_player.hand:
         if not card.is_playable():
@@ -225,7 +224,6 @@ class HSsimulation(object):
             actions.append(
               self.Action(character, character.attack, {'target': enemy_char},
                           self))
-      actions += [no_action]
       # for action in actions:
       #     action.vector = (self.card_to_bow(action.card), self.card_to_bow(action.params))
     assert len(actions) > 0
@@ -323,7 +321,12 @@ class HSsimulation(object):
 
     player_observation = self.observe_player(self.player)
     opponent_observation = self.observe_player(self.opponent)
-    observation = np.hstack((player_observation, opponent_observation))
+
+    if self.game.current_player.controller.name == 'Opponent':
+      observation = np.hstack((opponent_observation, player_observation))
+    else:
+      observation = np.hstack((player_observation, opponent_observation))
+
     return observation
 
   def step(self, action):
@@ -440,8 +443,17 @@ class HSsimulation(object):
     assert len(card_lst) == 3
     return np.array(card_lst)
 
-  def entity_to_vec(self, entity):
-    return self.card_to_bow(entity)
+  @staticmethod
+  def fast_card_to_bow(card_obj):
+    if card_obj is None:
+      return np.array((-1, -1, -1))
+    else:
+      return np.array((card_obj.atk, card_obj.health, card_obj.can_attack()))
+
+  @staticmethod
+  def entity_to_vec(entity):
+    # crd = self.card_to_bow(entity)
+    return HSsimulation.fast_card_to_bow(entity)
 
 
 class Agent(object):

@@ -9,6 +9,7 @@ import fireplace.logging
 import gym.spaces
 import hearthstone
 import numpy as np
+import torch
 from fireplace.exceptions import GameOver
 from fireplace.game import PlayState
 
@@ -79,6 +80,7 @@ class VanillaHS(base_env.BaseEnv):
     if seed is not None:
       random.seed(seed + extra_seed)
       np.random.seed(seed + extra_seed)
+    self.opponent_obs_rms = None
     self.gui = None
     self.opponent = None
     self.id_to_action = [(-1, -1), ]
@@ -203,9 +205,9 @@ class VanillaHS(base_env.BaseEnv):
   def game_value(self):
     player = self.simulation.player
     if player.playstate == PlayState.WON:
-      return +1.0
+      return +0.5
     elif player.playstate == PlayState.LOST:
-      return -1.0
+      return -0.5
     elif player.playstate == PlayState.TIED:
       raise ValueError
     elif player.playstate == PlayState.INVALID:
@@ -291,8 +293,9 @@ class VanillaHS(base_env.BaseEnv):
     return np.array(reward, dtype=np.float32)
 
   @episodic_log
-  def set_opponent(self, opponent: agents.base_agent.Agent):
+  def set_opponent(self, opponent: agents.base_agent.Agent, opponent_obs_rms=None):
     self.opponent = opponent
+    self.opponent_obs_rms = opponent_obs_rms
 
   @episodic_log
   def play_opponent_turn(self):
@@ -303,10 +306,21 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def play_opponent_action(self):
     assert self.simulation.game.current_player.controller.name == 'Opponent'
-    observation, _, terminal, _ = self.gather_transition()
-    info = self.game_info()
+    observation, _, terminal, encoded_info = self.gather_transition()
 
-    action = self.opponent.choose(observation, info)
+    if self.opponent_obs_rms is not None:
+      observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
+
+    observation = torch.FloatTensor(observation)
+    observation = observation.unsqueeze(0)
+
+    pa = encoded_info['possible_actions']
+    pa = torch.FloatTensor(pa)
+    encoded_info['possible_actions'] = pa.unsqueeze(0)
+    # raise ValueError("Make sure/assert original info's order is correct!!!!")
+    encoded_info['original_info'] = self.game_info()
+
+    action = self.opponent.choose(observation, encoded_info)
     self.step(action, autoreset=False)
     trans = self.gather_transition()
     return trans
@@ -340,6 +354,7 @@ class VanillaHS(base_env.BaseEnv):
         'num_games': self.games_played,
         'num_steps': self.episode_steps,
         'turn': self.simulation.game.turn,
+        'outcome': reward,
       }
       if autoreset:
         new_obs, _, _, new_info = self.reset()
@@ -378,8 +393,7 @@ class VanillaHS(base_env.BaseEnv):
   def game_info(self):
     possible_actions = self.simulation.actions()
     info = {
-      'possible_actions': self.encode_actions(possible_actions),
-      'original_info': {'possible_actions': possible_actions},
+      'possible_actions': possible_actions,
     }
     return info
 
@@ -404,7 +418,8 @@ class VanillaHS(base_env.BaseEnv):
 
   def close(self):
     super(VanillaHS, self).close()
-    del self._gui
+    if hasattr(self, '_gui'):
+      del self._gui
 
   def __str__(self):
     return 'VanillaHS:{}'.format(self.opponent.level, )

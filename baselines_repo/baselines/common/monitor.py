@@ -1,13 +1,13 @@
+raise DeprecationWarning
 __all__ = ['Monitor', 'get_monitor_files', 'load_results']
 
-import gym
-from gym.core import Wrapper
+import csv
+import json
+import os.path as osp
 import time
 from glob import glob
-import csv
-import os.path as osp
-import json
-import numpy as np
+
+from gym.core import Wrapper
 
 
 class Monitor(Wrapper):
@@ -74,8 +74,8 @@ class Monitor(Wrapper):
       if self.results_writer:
         self.results_writer.write_row(epinfo)
       assert isinstance(info, dict)
-      if isinstance(info, dict):
-        info['episode'] = epinfo
+      # if isinstance(info, dict):
+      #   info['episode'] = epinfo
 
     self.total_steps += 1
 
@@ -166,27 +166,3 @@ def load_results(dir):
   df.headers = headers  # HACK to preserve backwards compatibility
   return df
 
-
-def test_monitor():
-  env = gym.make("CartPole-v1")
-  env.seed(0)
-  mon_file = "/tmp/baselines-test-%s.monitor.csv" % uuid.uuid4()
-  menv = Monitor(env, mon_file)
-  menv.reset()
-  for _ in range(1000):
-    _, _, done, _ = menv.step(0)
-    if done:
-      menv.reset()
-
-  f = open(mon_file, 'rt')
-
-  firstline = f.readline()
-  assert firstline.startswith('#')
-  metadata = json.loads(firstline[1:])
-  assert metadata['env_id'] == "CartPole-v1"
-  assert set(metadata.keys()) == {'env_id', 'gym_version', 't_start'}, "Incorrect keys in monitor metadata"
-
-  last_logline = pandas.read_csv(f, index_col=None)
-  assert set(last_logline.keys()) == {'l', 't', 'r'}, "Incorrect keys in monitor logline"
-  f.close()
-  os.remove(mon_file)

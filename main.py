@@ -1,9 +1,8 @@
 import glob
-import sys
 
 import torch
 
-import agents.base_agent
+# import agents.base_agent
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
 import agents.learning.ppo_agent
@@ -12,10 +11,6 @@ import hs_config
 
 
 def train():
-  if '_pydev_bundle.pydev_log' in sys.modules.keys():
-    hs_config.PPOAgent.num_processes = 2
-    hs_config.comment = "DELETEME"
-
   if not hs_config.comment:
     import tkinter.simpledialog
     # comment = "256h32bs"
@@ -36,8 +31,8 @@ def train():
 
   dummy_hs_env = game_class()
   player = agent(
-    observation_space=dummy_hs_env.observation_space,
-    action_space=dummy_hs_env.action_space,
+    num_inputs=dummy_hs_env.observation_space.shape[0],
+    num_possible_actions=dummy_hs_env.action_space.n,
     log_dir='/tmp/ppo_log/',
   )
   del dummy_hs_env

@@ -20,3 +20,7 @@ class BaseEnv(gym.Env, ABC):
   @abstractmethod
   def game_value(self):
     raise NotImplemented
+
+  @abstractmethod
+  def set_opponent(self, opponent, opponent_obs_rms):
+    raise NotImplemented

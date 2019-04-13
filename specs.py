@@ -8,7 +8,7 @@ Info = NewType('Info', Dict[Text, Union[np.ndarray, Text]])
 
 INFO_KEYS = {'action_history', 'observation', 'possible_actions', 'reward'}
 # OPTIONAL_INFO_KEYS = {'episode', 'game_statistics', 'end_episode_info'}
-OPTIONAL_INFO_KEYS = {'end_episode_info'}
+OPTIONAL_INFO_KEYS = {'game_statistics'}  # , 'episode'}
 
 
 def check_info_spec(info: Info):
@@ -29,7 +29,7 @@ def check_info_spec(info: Info):
 
 
 def check_observation(num_inputs, observation):
-  assert observation.dtype == torch.float32
+  assert observation.dtype == torch.float32, "{} is not float32".format(observation.dtype)
   assert len(observation.size()) == 2  # batch_size, num_inputs
   assert observation.size(1) == num_inputs
   return True

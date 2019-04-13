@@ -3,10 +3,12 @@ import random
 from typing import Dict, Text, Any
 
 import numpy as np
+import torch
 
 import agents.base_agent
 import agents.heuristic.random_agent
 import hs_config
+import specs
 
 
 class PassingAgent(agents.base_agent.Agent):
@@ -34,14 +36,15 @@ class HeuristicAgent(agents.base_agent.Bot):
     self.random_agent = agents.heuristic.random_agent.RandomAgent()
     self.passing_agent = PassingAgent()
 
-  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
+  def _choose(self, observation: np.ndarray, encoded_info: specs.Info):
     if self.level == 0:
-      return self.passing_agent.choose(observation, info)
+      return self.passing_agent.choose(observation, encoded_info)
 
     if random.random() < self.randomness:
-      return self.random_agent.choose(observation, info)
+      return self.random_agent.choose(observation, encoded_info)
 
-    possible_actions = info['original_info']['possible_actions']
+    possible_actions = encoded_info['original_info']['possible_actions']
+    assert encoded_info['possible_actions'].size(0) == 1
 
     if len(possible_actions) == 1:
       selected_action = possible_actions[0]
@@ -88,8 +91,9 @@ class HeuristicAgent(agents.base_agent.Bot):
       else:
         selected_action = actions[0]
 
-    for enc_action, action_obj in zip(info['possible_actions'], info['original_info']['possible_actions']):
+    for enc_action, action_obj in zip(torch.nonzero(encoded_info['possible_actions']),
+                                      encoded_info['original_info']['possible_actions']):
       if action_obj == selected_action:
-        return enc_action
+        return enc_action[1]
     else:
       raise Exception

@@ -3,16 +3,17 @@ from typing import Dict, Text, Any, Callable, Optional
 
 import numpy as np
 
+import specs
+
 
 class Agent(ABC):
   @abstractmethod
   def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     raise NotImplemented
 
-  def choose(self, observation: np.ndarray, info: Dict[Text, Any]):
-    import specs
-    specs.check_info_spec(info)
-    return self._choose(observation, info)
+  def choose(self, observation: np.ndarray, info: specs.Info):
+    # assert specs.check_info_spec(info)
+    return self._choose(observation, info['possible_actions'])
 
   def load_model(self, model_path=None):
     raise NotImplemented
@@ -29,16 +30,19 @@ class Bot(ABC):
   def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     raise NotImplemented
 
-  def choose(self, observation: np.ndarray, info: Dict[Text, Any]):
-    import environments.simulator
-    assert sorted(info.keys()) == ['original_info', 'possible_actions']
+  def choose(self, observation: np.ndarray, info: specs.Info):
+    assert set(info.keys()) == {*specs.INFO_KEYS, 'original_info'} or set(info.keys()) == {*specs.INFO_KEYS,
+                                                                                           *specs.OPTIONAL_INFO_KEYS,
+                                                                                           'original_info'}
     assert isinstance(info['original_info'], dict)
     assert isinstance(info['original_info']['possible_actions'], tuple)
-    assert isinstance(info['original_info']['possible_actions'][0], environments.simulator.HSsimulation.Action)
+    assert info['original_info']['possible_actions'][0].card is None
+    # import environments.simulator
+    # assert isinstance(info['original_info']['possible_actions'][0], environments.simulator.HSsimulation.Action)
 
-    assert isinstance(info['possible_actions'], tuple)
-    assert isinstance(info['possible_actions'][0], int)
+    assert specs.check_possible_actions(67, info['possible_actions'])
     return self._choose(observation, info)
 
-  def load_model(self, model_path=None):
-    raise NotImplemented
+
+def load_model(self, model_path=None):
+  raise NotImplemented
