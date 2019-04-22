@@ -7,12 +7,11 @@ import shutil
 import tempfile
 import time
 from collections import deque
-from typing import Text, Optional
+from typing import Text, Optional, Tuple
 
 import numpy as np
 import tensorboardX
 import torch
-import tqdm
 
 import agents.base_agent
 import game_utils
@@ -47,6 +46,10 @@ class PPOAgent(agents.base_agent.Agent):
     self._setup_logs(log_dir)
     self.log_dir = log_dir
     self.tensorboard = None
+    self.envs = None
+    self.eval_envs = None
+    self.validation_envs = None
+    self.enjoy_env = None
 
     self.num_inputs = num_inputs
     self.num_actions = num_possible_actions
@@ -112,7 +115,6 @@ class PPOAgent(agents.base_agent.Agent):
     try:
       os.makedirs(log_dir)
     except OSError:
-      # raise ValueError('log dir exists')
       files = glob.glob(os.path.join(log_dir, '*.monitor.csv'))
       for f in files:
         os.remove(f)
@@ -120,34 +122,23 @@ class PPOAgent(agents.base_agent.Agent):
     try:
       os.makedirs(eval_log_dir)
     except OSError:
-      # raise ValueError('log dir exists')
       files = glob.glob(os.path.join(eval_log_dir, '*.monitor.csv'))
       for f in files:
         os.remove(f)
 
   def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-            num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Text:
-    assert updates_offset >= 0
+            num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     self.update_experiment_logging()
+    return self._train(game_manager, checkpoint_file, num_updates, updates_offset)
 
-    print("[Train] Loading training environments")
-    envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir, hs_config.device,
-                         allow_early_resets=False)
-    print("[Train] Loading eval environments")
-    eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                              hs_config.device,
-                              allow_early_resets=True)
+  def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
+             num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+    assert updates_offset >= 0
+    envs, eval_envs, valid_envs = self.setup_envs(game_manager)
 
     if checkpoint_file:
       print('[Train] loading checkpoint:', checkpoint_file)
-      self.actor_critic, ob_rms = torch.load(checkpoint_file)
-      shared.utils.get_vec_normalize(envs).ob_rms = ob_rms
-
-      self.actor_critic.to(hs_config.device)
-      self.optimizer = torch.optim.Adam(
-        self.actor_critic.parameters(),
-        lr=hs_config.PPOAgent.adam_lr,
-      )
+      self.load_checkpoint(checkpoint_file, envs)
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
@@ -158,10 +149,11 @@ class PPOAgent(agents.base_agent.Agent):
     episode_rewards = deque(maxlen=10)
 
     start = time.time()
+    total_num_steps = None
+    ppo_update_num = None
 
-    for ppo_update_num in tqdm.trange(updates_offset, updates_offset + num_updates):
-
-      def stop_gathering(rews, step):
+    for ppo_update_num in range(updates_offset, updates_offset + num_updates):
+      def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
       self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
@@ -174,41 +166,87 @@ class PPOAgent(agents.base_agent.Agent):
       value_loss, action_loss, dist_entropy, policy_ratio, explained_variance = self.update(rollouts)
 
       rollouts.roll_over_last_transition()
-      total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps) - 1
-
-      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, total_num_steps, value_loss,
-                       policy_ratio, explained_variance)
+      total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
+      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
+                       explained_variance)
 
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
 
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1:
-        eval_rewards = self.eval_agent(envs, eval_envs)
-        test_performance = np.mean(eval_rewards)
-        self.tensorboard.add_scalar('Zeval/rewards', test_performance, ppo_update_num // self.eval_every)
-        if test_performance > hs_config.PPOAgent.winratio_cutoff:
+        performance = np.mean(self.eval_agent(envs, eval_envs))
+        self.tensorboard.add_scalar('eval_envs/rewards', performance, ppo_update_num)
+        if performance > hs_config.PPOAgent.winratio_cutoff:
+          print("[Train] early stopping at", ppo_update_num, performance)
           break
 
     checkpoint_file = self.save_model(envs, total_num_steps)
 
-    print("[Train] Loading heuristic environments")
     game_manager.set_heuristic_opponent()
-    eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                              hs_config.device, allow_early_resets=True)
+    eval_rewards = self.eval_agent(envs, valid_envs)
+    test_performance = float(np.mean(eval_rewards))
 
-    eval_rewards = self.eval_agent(envs, eval_envs)
-    test_performance = np.mean(eval_rewards)
-    self.tensorboard.add_scalar('Zeval/heuristic', test_performance, ppo_update_num // self.eval_every)
+    if test_performance > 0.9:
+      self.enjoy(game_manager, checkpoint_file)
 
-    envs.close()
-    eval_envs.close()
-    return checkpoint_file
+    return checkpoint_file, test_performance, ppo_update_num + 1
+
+  def load_checkpoint(self, checkpoint_file, envs):
+    self.actor_critic, ob_rms = torch.load(checkpoint_file)
+    shared.utils.get_vec_normalize(envs).ob_rms = ob_rms
+    self.actor_critic.to(hs_config.device)
+    self.optimizer = torch.optim.Adam(
+      self.actor_critic.parameters(),
+      lr=hs_config.PPOAgent.adam_lr,
+    )
+
+  def setup_envs(self, game_manager: game_utils.GameManager):
+
+    if self.envs is None:
+      print("[Train] Loading training environments")
+      self.envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                                hs_config.device, allow_early_resets=False)
+    else:
+      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents,
+                                                 opponents_obs_rmss=game_manager.opponent_obs_rmss)
+
+    if self.eval_envs is None:
+      print("[Train] Loading eval environments")
+      self.eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                                     hs_config.device, allow_early_resets=True)
+    else:
+      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents,
+                                                      opponents_obs_rmss=game_manager.opponent_obs_rmss)
+
+    if self.validation_envs is None:
+      print("[Train] Loading validation environments")
+      self.validation_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+                                           hs_config.device, allow_early_resets=True)
+    else:
+      self.get_last_env(self.validation_envs).set_opponents(opponents=game_manager.opponents,
+                                                            opponents_obs_rmss=game_manager.opponent_obs_rmss)
+
+    shared.utils.get_vec_normalize(self.envs).ob_rms = None
+    shared.utils.get_vec_normalize(self.eval_envs).ob_rms = None
+    shared.utils.get_vec_normalize(self.validation_envs).ob_rms = None
+    return self.envs, self.eval_envs, self.validation_envs
+
+  def get_last_env(self, env):
+    for _ in range(256):
+      if hasattr(env, 'vectorized_env'):
+        env = env.vectorized_env
+      else:
+        break
+    else:
+      raise AttributeError('Infinite loop')
+
+    return env
 
   def eval_agent(self, train_envs, eval_envs):
     vec_norm = shared.utils.get_vec_normalize(eval_envs)
-    if vec_norm is not None:
-      vec_norm.eval()
-      vec_norm.ob_rms = shared.utils.get_vec_normalize(train_envs).ob_rms
+    assert vec_norm is not None
+    vec_norm.eval()
+    vec_norm.ob_rms = shared.utils.get_vec_normalize(train_envs).ob_rms
 
     rewards = []
 
@@ -219,6 +257,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards
 
   def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False):
+
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -236,6 +275,7 @@ class PPOAgent(agents.base_agent.Agent):
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
       obs, reward, done, infos = envs.step(action)
+
       possible_actions = infos['possible_actions']
 
       if rollouts is not None:
@@ -246,11 +286,14 @@ class PPOAgent(agents.base_agent.Agent):
       if 'game_statistics' in infos:
         rewards.extend(i['outcome'].item() for i in infos['game_statistics'])
 
-  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, total_num_steps, value_loss,
-                  policy_ratio, explained_variance):
+      if record:
+        return replay
+
+  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
+                  explained_variance):
     end = time.time()
     if episode_rewards:
-      self.tensorboard.add_scalar('zdebug/steps_per_second', int(total_num_steps / (end - start)), time_step)
+      self.tensorboard.add_scalar('zdebug/steps_per_second', int(time_step / (end - start)), time_step)
       self.tensorboard.add_scalar('train/mean_reward', np.mean(episode_rewards), time_step)
 
     self.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
@@ -304,29 +347,30 @@ class PPOAgent(agents.base_agent.Agent):
     latest_checkpoint = checkpoints[-1]
     return latest_checkpoint
 
-  def enjoy(self, make_env, checkpoint_file):
-    env = make_vec_envs(make_env, hs_config.seed, num_processes=1, gamma=1, log_dir='/tmp/enjoy_log_dir',
-                        device=torch.device('cpu'), allow_early_resets=False)
+  def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
+    if self.enjoy_env is None:
+      print("[Train] Loading training environments")
+      self.enjoy_env = make_vec_envs(game_manager, num_processes=1, gamma=0, log_dir=None, device=hs_config.device,
+                                     allow_early_resets=True)
+    else:
+      self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents,
+                                                     opponent_obs_rmss=game_manager.opponent_obs_rmss)
 
     # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
-      self.actor_critic, ob_rms = torch.load(checkpoint_file)
+      self.load_checkpoint(checkpoint_file, self.enjoy_env)
 
-      vec_norm = shared.utils.get_vec_normalize(env)
-      if vec_norm is not None:
-        vec_norm.eval()
-        vec_norm.ob_rms = ob_rms
+    obs, _, _, infos = self.enjoy_env.reset()
 
-    obs, _, _, infos = env.reset()
-    possible_actionss = torch.zeros(size=(len(infos),) + infos[0]['possible_actions'].shape)
-
-    env.render(info=infos[0])
+    self.enjoy_env.render()
     while True:
       with torch.no_grad():
-        value, action, _, _ = self.actor_critic(obs, None, None, possible_actionss)
-      obs, reward, done, infos = env.step(action)
+        value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
+      obs, reward, done, infos = self.enjoy_env.step(action)
+      self.enjoy_env.render()
 
-      env.render(info=infos[0])
+      if done:
+        break
 
   def update(self, rollouts: RolloutStorage):
     advantages = rollouts.get_advantages()
@@ -394,21 +438,30 @@ class PPOAgent(agents.base_agent.Agent):
 
     return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch
 
-  def self_play(self, game_manger: game_utils.GameManager, checkpoint_file):
-    # checkpoint_file = self.get_latest_checkpoint_file()
-    checkpoint_file = None
+  def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
+    self.update_experiment_logging()
+    checkpoint_file = self.get_latest_checkpoint_file()
 
     # https://openai.com/blog/openai-five/
     updates_so_far = 0
-    updates_schedule = [1, ] + [hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates
+    updates_schedule = [hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates
+    try:
+      for self_play_iter, num_updates in enumerate(updates_schedule):
+        print("Iter", self_play_iter)
+        checkpoint_file, win_ratio, updates_so_far = self._train(
+          game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
 
-    for self_play_iter, num_updates in enumerate(updates_schedule):
-      print("Iter", self_play_iter)
-      checkpoint_file = self.train(game_manger, checkpoint_file=checkpoint_file, num_updates=num_updates,
-                                   updates_offset=updates_so_far)
+        shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
+        self.tensorboard.add_scalar('eval_envs/heuristic', win_ratio, self_play_iter)
+        # self.enjoy(game_manager, checkpoint_file)
 
-      shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
-      game_manger.update_learning_opponent(checkpoint_file)
+        game_manager.add_learning_opponent(checkpoint_file)
+
+    except KeyboardInterrupt:
+      self.eval_envs.close()
+      self.envs.close()
+      self.validation_envs.close()
+      self.tensorboard.close()
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.tensorboard.close()

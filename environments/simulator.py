@@ -257,9 +257,23 @@ class HSsimulation(object):
     def __repr__(self):
       if self.card is None:
         return "PASS"
-      target = None if self.params['target'] is None else self.params['target'].data.name
-      return "{}({},{})->{}".format(
-        self.card.data.name, self.card.atk, self.card.health, target)
+      target = self.params['target']
+      src = '{}({},{})'.format(self.card.data.name, self.card.atk, self.card.health)
+
+      if target is None:
+        representation = "PLAY({})".format(src)
+      else:
+        tar = '{}({},{})'.format(target.data.name, target.atk, target.health)
+        representation = 'ATK({},{})'.format(src, tar)
+
+        if self.card.atk >= target.health and target.atk >= self.card.health:
+          representation += ' BOTH die'
+        elif target.atk >= self.card.health:
+          representation += ' ATK dies'
+        elif self.card.atk >= target.health:
+          representation += ' DEF dies'
+
+      return str(self.card.controller)[0].lower() + representation
 
     def encode(self):
       state = {

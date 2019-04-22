@@ -24,12 +24,14 @@ def worker(remote, parent_remote, env_fn_wrapper):
         ob, reward, done, info = env.reset()
         remote.send((ob, reward, done, info))
       elif cmd == 'render':
-        remote.send(env.render(mode='rgb_array'))
+        remote.send(env.render(data))
       elif cmd == 'close':
         remote.close()
         break
       elif cmd == 'get_spaces_spec':
         remote.send((env.observation_space, env.action_space, env.spec))
+      elif cmd == 'set_opponents':
+        env.set_opponents(**data)
       else:
         raise NotImplementedError
   except KeyboardInterrupt:
@@ -69,20 +71,26 @@ class SubprocVecEnv(VecEnv):
     self.viewer = None
     VecEnv.__init__(self, len(env_fns), observation_space, action_space)
 
+  def set_opponents(self, opponents, opponents_obs_rmss):
+    assert self._assert_not_closed()
+
+    for remote in self.remotes:
+      remote.send(('set_opponents', {'opponents': opponents, 'opponent_obs_rmss': opponents_obs_rmss}))
+
   def step_async(self, actions):
-    self._assert_not_closed()
+    assert self._assert_not_closed()
     for remote, action in zip(self.remotes, actions):
       remote.send(('step', action))
     self.waiting = True
 
   def step_wait(self):
-    self._assert_not_closed()
+    assert self._assert_not_closed()
     results = self.gather_transition()
     self.waiting = False
     return results
 
   def reset(self):
-    self._assert_not_closed()
+    assert self._assert_not_closed()
     for remote in self.remotes:
       remote.send(('reset', None))
     return self.gather_transition()
@@ -102,15 +110,16 @@ class SubprocVecEnv(VecEnv):
     for p in self.ps:
       p.join()
 
-  def get_images(self):
-    self._assert_not_closed()
+  def render(self, mode='text'):
+    assert self._assert_not_closed()
     for pipe in self.remotes:
-      pipe.send(('render', None))
+      pipe.send(('render', mode))
     imgs = [pipe.recv() for pipe in self.remotes]
     return imgs
 
   def _assert_not_closed(self):
     assert not self.closed, "Trying to operate on a SubprocVecEnv after calling close()"
+    return True
 
   def __del__(self):
     if not self.closed:

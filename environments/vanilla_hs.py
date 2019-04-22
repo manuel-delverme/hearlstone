@@ -2,8 +2,9 @@ import collections
 import logging
 import pprint
 import random
-from typing import Tuple, Dict, Text, Any
+from typing import Tuple, Dict, Text, Any, Iterable
 
+import baselines.common.running_mean_std
 import fireplace
 import fireplace.logging
 import gym.spaces
@@ -26,7 +27,6 @@ def get_hp(card):
     return card.hp
   except AttributeError:
     return card.health
-  raise AttributeError
 
 
 def episodic_log(func):
@@ -80,11 +80,17 @@ class VanillaHS(base_env.BaseEnv):
     if seed is not None:
       random.seed(seed + extra_seed)
       np.random.seed(seed + extra_seed)
-    self.opponent_obs_rms = None
-    self.gui = None
     self.opponent = None
+    self.opponents = [None, ]
+    self.opponent_obs_rms = None
+    self.opponent_obs_rmss = [None, ]
+
+    self.gui = None
+    self.last_info = None
     self.id_to_action = [(-1, -1), ]
-    self.action_history = collections.deque(maxlen=5)
+    self.action_history = collections.deque(maxlen=2)
+    self.action_history.append([])
+
     for src_idx in range(max_cards_in_hand):
       self.id_to_action.append((src_idx, -1))
     for src_idx in range(max_cards_in_board):
@@ -125,7 +131,7 @@ class VanillaHS(base_env.BaseEnv):
 
     self.reinit_game()
 
-    obs, _, _, _ = self.gather_transition()
+    obs, _, _, _ = self.gather_transition(autoreset=False)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
     self.action_space = gym.spaces.Discrete(self.num_actions)
 
@@ -155,7 +161,7 @@ class VanillaHS(base_env.BaseEnv):
     return tuple(encoded_actions)
 
   @episodic_log
-  def decode_action(self, encoded_action: int):
+  def decode_action(self, encoded_action: int) -> simulator.HSsimulation.Action:
     assert isinstance(encoded_action, (int, np.int64))
     return self.lookup_action_id_to_obj[encoded_action]
 
@@ -192,6 +198,14 @@ class VanillaHS(base_env.BaseEnv):
       starting_hp=self.starting_hp,
       sort_decks=sort_decks,
     )
+    if random.random() < 0.2:
+      opponent_idx = random.randint(0, len(self.opponents) - 1)
+    else:
+      opponent_idx = -1
+
+    self.opponent = self.opponents[opponent_idx]
+    self.opponent_obs_rms = self.opponent_obs_rmss[opponent_idx]
+
     try:
       self.opponent.set_simulation(self.simulation)
     except AttributeError:
@@ -205,9 +219,9 @@ class VanillaHS(base_env.BaseEnv):
   def game_value(self):
     player = self.simulation.player
     if player.playstate == PlayState.WON:
-      return +0.5
+      return 1
     elif player.playstate == PlayState.LOST:
-      return -0.5
+      return 0
     elif player.playstate == PlayState.TIED:
       raise ValueError
     elif player.playstate == PlayState.INVALID:
@@ -231,27 +245,31 @@ class VanillaHS(base_env.BaseEnv):
   def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
 
-  def render(self, mode='human', info=None):
-    if info is None:
-      raise ValueError
-
+  def render(self, mode='human'):
     if self.gui is None:
       self.gui = gui.GUI()
 
-    obs = info['observation']
+    obs = self.last_info['observation']
     offset, board, hand, mana = self.render_player(obs)
     self.gui.draw_agent(board=board, hand=hand)
 
     offset, board, hand, mana = self.render_player(obs, offset)
     self.gui.draw_opponent(board=board, hand=hand)
 
-    info = info.copy()
+    info = self.last_info.copy()
     info['possible_actions'] = np.argwhere(info['possible_actions']).flatten()
     action_history = info['action_history']
     del info['action_history']
     del info['observation']
-    self.gui.log(action_history, row=1)
-    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=2, multiline=True)
+    self.gui.log(action_history[0], row=1)
+    if len(action_history) > 1:
+      self.gui.log(action_history[1], row=2)
+    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=3, multiline=True)
+
+    if mode == 'human':
+      self.gui.screen.getch()
+    else:
+      raise NotImplementedError
 
   def render_player(self, obs, offset=0):
     hand = []
@@ -277,8 +295,9 @@ class VanillaHS(base_env.BaseEnv):
     self.reinit_game(shuffle_deck)
 
     self.action_history.clear()
+    self.action_history.append([])
     self.games_played += 1
-    return self.gather_transition()
+    return self.gather_transition(autoreset=False)
 
   @episodic_log
   def calculate_reward(self):
@@ -293,9 +312,14 @@ class VanillaHS(base_env.BaseEnv):
     return np.array(reward, dtype=np.float32)
 
   @episodic_log
-  def set_opponent(self, opponent: agents.base_agent.Agent, opponent_obs_rms=None):
-    self.opponent = opponent
-    self.opponent_obs_rms = opponent_obs_rms
+  def set_opponents(self, opponents: Iterable[agents.base_agent.Agent], opponent_obs_rmss=None):
+    assert [isinstance(opponent, (agents.base_agent.Agent, agents.base_agent.Bot)) for opponent in opponents]
+    assert [
+      (opponent_obs_rms is None or isinstance(opponent_obs_rms, (baselines.common.running_mean_std.RunningMeanStd,)))
+      for opponent_obs_rms in opponent_obs_rmss]
+
+    self.opponents = opponents
+    self.opponent_obs_rmss = opponent_obs_rmss
 
   @episodic_log
   def play_opponent_turn(self):
@@ -306,7 +330,7 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def play_opponent_action(self):
     assert self.simulation.game.current_player.controller.name == 'Opponent'
-    observation, _, terminal, encoded_info = self.gather_transition()
+    observation, _, terminal, encoded_info = self.gather_transition(autoreset=False)
 
     if self.opponent_obs_rms is not None:
       observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
@@ -321,14 +345,16 @@ class VanillaHS(base_env.BaseEnv):
     encoded_info['original_info'] = self.game_info()
 
     action = self.opponent.choose(observation, encoded_info)
-    self.step(action, autoreset=False)
-    trans = self.gather_transition()
-    return trans
+    return self.step(action, autoreset=False)
 
   @episodic_log
   def step(self, encoded_action, autoreset=True):
     action = self.decode_action(int(encoded_action))
-    self.action_history.append(repr(action))
+
+    self.action_history[-1].append(repr(action))
+    if action.card is None:
+      self.action_history.append([])
+
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
       if encoded_action == 0:
@@ -346,25 +372,10 @@ class VanillaHS(base_env.BaseEnv):
     except GameOver as e:
       if not self.simulation.game.ended:
         raise e
-
-    game_observation, reward, terminal, info = self.gather_transition()
-
-    if terminal:
-      info['game_statistics'] = {
-        'num_games': self.games_played,
-        'num_steps': self.episode_steps,
-        'turn': self.simulation.game.turn,
-        'outcome': reward,
-      }
-      if autoreset:
-        new_obs, _, _, new_info = self.reset()
-        game_observation = new_obs
-        info['possible_actions'] = new_info['possible_actions']
-        info['observation'] = new_info['observation']
-    return game_observation, reward, terminal, info
+    return self.gather_transition(autoreset)
 
   @episodic_log
-  def gather_transition(self) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
+  def gather_transition(self, autoreset) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
 
@@ -381,12 +392,32 @@ class VanillaHS(base_env.BaseEnv):
     enc_possible_actions = self.encode_actions(possible_actions)
 
     possible_actions = utils.one_hot_actions((enc_possible_actions,), self.num_actions)
+
+    history = []
+    for turn in self.action_history:
+      turn_history = ", ".join(reversed(turn))
+      history.append(turn_history)
+
     info = {
       'possible_actions': possible_actions.squeeze(),
       'observation': game_observation,
       'reward': reward,
-      'action_history': ", ".join(reversed(self.action_history)),
+      'action_history': list(reversed(history)),
     }
+    if terminal:
+      info['game_statistics'] = {
+        'num_games': self.games_played,
+        'num_steps': self.episode_steps,
+        'turn': self.simulation.game.turn,
+        'outcome': reward,
+      }
+      if autoreset:
+        new_obs, _, _, new_info = self.reset()
+        game_observation = new_obs
+        info['possible_actions'] = new_info['possible_actions']
+        info['observation'] = new_info['observation']
+
+    self.last_info = info
     return game_observation, reward, terminal, info
 
   @episodic_log
@@ -422,4 +453,4 @@ class VanillaHS(base_env.BaseEnv):
       del self._gui
 
   def __str__(self):
-    return 'VanillaHS:{}'.format(self.opponent.level, )
+    return 'VanillaHS:{}'.format(self.opponents[-1].level, )

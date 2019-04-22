@@ -21,16 +21,16 @@ class PassingAgent(agents.base_agent.Agent):
 
 class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self, level: int = hs_config.VanillaHS.level):
-    assert -1 < level < 6
+    assert -1 < level < 7
     super().__init__()
     self.randomness = [
-      None,
-      1,
-      0.75,
-      0.5,
-      0.25,
-      0.125,
-      0,
+      None,  # 0 is passing
+      1,  # 1 is always random
+      0.75,  # 2
+      0.5,  # 3
+      0.25,  # 4
+      0.125,  # 5
+      0,  # 6 is no random
     ][level]
     self.level = level
     self.random_agent = agents.heuristic.random_agent.RandomAgent()

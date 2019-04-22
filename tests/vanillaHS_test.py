@@ -2,17 +2,18 @@ import random
 
 import numpy as np
 
-from environments.vanilla_hs import VanillaHS
 from agents.heuristic.hand_coded import HeuristicAgent
-
+from environments.vanilla_hs import VanillaHS
 
 env = VanillaHS(skip_mulligan=True)
-env.set_opponent(HeuristicAgent(level=1))
+env.set_opponents(HeuristicAgent(level=1))
+
 
 def HSenv_test():
   s0, reward, terminal, info = env.reset()
   for _ in range(3):
     done = False
+    r = None
     while not done:
       possible_actions = np.argwhere(info['possible_actions'])
       random_act = random.choice(possible_actions)
@@ -21,12 +22,13 @@ def HSenv_test():
 
 
 def test_loss():
-  s0, reward, terminal, info = env.reset()
+  env.reset()
   for _ in range(3):
     done = False
+    r = None
     while not done:
       s, r, done, info = env.step(0)
-      env.render(info=info)
+      env.render()
     assert r == -1
 
 

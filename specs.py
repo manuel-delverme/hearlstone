@@ -15,7 +15,7 @@ def check_info_spec(info: Info):
   if INFO_KEYS != set(info.keys()):
     assert set(info.keys()).difference(INFO_KEYS) == OPTIONAL_INFO_KEYS, set(info.keys())
 
-  assert isinstance(info['action_history'], str)
+  assert isinstance(info['action_history'], list)
   assert isinstance(info['observation'], np.ndarray)
   assert isinstance(info['possible_actions'], np.ndarray)
   assert isinstance(info['reward'], np.ndarray)

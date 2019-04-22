@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Callable, Text
+from typing import Callable, Text, Optional
 
 import baselines
 import numpy as np
@@ -105,9 +105,9 @@ def _make_env(
   return _thunk
 
 
-def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, gamma: float,
-                  log_dir: Text,
-                  device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
+def make_vec_envs(
+  load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, gamma: float, log_dir: Optional[Text],
+  device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
   envs = [_make_env(load_env, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
 
   if len(envs) == 1 or hs_config.VanillaHS.debug:
@@ -118,3 +118,14 @@ def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_
   normalized_envs = VecNormalize(vectorized_envs, gamma=gamma)
   pytorch_envs = PyTorchCompatibilityWrapper(normalized_envs, device)
   return pytorch_envs
+
+
+class StdOutWrapper:
+  text = ""
+
+  def write(self, txt):
+    self.text += txt
+    self.text = '\n'.join(self.text.split('\n')[-30:])
+
+  def get_text(self, beg, end):
+    return '\n'.join(self.text.split('\n')[beg:end])

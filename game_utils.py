@@ -1,9 +1,11 @@
 import tempfile
 
+import baselines.common.running_mean_std
 import torch
 
 import agents.base_agent
-import agents.heuristic.random_agent
+import agents.heuristic.hand_coded
+import agents.learning.models.randomized_policy
 import agents.learning.ppo_agent
 import hs_config
 
@@ -11,32 +13,45 @@ import hs_config
 class GameManager(object):
   def __init__(self, seed=None, env_id=None, log_dir=None):
     self.seed = seed
-    self.game_class = hs_config.VanillaHS.get_game_mode()
+    self.use_heuristic_opponent = True
 
-    self.opponent = agents.heuristic.random_agent.RandomAgent()
-    self.opponent_obs_rms = None
+    self.game_class = hs_config.VanillaHS.get_game_mode()
+    self.opponents = [agents.heuristic.hand_coded.HeuristicAgent(), ]
+    self.opponent_obs_rmss = [None, ]
 
   def __call__(self, extra_seed):
-    assert isinstance(self.opponent, (agents.base_agent.Bot, agents.base_agent.Agent))
     hs_game = self.game_class(seed=self.seed, extra_seed=extra_seed)
-    hs_game.set_opponent(opponent=self.opponent, opponent_obs_rms=self.opponent_obs_rms)
+
+    if self.use_heuristic_opponent:
+      hs_game.set_opponents(opponents=[hs_config.VanillaHS.get_opponent()()], opponent_obs_rmss=[None, ])
+    else:
+      hs_game.set_opponents(opponents=self.opponents, opponent_obs_rmss=self.opponent_obs_rmss)
+
     return hs_game
 
-  def update_learning_opponent(self, checkpoint_file):
-    opponent_network, self.opponent_obs_rms = torch.load(checkpoint_file)
+  def add_learning_opponent(self, checkpoint_file):
+    self.use_heuristic_opponent = False
+
+    opponent_network, opponent_obs_rms = torch.load(checkpoint_file)
+
+    assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
+    assert (opponent_obs_rms is None or isinstance(opponent_obs_rms,
+                                                   baselines.common.running_mean_std.RunningMeanStd)), opponent_obs_rms
 
     # return agents.learning.ppo_agent.PPOAgent
-    self.opponent = agents.learning.ppo_agent.PPOAgent(
+    opponent = agents.learning.ppo_agent.PPOAgent(
       opponent_network.num_inputs, opponent_network.num_possible_actions, log_dir=tempfile.mktemp())
 
-    del self.opponent.optimizer
+    del opponent.optimizer
     opponent_network.eval()
     for network in (opponent_network.actor, opponent_network.critic, opponent_network.actor_logits):
       for param in network.parameters():
         param.requires_gradient = False
 
-    self.opponent.actor_critic = opponent_network
+    opponent.actor_critic = opponent_network
+
+    self.opponents.append(opponent)
+    self.opponent_obs_rmss.append(opponent_obs_rms)
 
   def set_heuristic_opponent(self):
-    self.opponent = hs_config.VanillaHS.get_opponent()()
-    self.opponent_obs_rms = None
+    self.use_heuristic_opponent = True
