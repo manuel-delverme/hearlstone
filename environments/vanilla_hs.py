@@ -30,7 +30,7 @@ def get_hp(card):
 
 
 def episodic_log(func):
-  if not hs_config.VanillaHS.debug:
+  if not hs_config.DEBUG:
     return func
 
   def wrapper(*args, **kwargs):
@@ -104,7 +104,7 @@ class VanillaHS(base_env.BaseEnv):
     print("Initializing card database")
     db, xml = hearthstone.cardxml.load()
     self.log_call_depth = 0
-    if hs_config.VanillaHS.debug:
+    if hs_config.DEBUG:
       self.log = collections.deque(maxlen=2)
       logger = logging.getLogger('fireplace')
       logger.setLevel(logging.INFO)
@@ -191,14 +191,14 @@ class VanillaHS(base_env.BaseEnv):
       raise e
 
   @episodic_log
-  def reinit_game(self, sort_decks=False):
+  def reinit_game(self):
     self.simulation = simulator.HSsimulation(
       skip_mulligan=self.skip_mulligan,
       cheating_opponent=self.cheating_opponent,
       starting_hp=self.starting_hp,
-      sort_decks=sort_decks,
+      sort_decks=self.sort_decks,
     )
-    if random.random() < 0.2:
+    if random.random() < hs_config.VanillaHS.old_opponent_prob:
       opponent_idx = random.randint(0, len(self.opponents) - 1)
     else:
       opponent_idx = -1
@@ -291,8 +291,8 @@ class VanillaHS(base_env.BaseEnv):
     return offset, [board[-1], ] + board[:-1], hand, mana
 
   @episodic_log
-  def reset(self, shuffle_deck=hs_config.VanillaHS.sort_decks):
-    self.reinit_game(shuffle_deck)
+  def reset(self):
+    self.reinit_game()
 
     self.action_history.clear()
     self.action_history.append([])

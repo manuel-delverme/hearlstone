@@ -1,6 +1,7 @@
 import numpy as np
-from .vec_env import VecEnv
+
 from .util import copy_obs_dict, dict_to_obs, obs_space_info
+from .vec_env import VecEnv
 
 
 class DummyVecEnv(VecEnv):
@@ -77,6 +78,9 @@ class DummyVecEnv(VecEnv):
 
   def get_images(self):
     return [env.render(mode='rgb_array') for env in self.envs]
+
+  def set_opponents(self, *args, **kwargs):
+    return [env.set_opponents(*args, **kwargs) for env in self.envs]
 
   def render(self, **kwargs):
     if self.num_envs == 1:

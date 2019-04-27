@@ -286,9 +286,6 @@ class PPOAgent(agents.base_agent.Agent):
       if 'game_statistics' in infos:
         rewards.extend(i['outcome'].item() for i in infos['game_statistics'])
 
-      if record:
-        return replay
-
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
                   explained_variance):
     end = time.time()
@@ -445,15 +442,19 @@ class PPOAgent(agents.base_agent.Agent):
     # https://openai.com/blog/openai-five/
     updates_so_far = 0
     updates_schedule = [hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates
+    old_win_ratio = -1
     try:
       for self_play_iter, num_updates in enumerate(updates_schedule):
         print("Iter", self_play_iter)
-        checkpoint_file, win_ratio, updates_so_far = self._train(
+        new_checkpoint_file, win_ratio, updates_so_far = self._train(
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
 
-        shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
         self.tensorboard.add_scalar('eval_envs/heuristic', win_ratio, self_play_iter)
-        # self.enjoy(game_manager, checkpoint_file)
+        if win_ratio > old_win_ratio:
+          checkpoint_file = new_checkpoint_file
+          shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
+          self.tensorboard.add_scalar('eval_envs/current_heuristic', win_ratio, self_play_iter)
+          old_win_ratio = win_ratio
 
         game_manager.add_learning_opponent(checkpoint_file)
 

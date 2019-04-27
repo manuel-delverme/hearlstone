@@ -110,7 +110,7 @@ def make_vec_envs(
   device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
   envs = [_make_env(load_env, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
 
-  if len(envs) == 1 or hs_config.VanillaHS.debug:
+  if len(envs) == 1 or hs_config.VanillaHS.no_subprocess:
     vectorized_envs = DummyVecEnv(envs)
   else:
     vectorized_envs = SubprocVecEnv(envs)

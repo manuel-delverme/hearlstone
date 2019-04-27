@@ -8,10 +8,22 @@ import fireplace.game
 import numpy as np
 from fireplace.game import PlayState
 from fireplace.player import Player
-from hearthstone.enums import CardClass
+from hearthstone.enums import CardClass, Zone
 
 import hs_config
 from shared import utils
+
+
+def can_attack(self):
+  if not self._zone == Zone.PLAY:
+    return False
+  if not self.attack_targets:
+    return False
+  if self.exhausted:
+    return False
+  if not self.atk:
+    return False
+  return True
 
 
 class CoinRules:
@@ -127,10 +139,10 @@ class HSsimulation(object):
       self.player2._start_hand_size = 1
     else:
       self.player1.max_hand_size = self._MAX_CARDS_IN_HAND
-      self.player1._start_hand_size = self._MAX_CARDS_IN_HAND - 1
+      # self.player1._start_hand_size = self._MAX_CARDS_IN_HAND - 1
 
       self.player2.max_hand_size = self._MAX_CARDS_IN_HAND
-      self.player2._start_hand_size = self._MAX_CARDS_IN_HAND - 1
+      # self.player2._start_hand_size = self._MAX_CARDS_IN_HAND - 1
 
     self.cheating_opponent = cheating_opponent
 
@@ -219,7 +231,7 @@ class HSsimulation(object):
           actions.append(self.Action(card, card.play, {'target': None}, self))
 
       for character in self.game.current_player.characters:
-        if character.can_attack():
+        if can_attack(character):
           for enemy_char in character.targets:
             actions.append(
               self.Action(character, character.attack, {'target': enemy_char},
@@ -429,7 +441,7 @@ class HSsimulation(object):
       card_dict['can_attack'] = None
 
     # crash if skipping important data
-    if hs_config.VanillaHS.debug:
+    if hs_config.DEBUG:
       for k in self._skipped:
         try:
           value = card_obj.__getattribute__(k)
@@ -462,7 +474,7 @@ class HSsimulation(object):
     if card_obj is None:
       return np.array((-1, -1, -1))
     else:
-      return np.array((card_obj.atk, card_obj.health, card_obj.can_attack()))
+      return np.array((card_obj.atk, card_obj.health, can_attack(card_obj)))
 
   @staticmethod
   def entity_to_vec(entity):

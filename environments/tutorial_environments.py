@@ -1,8 +1,8 @@
 import fireplace.cards
 
-import hs_config
-import environments.vanilla_hs
 import agents.heuristic.hand_coded
+import environments.vanilla_hs
+import hs_config
 
 
 class TradingHS(environments.vanilla_hs.VanillaHS):
@@ -45,8 +45,8 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     self.opponent = agents.heuristic.hand_coded.PassingAgent()
     self.minions_in_board = level
 
-  def reinit_game(self, sort_decks=False):
-    super(TradingHS, self).reinit_game(sort_decks)
+  def reinit_game(self):
+    super(TradingHS, self).reinit_game(self.sort_decks)
 
     for minion in self.player_board:
       self.simulation.player.summon(minion)

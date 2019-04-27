@@ -24,8 +24,9 @@ BIG_NUMBER = 9999999999999
 
 
 class VanillaHS:
+  no_subprocess = True
+  old_opponent_prob = 0.2
   sort_decks = False
-  debug = False
   normalize = True
   starting_hp = 30
 
@@ -77,7 +78,7 @@ class PPOAgent:
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
-  num_env_steps = int(1e5)
+  num_env_steps = int(3e4)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
