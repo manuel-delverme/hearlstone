@@ -74,7 +74,7 @@ class PPOAgent:
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 2 if DEBUG else 10  # number of CPU processes
+  num_processes = 2 if DEBUG else 8  # number of CPU processes
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 

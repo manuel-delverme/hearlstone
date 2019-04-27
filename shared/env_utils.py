@@ -1,12 +1,12 @@
 from collections import defaultdict
 from typing import Callable, Text, Optional
 
-import baselines
 import numpy as np
 import torch
-from baselines.common.vec_env import VecEnvWrapper
-from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
+from baselines.common import vec_env
+from baselines_repo.baselines.common.vec_env import VecEnvWrapper
 from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
+from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
 
 import environments.base_env
@@ -53,7 +53,7 @@ class VecNormalize(_VecNormalize):
 
 
 class PyTorchCompatibilityWrapper(VecEnvWrapper):
-  def __init__(self, venv: baselines.common.vec_env.VecEnv, device: torch.device):
+  def __init__(self, venv: vec_env.VecEnv, device: torch.device):
     super(PyTorchCompatibilityWrapper, self).__init__(venv)
     self.device = device
 

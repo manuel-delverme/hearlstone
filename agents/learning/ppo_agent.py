@@ -208,7 +208,7 @@ class PPOAgent(agents.base_agent.Agent):
                                 hs_config.device, allow_early_resets=False)
     else:
       self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents,
-                                                 opponents_obs_rmss=game_manager.opponent_obs_rmss)
+                                                 opponent_obs_rmss=game_manager.opponent_obs_rmss)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -216,7 +216,7 @@ class PPOAgent(agents.base_agent.Agent):
                                      hs_config.device, allow_early_resets=True)
     else:
       self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents,
-                                                      opponents_obs_rmss=game_manager.opponent_obs_rmss)
+                                                      opponent_obs_rmss=game_manager.opponent_obs_rmss)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
@@ -224,7 +224,7 @@ class PPOAgent(agents.base_agent.Agent):
                                            hs_config.device, allow_early_resets=True)
     else:
       self.get_last_env(self.validation_envs).set_opponents(opponents=game_manager.opponents,
-                                                            opponents_obs_rmss=game_manager.opponent_obs_rmss)
+                                                            opponent_obs_rmss=game_manager.opponent_obs_rmss)
 
     shared.utils.get_vec_normalize(self.envs).ob_rms = None
     shared.utils.get_vec_normalize(self.eval_envs).ob_rms = None
