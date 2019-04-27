@@ -24,7 +24,7 @@ BIG_NUMBER = 9999999999999
 
 
 class VanillaHS:
-  no_subprocess = True
+  no_subprocess = False
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True

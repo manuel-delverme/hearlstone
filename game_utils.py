@@ -5,6 +5,7 @@ import torch
 
 import agents.base_agent
 import agents.heuristic.hand_coded
+import agents.heuristic.random_agent
 import agents.learning.models.randomized_policy
 import agents.learning.ppo_agent
 import hs_config
@@ -16,8 +17,8 @@ class GameManager(object):
     self.use_heuristic_opponent = True
 
     self.game_class = hs_config.VanillaHS.get_game_mode()
-    self.opponents = [agents.heuristic.hand_coded.HeuristicAgent(), ]
-    self.opponent_obs_rmss = [None, ]
+    self.opponents = [agents.heuristic.random_agent.RandomAgent(), ]
+    self.opponent_normalization_factors = [None]
 
   def __call__(self, extra_seed):
     hs_game = self.game_class(seed=self.seed, extra_seed=extra_seed)
@@ -25,7 +26,7 @@ class GameManager(object):
     if self.use_heuristic_opponent:
       hs_game.set_opponents(opponents=[hs_config.VanillaHS.get_opponent()()], opponent_obs_rmss=[None, ])
     else:
-      hs_game.set_opponents(opponents=self.opponents, opponent_obs_rmss=self.opponent_obs_rmss)
+      hs_game.set_opponents(opponents=self.opponents, opponent_obs_rmss=self.opponent_normalization_factors)
 
     return hs_game
 
@@ -51,7 +52,7 @@ class GameManager(object):
     opponent.actor_critic = opponent_network
 
     self.opponents.append(opponent)
-    self.opponent_obs_rmss.append(opponent_obs_rms)
+    self.opponent_normalization_factors.append(opponent_obs_rms)
 
   def set_heuristic_opponent(self):
     self.use_heuristic_opponent = True

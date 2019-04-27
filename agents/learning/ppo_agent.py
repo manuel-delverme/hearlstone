@@ -175,7 +175,7 @@ class PPOAgent(agents.base_agent.Agent):
 
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1:
         performance = np.mean(self.eval_agent(envs, eval_envs))
-        self.tensorboard.add_scalar('eval_envs/rewards', performance, ppo_update_num)
+        self.tensorboard.add_scalar('train/eval_performance', performance, ppo_update_num)
         if performance > hs_config.PPOAgent.winratio_cutoff:
           print("[Train] early stopping at", ppo_update_num, performance)
           break
@@ -208,7 +208,7 @@ class PPOAgent(agents.base_agent.Agent):
                                 hs_config.device, allow_early_resets=False)
     else:
       self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents,
-                                                 opponent_obs_rmss=game_manager.opponent_obs_rmss)
+                                                 opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -216,7 +216,7 @@ class PPOAgent(agents.base_agent.Agent):
                                      hs_config.device, allow_early_resets=True)
     else:
       self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents,
-                                                      opponent_obs_rmss=game_manager.opponent_obs_rmss)
+                                                      opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
@@ -224,7 +224,7 @@ class PPOAgent(agents.base_agent.Agent):
                                            hs_config.device, allow_early_resets=True)
     else:
       self.get_last_env(self.validation_envs).set_opponents(opponents=game_manager.opponents,
-                                                            opponent_obs_rmss=game_manager.opponent_obs_rmss)
+                                                            opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     shared.utils.get_vec_normalize(self.envs).ob_rms = None
     shared.utils.get_vec_normalize(self.eval_envs).ob_rms = None
@@ -290,8 +290,12 @@ class PPOAgent(agents.base_agent.Agent):
                   explained_variance):
     end = time.time()
     if episode_rewards:
-      self.tensorboard.add_scalar('zdebug/steps_per_second', int(time_step / (end - start)), time_step)
-      self.tensorboard.add_scalar('train/mean_reward', np.mean(episode_rewards), time_step)
+      fps = int(time_step / (end - start))
+      if fps > 1000:
+        fps = float('nan')
+
+      self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
+      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards), time_step)
 
     self.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
     self.tensorboard.add_scalar('train/value_loss', value_loss, time_step)
@@ -302,9 +306,9 @@ class PPOAgent(agents.base_agent.Agent):
     #  >= 1 good ev; =< 0 null predictor
     self.tensorboard.add_scalar('train/explained_variance', explained_variance, time_step)
 
-    self.tensorboard.add_scalar('losses/entropy', dist_entropy * self.entropy_coeff, time_step)
-    self.tensorboard.add_scalar('losses/value_loss', value_loss * self.value_loss_coeff, time_step)
-    self.tensorboard.add_scalar('losses/action_loss', action_loss, time_step)
+    self.tensorboard.add_scalar('zlosses/entropy', dist_entropy * self.entropy_coeff, time_step)
+    self.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
+    self.tensorboard.add_scalar('zlosses/action_loss', action_loss, time_step)
 
   def save_model(self, envs, total_num_steps):
     try:
@@ -351,7 +355,7 @@ class PPOAgent(agents.base_agent.Agent):
                                      allow_early_resets=True)
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents,
-                                                     opponent_obs_rmss=game_manager.opponent_obs_rmss)
+                                                     opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
@@ -437,7 +441,9 @@ class PPOAgent(agents.base_agent.Agent):
 
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
     self.update_experiment_logging()
-    checkpoint_file = self.get_latest_checkpoint_file()
+
+    if checkpoint_file is None:
+      checkpoint_file = self.get_latest_checkpoint_file()
 
     # https://openai.com/blog/openai-five/
     updates_so_far = 0
@@ -445,20 +451,21 @@ class PPOAgent(agents.base_agent.Agent):
     old_win_ratio = -1
     try:
       for self_play_iter, num_updates in enumerate(updates_schedule):
-        print("Iter", self_play_iter)
+        print("Iter", self_play_iter, 'old_win_ration', old_win_ratio, 'updates_so_far', updates_so_far)
         new_checkpoint_file, win_ratio, updates_so_far = self._train(
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
 
-        self.tensorboard.add_scalar('eval_envs/heuristic', win_ratio, self_play_iter)
-        if win_ratio > old_win_ratio:
+        self.tensorboard.add_scalar('winning_ratios/heuristic_latest', win_ratio, self_play_iter)
+        if win_ratio >= old_win_ratio:
           checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
-          self.tensorboard.add_scalar('eval_envs/current_heuristic', win_ratio, self_play_iter)
+          self.tensorboard.add_scalar('dashboard/heuristic_best', win_ratio, self_play_iter)
           old_win_ratio = win_ratio
 
         game_manager.add_learning_opponent(checkpoint_file)
 
     except KeyboardInterrupt:
+      print("Captured KeyboardInterrupt from user, quitting")
       self.eval_envs.close()
       self.envs.close()
       self.validation_envs.close()
