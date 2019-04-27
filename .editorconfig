@@ -5,7 +5,3 @@ insert_final_newline=false
 indent_style=space
 indent_size=2
 
-[{BUILD,WORKSPACE,*.bzl}]
-indent_style=space
-indent_size=4
-

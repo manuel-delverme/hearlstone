@@ -1,3 +1,4 @@
+import collections
 import copy
 import datetime
 import glob
@@ -133,6 +134,7 @@ class PPOAgent(agents.base_agent.Agent):
 
   def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
              num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+
     assert updates_offset >= 0
     envs, eval_envs, valid_envs = self.setup_envs(game_manager)
 
@@ -175,7 +177,7 @@ class PPOAgent(agents.base_agent.Agent):
 
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1:
         performance = np.mean(self.eval_agent(envs, eval_envs))
-        self.tensorboard.add_scalar('train/eval_performance', performance, ppo_update_num)
+        self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
         if performance > hs_config.PPOAgent.winratio_cutoff:
           print("[Train] early stopping at", ppo_update_num, performance)
           break
@@ -186,8 +188,8 @@ class PPOAgent(agents.base_agent.Agent):
     eval_rewards = self.eval_agent(envs, valid_envs)
     test_performance = float(np.mean(eval_rewards))
 
-    if test_performance > 0.9:
-      self.enjoy(game_manager, checkpoint_file)
+    # if test_performance > 0.9:
+    #   self.enjoy(game_manager, checkpoint_file)
 
     return checkpoint_file, test_performance, ppo_update_num + 1
 
@@ -442,27 +444,30 @@ class PPOAgent(agents.base_agent.Agent):
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
     self.update_experiment_logging()
 
-    if checkpoint_file is None:
-      checkpoint_file = self.get_latest_checkpoint_file()
+    # if checkpoint_file is None:
+    #   checkpoint_file = self.get_latest_checkpoint_file()
 
     # https://openai.com/blog/openai-five/
     updates_so_far = 0
-    updates_schedule = [hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates
+    updates_schedule = [1, ]
+    updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
     old_win_ratio = -1
     try:
       for self_play_iter, num_updates in enumerate(updates_schedule):
-        print("Iter", self_play_iter, 'old_win_ration', old_win_ratio, 'updates_so_far', updates_so_far)
+        print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
         new_checkpoint_file, win_ratio, updates_so_far = self._train(
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
 
-        self.tensorboard.add_scalar('winning_ratios/heuristic_latest', win_ratio, self_play_iter)
+        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
         if win_ratio >= old_win_ratio:
           checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
-          self.tensorboard.add_scalar('dashboard/heuristic_best', win_ratio, self_play_iter)
+          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
           old_win_ratio = win_ratio
 
         game_manager.add_learning_opponent(checkpoint_file)
+        self.actor_critic.reset_actor()
+        self.optimizer.state = collections.defaultdict(dict)  # Reset state
 
     except KeyboardInterrupt:
       print("Captured KeyboardInterrupt from user, quitting")

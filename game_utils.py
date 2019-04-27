@@ -31,7 +31,10 @@ class GameManager(object):
     return hs_game
 
   def add_learning_opponent(self, checkpoint_file):
-    self.use_heuristic_opponent = False
+    if self.use_heuristic_opponent:
+      self.opponents = []
+      self.opponent_normalization_factors = []
+      self.use_heuristic_opponent = False
 
     opponent_network, opponent_obs_rms = torch.load(checkpoint_file)
 
@@ -39,7 +42,6 @@ class GameManager(object):
     assert (opponent_obs_rms is None or isinstance(opponent_obs_rms,
                                                    baselines.common.running_mean_std.RunningMeanStd)), opponent_obs_rms
 
-    # return agents.learning.ppo_agent.PPOAgent
     opponent = agents.learning.ppo_agent.PPOAgent(
       opponent_network.num_inputs, opponent_network.num_possible_actions, log_dir=tempfile.mktemp())
 

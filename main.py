@@ -1,4 +1,4 @@
-import glob
+import sys
 
 import torch
 
@@ -11,7 +11,7 @@ import hs_config
 
 
 def train():
-  if not hs_config.comment:
+  if not hs_config.comment and len(sys.argv) != 2:
     import tkinter.simpledialog
     # comment = "256h32bs"
     root = tkinter.Tk()
@@ -38,11 +38,16 @@ def train():
   del dummy_hs_env
   game_manager = game_utils.GameManager(hs_config.seed)
 
-  if hs_config.enjoy:
-    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
-    latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.replace(":", "-").split("-")[-1][:-3]))[-1]
+  if len(sys.argv) == 2:
+    # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
+    # latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.replace(":", "-").split("-")[-1][:-3]))[-1]
+
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*{}-*'.format(hs_config.VanillaHS.level))
-    player.enjoy(game_manager, checkpoint_file=latest_checkpoint)
+
+    player.enjoy(game_manager, checkpoint_file=sys.argv[1])
+  elif len(sys.argv) == 3:
+    game_manager.add_learning_opponent(sys.argv[2])
+    player.enjoy(game_manager, checkpoint_file=sys.argv[1])
   else:
     player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
 

@@ -251,10 +251,10 @@ class VanillaHS(base_env.BaseEnv):
 
     obs = self.last_info['observation']
     offset, board, hand, mana = self.render_player(obs)
-    self.gui.draw_agent(board=board, hand=hand)
+    self.gui.draw_agent(board=board, hand=hand, mana=mana)
 
     offset, board, hand, mana = self.render_player(obs, offset)
-    self.gui.draw_opponent(board=board, hand=hand)
+    self.gui.draw_opponent(board=board, hand=hand, mana=mana)
 
     info = self.last_info.copy()
     info['possible_actions'] = np.argwhere(info['possible_actions']).flatten()

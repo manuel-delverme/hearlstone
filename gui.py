@@ -1,4 +1,3 @@
-import time
 import curses
 import enum
 
@@ -71,15 +70,17 @@ class GUI:
   def opponent_addstr(self, y, x, message, options=0):
     self.windows[Players.OPPONENT].addstr(y, x, message, options)
 
-  def draw_opponent(self, board, hand):
+  def draw_opponent(self, board, hand, mana):
     board = [(hp, atk, ready) for atk, hp, ready in board]
     hand = [(hp, atk, ready) for atk, hp, ready in hand]  # opponent is mirrored
     self.draw_player_side(Players.OPPONENT, top_row=hand, bottom_row=board)
-    self.opponent_addstr(0, self.game_width - 1 - len('Opponent'), 'Opponent')
+    nametag = 'Opponent mana:{}'.format(mana)
+    self.opponent_addstr(0, self.game_width - 1 - len(nametag), nametag)
 
-  def draw_agent(self, board, hand):
+  def draw_agent(self, board, hand, mana):
     self.draw_player_side(Players.AGENT, top_row=board, bottom_row=hand)
-    self.player_addstr(0, self.game_width - 1 - len('Agent'), 'Agent')
+    nametag = 'Agent mana:{}'.format(mana)
+    self.player_addstr(0, self.game_width - 1 - len(nametag), nametag)
 
   def draw_player_side(self, player, top_row, bottom_row):
     self.windows[player].clear()
