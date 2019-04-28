@@ -20,7 +20,7 @@ def check_info_spec(info: Info):
   assert isinstance(info['possible_actions'], np.ndarray)
   assert isinstance(info['reward'], np.ndarray)
 
-  assert info['observation'].dtype in (np.float, np.int64)
+  assert info['observation'].dtype in (np.float, np.int64, np.int32)
   assert info['possible_actions'].dtype in (np.float32,)
   assert info['reward'].dtype in (np.float32,)
 

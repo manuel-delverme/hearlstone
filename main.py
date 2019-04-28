@@ -1,5 +1,5 @@
+import os
 import sys
-
 import torch
 
 # import agents.base_agent
@@ -8,6 +8,8 @@ import agents.heuristic.random_agent
 import agents.learning.ppo_agent
 import game_utils
 import hs_config
+
+torch.cuda.current_device()  # this is required for M$win driver to work
 
 
 def train():
@@ -26,14 +28,13 @@ def train():
       torch.backends.cudnn.benchmark = False
       torch.backends.cudnn.deterministic = True
 
-  agent = agents.learning.ppo_agent.PPOAgent
   game_class = hs_config.VanillaHS.get_game_mode()
-
   dummy_hs_env = game_class()
-  player = agent(
+
+  player = agents.learning.ppo_agent.PPOAgent(
     num_inputs=dummy_hs_env.observation_space.shape[0],
     num_possible_actions=dummy_hs_env.action_space.n,
-    log_dir='/tmp/ppo_log/',
+    log_dir=os.path.join(os.getcwd(), 'ppo_log'),
   )
   del dummy_hs_env
   game_manager = game_utils.GameManager(hs_config.seed)

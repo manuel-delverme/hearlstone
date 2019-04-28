@@ -99,7 +99,7 @@ class PPOAgent(agents.base_agent.Agent):
     )
 
   def update_experiment_logging(self):
-    tensorboard_dir = os.path.join(self.log_dir, "tensorboard", "{}:{}:{}.pt".format(
+    tensorboard_dir = os.path.join(self.log_dir, r"tensorboard", "{}_{}_{}.pt".format(
       datetime.datetime.now().strftime('%b%d_%H-%M-%S'), self.experiment_id, self.sequential_experiment_num))
 
     if "DELETEME" in tensorboard_dir:
@@ -175,7 +175,7 @@ class PPOAgent(agents.base_agent.Agent):
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
 
-      if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1:
+      if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or np.mean(episode_rewards) > 1-(1-hs_config.PPOAgent.winratio_cutoff)*2:
         performance = np.mean(self.eval_agent(envs, eval_envs))
         self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
         if performance > hs_config.PPOAgent.winratio_cutoff:
@@ -461,7 +461,7 @@ class PPOAgent(agents.base_agent.Agent):
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
         if win_ratio >= old_win_ratio:
           checkpoint_file = new_checkpoint_file
-          shutil.copyfile(checkpoint_file, checkpoint_file + ":iter_" + str(self_play_iter))
+          shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
           old_win_ratio = win_ratio
 

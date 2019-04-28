@@ -15,7 +15,6 @@ from fireplace.exceptions import GameOver
 from fireplace.game import PlayState
 
 import agents.base_agent
-import gui
 import hs_config
 from environments import base_env
 from environments import simulator
@@ -247,6 +246,7 @@ class VanillaHS(base_env.BaseEnv):
 
   def render(self, mode='human'):
     if self.gui is None:
+      import gui
       self.gui = gui.GUI()
 
     obs = self.last_info['observation']
