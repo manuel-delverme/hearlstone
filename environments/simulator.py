@@ -1,6 +1,5 @@
 import functools
 import random
-import shelve
 import string
 from collections import defaultdict, OrderedDict
 
@@ -21,7 +20,10 @@ def can_attack(self):
     return False
   if self.exhausted:
     return False
-  if not self.atk:
+  try:
+    if not self._atk:
+      return False
+  except AttributeError:
     return False
   return True
 
@@ -49,6 +51,10 @@ class CoinRules:
 
 
 class Game(fireplace.game.MulliganRules, CoinRules, fireplace.game.BaseGame):
+  pass
+
+
+def get_simmetries(player_hand):
   pass
 
 
@@ -334,7 +340,16 @@ class HSsimulation(object):
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana
 
+    # player_hands = get_simmetries(player_hand)
+    # player_boards = get_simmetries(player_board)
+
+    # game_states = []
+
+    # for _player_hand, _player_board in zip(player_hands, player_boards):
+    #   game_states.append(np.hstack((_player_hand, _player_board, player_hero, player_mana)))
     game_state = np.hstack((player_hand, player_board, player_hero, player_mana))
+    # game_state = np.hstack((game_state, np.where(game_state == -1)))
+
     return game_state
 
   def observe(self):
@@ -472,92 +487,14 @@ class HSsimulation(object):
   @staticmethod
   def fast_card_to_bow(card_obj):
     if card_obj is None:
-      return np.array((-1, -1, -1))
+      return -1, -1, -1
     else:
-      return np.array((card_obj.atk, card_obj.health, can_attack(card_obj)))
+      try:
+        return card_obj._atk, card_obj._max_health - card_obj.damage, can_attack(card_obj)
+      except AttributeError:
+        return card_obj.atk, card_obj._max_health - card_obj.damage, can_attack(card_obj)
 
   @staticmethod
   def entity_to_vec(entity):
     # crd = self.card_to_bow(entity)
     return HSsimulation.fast_card_to_bow(entity)
-
-
-class Agent(object):
-  _ACTIONS_DIMENSIONS = 300
-
-  def __init__(self):
-    # self.simulation = simulation
-    self.epsilon = 0.3
-    self.learning_rate = 0.1
-    self.gamma = 0.80
-
-    self.qmiss = 1
-    self.qhit = 0
-    # nr_states = len(simulation.possible_states)
-    # nr_actions = len(simulation.possible_actions)
-    # self.Q_table = np.zeros(shape=(nr_states, nr_actions))
-    self.Q_table = shelve.open("Q_table", protocol=1, writeback=True)
-    self.simulation = None
-
-  def join_game(self, simulation: HSsimulation):
-    self.simulation = simulation
-
-  def getQ(self, state_id, action_id=None):
-    if action_id == 0:
-      return 0
-    action_id = str(action_id)
-    state_id = str(state_id)
-    try:
-      action_Q = self.Q_table[state_id]
-    except KeyError:
-      self.Q_table[state_id] = dict()
-      action_Q = self.Q_table[state_id]
-
-    if action_id:
-      try:
-        return action_Q[action_id]
-      except KeyError:
-        init_q = 0.0
-        for nearby_state in range(int(state_id), int(state_id) + 100):
-          try:
-            approximate_q = self.Q_table[str(nearby_state)][action_id]
-            init_q = approximate_q
-            break
-          except KeyError:
-            pass
-        self.Q_table[state_id][action_id] = init_q
-        return self.Q_table[state_id][action_id]
-    else:
-      return action_Q
-
-  def setQ(self, state, action, q_value):
-    action_id = str(action)
-    state_id = str(state)
-    self.Q_table[state_id][action_id] = q_value
-
-  def _choose_action(self, state, possible_actions):
-    if random.random() < self.epsilon:
-      best_action = random.choice(possible_actions)
-    else:
-      q = [self.getQ(state, self.simulation.action_to_action_id(a)) for a in
-           possible_actions]
-      maxQ = max(q)
-      if maxQ == 0.0:  # FIXME: account for no-action which is always present
-        self.qmiss += 1
-      else:
-        self.qhit += 1
-      # choose one of the best actions
-      best_action = random.choice(
-        [a for q, a in zip(q, possible_actions) if q == maxQ])
-    return best_action
-
-  def learn_from_reaction(self, state, action, reward, next_state):
-    action_id = self.simulation.action_to_action_id(action)
-    state_id = state
-
-    old_q = self.getQ(state_id, action_id)
-    change = self.learning_rate * (
-      reward + self.gamma * np.max(self.getQ(next_state)) - old_q)
-    new_q = old_q + change
-    self.setQ(state, action_id, new_q)
-    return change

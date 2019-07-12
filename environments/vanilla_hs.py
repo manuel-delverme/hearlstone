@@ -29,7 +29,7 @@ def get_hp(card):
 
 
 def episodic_log(func):
-  if not hs_config.DEBUG:
+  if not hs_config.VanillaHS.DEBUG:
     return func
 
   def wrapper(*args, **kwargs):
@@ -103,7 +103,8 @@ class VanillaHS(base_env.BaseEnv):
     print("Initializing card database")
     db, xml = hearthstone.cardxml.load()
     self.log_call_depth = 0
-    if hs_config.DEBUG:
+
+    if hs_config.VanillaHS.DEBUG:
       self.log = collections.deque(maxlen=2)
       logger = logging.getLogger('fireplace')
       logger.setLevel(logging.INFO)
@@ -244,7 +245,7 @@ class VanillaHS(base_env.BaseEnv):
   def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
 
-  def render(self, mode='human'):
+  def render(self, mode='human', choice=None):
     if self.gui is None:
       import gui
       self.gui = gui.GUI()
@@ -264,7 +265,8 @@ class VanillaHS(base_env.BaseEnv):
     self.gui.log(action_history[0], row=1)
     if len(action_history) > 1:
       self.gui.log(action_history[1], row=2)
-    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=3, multiline=True)
+    self.gui.log("choice:{}".format(choice), row=3, multiline=False)
+    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=4, multiline=True)
 
     if mode == 'human':
       self.gui.screen.getch()
@@ -314,9 +316,7 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def set_opponents(self, opponents: Iterable[agents.base_agent.Agent], opponent_obs_rmss=None):
     assert [isinstance(opponent, (agents.base_agent.Agent, agents.base_agent.Bot)) for opponent in opponents]
-    assert [
-      (opponent_obs_rms is None or isinstance(opponent_obs_rms, (baselines.common.running_mean_std.RunningMeanStd,)))
-      for opponent_obs_rms in opponent_obs_rmss]
+    assert [(opponent_obs_rms is None or isinstance(opponent_obs_rms, (baselines.common.running_mean_std.RunningMeanStd,))) for opponent_obs_rms in opponent_obs_rmss]
 
     self.opponents = opponents
     self.opponent_obs_rmss = opponent_obs_rmss

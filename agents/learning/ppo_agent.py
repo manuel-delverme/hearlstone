@@ -175,11 +175,15 @@ class PPOAgent(agents.base_agent.Agent):
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
 
-      if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or np.mean(episode_rewards) > 1-(1-hs_config.PPOAgent.winratio_cutoff)*2:
+      good_training_performance = len(episode_rewards) == episode_rewards.maxlen and np.mean(episode_rewards) > 1 - (1 - hs_config.PPOAgent.winratio_cutoff) * 2
+      if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or good_training_performance:
+
         performance = np.mean(self.eval_agent(envs, eval_envs))
         self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
         if performance > hs_config.PPOAgent.winratio_cutoff:
-          print("[Train] early stopping at", ppo_update_num, performance)
+          p = self.eval_agent(envs, eval_envs)
+          performance = np.mean(p)
+          print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
           break
 
     checkpoint_file = self.save_model(envs, total_num_steps)
@@ -187,6 +191,7 @@ class PPOAgent(agents.base_agent.Agent):
     game_manager.set_heuristic_opponent()
     eval_rewards = self.eval_agent(envs, valid_envs)
     test_performance = float(np.mean(eval_rewards))
+    # print("[Train] test performance", checkpoint_file, ppo_update_num, test_performance)
 
     # if test_performance > 0.9:
     #   self.enjoy(game_manager, checkpoint_file)
@@ -222,11 +227,13 @@ class PPOAgent(agents.base_agent.Agent):
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
+      assert game_manager.use_heuristic_opponent
+
       self.validation_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                                            hs_config.device, allow_early_resets=True)
-    else:
-      self.get_last_env(self.validation_envs).set_opponents(opponents=game_manager.opponents,
-                                                            opponent_obs_rmss=game_manager.opponent_normalization_factors)
+    # else:
+    #   self.get_last_env(self.validation_envs).set_opponents(opponents=game_manager.opponents,
+    #                                                         opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     shared.utils.get_vec_normalize(self.envs).ob_rms = None
     shared.utils.get_vec_normalize(self.eval_envs).ob_rms = None
@@ -353,8 +360,7 @@ class PPOAgent(agents.base_agent.Agent):
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:
       print("[Train] Loading training environments")
-      self.enjoy_env = make_vec_envs(game_manager, num_processes=1, gamma=0, log_dir=None, device=hs_config.device,
-                                     allow_early_resets=True)
+      self.enjoy_env = make_vec_envs(game_manager, num_processes=1, gamma=0, log_dir=None, device=hs_config.device, allow_early_resets=True)
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents,
                                                      opponent_obs_rmss=game_manager.opponent_normalization_factors)
@@ -365,12 +371,12 @@ class PPOAgent(agents.base_agent.Agent):
 
     obs, _, _, infos = self.enjoy_env.reset()
 
-    self.enjoy_env.render()
     while True:
       with torch.no_grad():
         value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
+
+      self.enjoy_env.render(choice=action)
       obs, reward, done, infos = self.enjoy_env.step(action)
-      self.enjoy_env.render()
 
       if done:
         break
@@ -460,13 +466,14 @@ class PPOAgent(agents.base_agent.Agent):
 
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
         if win_ratio >= old_win_ratio:
+          print('updating checkpoint')
           checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
           old_win_ratio = win_ratio
 
         game_manager.add_learning_opponent(checkpoint_file)
-        self.actor_critic.reset_actor()
+        # self.actor_critic.reset_actor()
         self.optimizer.state = collections.defaultdict(dict)  # Reset state
 
     except KeyboardInterrupt:

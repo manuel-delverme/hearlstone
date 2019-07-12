@@ -1,5 +1,6 @@
 import os
 import sys
+
 import torch
 
 # import agents.base_agent
@@ -13,12 +14,15 @@ torch.cuda.current_device()  # this is required for M$win driver to work
 
 
 def train():
-  if not hs_config.comment and len(sys.argv) != 2:
+  if not hs_config.comment and len(sys.argv) == 1:
     import tkinter.simpledialog
     # comment = "256h32bs"
-    root = tkinter.Tk()
-    hs_config.comment = tkinter.simpledialog.askstring("comment", "comment")
-    root.destroy()
+    try:
+      root = tkinter.Tk()
+      hs_config.comment = tkinter.simpledialog.askstring("comment", "comment")
+      root.destroy()
+    except tkinter.TclError as _:
+      print("no-comment")
 
   if hs_config.seed:
     torch.manual_seed(hs_config.seed)
@@ -40,6 +44,8 @@ def train():
   game_manager = game_utils.GameManager(hs_config.seed)
 
   if len(sys.argv) == 2:
+    hs_config.use_gpu = False
+    hs_config.device = torch.device('cpu')
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
     # latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.replace(":", "-").split("-")[-1][:-3]))[-1]
 
@@ -47,6 +53,8 @@ def train():
 
     player.enjoy(game_manager, checkpoint_file=sys.argv[1])
   elif len(sys.argv) == 3:
+    hs_config.use_gpu = False
+    hs_config.device = torch.device('cpu')
     game_manager.add_learning_opponent(sys.argv[2])
     player.enjoy(game_manager, checkpoint_file=sys.argv[1])
   else:
