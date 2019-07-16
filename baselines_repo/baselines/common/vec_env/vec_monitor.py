@@ -4,7 +4,7 @@ import time
 from collections import deque
 
 import numpy as np
-from baselines.common.monitor import ResultsWriter
+#from baselines.common.monitor import ResultsWriter
 
 from . import VecEnvWrapper
 

@@ -4,7 +4,7 @@ import pprint
 import random
 from typing import Tuple, Dict, Text, Any, Iterable
 
-import baselines.common.running_mean_std
+from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 import fireplace
 import fireplace.logging
 import gym.spaces
@@ -316,7 +316,7 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def set_opponents(self, opponents: Iterable[agents.base_agent.Agent], opponent_obs_rmss=None):
     assert [isinstance(opponent, (agents.base_agent.Agent, agents.base_agent.Bot)) for opponent in opponents]
-    assert [(opponent_obs_rms is None or isinstance(opponent_obs_rms, (baselines.common.running_mean_std.RunningMeanStd,))) for opponent_obs_rms in opponent_obs_rmss]
+    assert [(opponent_obs_rms is None or isinstance(opponent_obs_rms, (RunningMeanStd,))) for opponent_obs_rms in opponent_obs_rmss]
 
     self.opponents = opponents
     self.opponent_obs_rmss = opponent_obs_rmss

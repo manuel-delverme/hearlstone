@@ -1,6 +1,7 @@
 import tempfile
 
-import baselines.common.running_mean_std
+#import baselines.common.running_mean_std
+from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 import torch
 
 import agents.base_agent
@@ -39,7 +40,7 @@ class GameManager(object):
     opponent_network, opponent_obs_rms = torch.load(checkpoint_file)
 
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
-    assert (opponent_obs_rms is None or isinstance(opponent_obs_rms, baselines.common.running_mean_std.RunningMeanStd)), opponent_obs_rms
+    assert (opponent_obs_rms is None or isinstance(opponent_obs_rms, RunningMeanStd)), opponent_obs_rms
 
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, log_dir=tempfile.mktemp())
 

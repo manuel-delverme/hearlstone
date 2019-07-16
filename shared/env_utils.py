@@ -3,7 +3,8 @@ from typing import Callable, Text, Optional
 
 import numpy as np
 import torch
-from baselines.common import vec_env
+#from baselines.common import vec_env
+from baselines_repo.baselines.common import vec_env
 from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
 from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv

@@ -1,6 +1,6 @@
 import specs
 from . import VecEnvWrapper
-from baselines.common.running_mean_std import RunningMeanStd
+from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 import numpy as np
 
 
