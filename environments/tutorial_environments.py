@@ -1,4 +1,5 @@
 import fireplace.cards
+import numpy as np
 
 import agents.heuristic.hand_coded
 import environments.vanilla_hs
@@ -6,13 +7,7 @@ import hs_config
 
 
 class TradingHS(environments.vanilla_hs.VanillaHS):
-  def __init__(self, level=hs_config.VanillaHS.level, ):
-    super(TradingHS, self).__init__(
-      max_cards_in_hand=0,
-      skip_mulligan=True,
-      starting_hp=hs_config.VanillaHS.starting_hp,
-      sort_decks=hs_config.VanillaHS.sort_decks,
-    )
+  def __init__(self, level=hs_config.VanillaHS.level, seed=None, extra_seed=None):
 
     if level == 0:
       self.player_board = [fireplace.cards.filter(name="Bloodfen Raptor", collectible=True), ] * 1
@@ -35,7 +30,16 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         fireplace.cards.filter(name="Magma Rager", collectible=True),
         fireplace.cards.filter(name="Magma Rager", collectible=True),
       ]
+    else:
+      raise ValueError
     self.level = level
+
+    super(TradingHS, self).__init__(
+      max_cards_in_hand=0,
+      skip_mulligan=True,
+      starting_hp=hs_config.VanillaHS.starting_hp,
+      sort_decks=hs_config.VanillaHS.sort_decks,
+    )
 
     immunity = fireplace.cards.utils.buff(immune=True)
     self.simulation.player.hero.set_current_health(hs_config.VanillaHS.starting_hp)
@@ -46,7 +50,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     self.minions_in_board = level
 
   def reinit_game(self):
-    super(TradingHS, self).reinit_game(self.sort_decks)
+    super(TradingHS, self).reinit_game()
 
     for minion in self.player_board:
       self.simulation.player.summon(minion)
@@ -54,12 +58,32 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     for minion in self.opponent_board:
       self.simulation.opponent.summon(minion)
 
-  def gather_transition(self):
-    game_observation, reward, terminal, info = super(TradingHS, self).gather_transition()
+  def gather_transition(self, autoreset):
+    game_observation, reward, terminal, info = super(TradingHS, self).gather_transition(autoreset)
     num_player_minions = len(self.simulation.player.characters[1:])
     num_opponent_minions = len(self.simulation.opponent.characters[1:])
-    if num_player_minions == 0 or num_opponent_minions == 0:
+    if num_player_minions == 0 or num_opponent_minions == 0 or self.simulation.game.turn == hs_config.VanillaHS.max_turns:
       terminal = True
+
+    if terminal:
+      info['game_statistics'] = {
+        'num_games': self.games_played,
+        'num_steps': self.episode_steps,
+        'turn': self.simulation.game.turn,
+        'outcome': reward,
+      }
+      if autoreset:
+        new_obs, _, _, new_info = self.reset()
+        game_observation = new_obs
+        info['possible_actions'] = new_info['possible_actions']
+        info['observation'] = new_info['observation']
+
+    # if autoreset and terminal:
+    #   new_obs, _, _, new_info = self.reset()
+    #   game_observation = new_obs
+    #   info['possible_actions'] = new_info['possible_actions']
+    #   info['observation'] = new_info['observation']
+
     return game_observation, reward, terminal, info
 
   def calculate_reward(self):
@@ -67,11 +91,11 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     num_player_minions = len(self.simulation.player.characters[1:])
     # if num_player_minions > 0 and num_opponent_minions > 0:
     #   return -1
-
     if num_opponent_minions > 0:
-      return -0.1
+      reward = 0
     else:
-      return num_player_minions
+      reward = num_player_minions
+    return np.array(reward, dtype=np.float32)
 
   def __str__(self):
     return 'TradingHS:{}'.format(self.level,)

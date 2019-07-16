@@ -8,14 +8,16 @@ import agents.base_agent
 from environments import base_env
 
 enjoy = False
-use_gpu = True
+# game_mode = "trading"
+use_gpu = False
 seed = 1337
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
+DEBUG = False
 
-comment = "DELETEME" if DEBUG else ""
+comment = "DELETEME" if DEBUG else "d10c4n3"
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
@@ -34,17 +36,20 @@ class VanillaHS:
   # this is now level
   max_cards_in_board = 7
   max_cards_in_hand = 10
+  max_turns = 50
 
   always_first_player = False
 
-  level = 6
+  level = 3
 
   @staticmethod
   def get_game_mode() -> Callable[[], base_env.BaseEnv]:
-    # import environments.tutorial_environments
-    # return environments.tutorial_environments.TradingHS
-    import environments.vanilla_hs
-    return environments.vanilla_hs.VanillaHS
+    # if game_mode == "trading":
+    import environments.tutorial_environments
+    return environments.tutorial_environments.TradingHS
+    # else:
+    # import environments.vanilla_hs
+    # return environments.vanilla_hs.VanillaHS
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:
@@ -75,7 +80,7 @@ class PPOAgent:
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 2 if DEBUG else 8  # number of CPU processes
+  num_processes = 2 if DEBUG else 3  # number of CPU processes
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 

@@ -10,7 +10,7 @@ import agents.learning.ppo_agent
 import game_utils
 import hs_config
 
-torch.cuda.current_device()  # this is required for M$win driver to work
+# torch.cuda.current_device()  # this is required for M$win driver to work
 
 
 def train():

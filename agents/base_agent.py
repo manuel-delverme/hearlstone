@@ -40,7 +40,7 @@ class Bot(ABC):
     # import environments.simulator
     # assert isinstance(info['original_info']['possible_actions'][0], environments.simulator.HSsimulation.Action)
 
-    assert specs.check_possible_actions(67, info['possible_actions'])
+    # assert specs.check_possible_actions(67, info['possible_actions'])
     return self._choose(observation, info)
 
 

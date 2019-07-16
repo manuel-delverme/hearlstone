@@ -189,8 +189,9 @@ class PPOAgent(agents.base_agent.Agent):
     checkpoint_file = self.save_model(envs, total_num_steps)
 
     game_manager.set_heuristic_opponent()
-    eval_rewards = self.eval_agent(envs, valid_envs)
-    test_performance = float(np.mean(eval_rewards))
+    outcome = self.eval_agent(envs, valid_envs)
+    # import pdb; pdb.set_trace()
+    test_performance = float(np.mean(outcome))
     # print("[Train] test performance", checkpoint_file, ppo_update_num, test_performance)
 
     # if test_performance > 0.9:
@@ -290,6 +291,9 @@ class PPOAgent(agents.base_agent.Agent):
       if rollouts is not None:
         rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
+      # else:
+      #   assert isinstance(reward, torch.Tensor)
+      #   rewards.append(reward)
 
       assert 'game_statistics' in specs.OPTIONAL_INFO_KEYS
       if 'game_statistics' in infos:

@@ -3,7 +3,7 @@ gym==0.12.0
 hearthstone==5.3.0
 hearthstone-data==29349.1
 numpy==1.16.2
-tensorboard==1.13.1
+tensorboard
 tensorboardX==1.6
 torch==1.0.1.post2
 -e git+https://github.com/lcswillems/torch-ac.git@7c2926667c6ba4029413f77a14d2ff1137ca4add#egg=torch_ac
