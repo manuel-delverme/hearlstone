@@ -1,3 +1,5 @@
+import collections
+
 import fireplace.cards
 import numpy as np
 
@@ -32,14 +34,13 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       ]
     else:
       raise ValueError
-    self.level = level
-
     super(TradingHS, self).__init__(
       max_cards_in_hand=0,
       skip_mulligan=True,
       starting_hp=hs_config.VanillaHS.starting_hp,
       sort_decks=hs_config.VanillaHS.sort_decks,
     )
+    self.level = level
 
     immunity = fireplace.cards.utils.buff(immune=True)
     self.simulation.player.hero.set_current_health(hs_config.VanillaHS.starting_hp)
@@ -49,8 +50,60 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     self.opponent = agents.heuristic.hand_coded.PassingAgent()
     self.minions_in_board = level
 
+  def generate_game(self):
+    pass
+
+  @classmethod
+  def solve_optimally(cls, player_board, opponent_board):
+    PLAYER, OPPONENT = 0, 1
+    ATK, HP = 0, 1
+
+    actions = []
+
+    def encode(card):
+      return card.atk, card.health
+
+    player_board = tuple(encode(fireplace.cards.db[c]) for c, in player_board)
+    opponent_board = tuple(encode(fireplace.cards.db[c]) for c, in opponent_board)
+
+    for atk_idx, src in enumerate(player_board):
+      for def_idx, target in enumerate(opponent_board):
+        actions.append(make_attack(atk_idx, def_idx))
+    actions = tuple(actions)
+
+    open_nodes = [(player_board, opponent_board), ]
+    forbidden_edges = collections.defaultdict(set)
+    closed = set()
+
+    while open_nodes:
+      node1 = open_nodes.pop(0)
+      if node1 in closed:
+        continue
+
+      for edge_idx, edge in enumerate(actions):
+        if edge_idx in forbidden_edges[node1]:
+          continue
+
+        node2 = edge(node1)
+
+        if node2 not in closed:
+          forbidden_edges[node2].update(forbidden_edges[node1])
+          forbidden_edges[node2].add(edge_idx)
+
+          player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
+          opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
+
+          if player_hp_left > 0:
+            if opponent_hp_left:
+              open_nodes.append(node2)
+            else:
+              print(node2, player_hp_left)
+
+      closed.add(node1)
+
   def reinit_game(self):
     super(TradingHS, self).reinit_game()
+    self.solve_optimally(self.player_board, self.opponent_board)
 
     for minion in self.player_board:
       self.simulation.player.summon(minion)
@@ -91,6 +144,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     num_player_minions = len(self.simulation.player.characters[1:])
     # if num_player_minions > 0 and num_opponent_minions > 0:
     #   return -1
+
     if num_opponent_minions > 0:
       reward = 0
     else:
@@ -98,4 +152,28 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     return np.array(reward, dtype=np.float32)
 
   def __str__(self):
-    return 'TradingHS:{}'.format(self.level,)
+    return 'TradingHS:{}'.format(self.level, )
+
+
+def make_attack(atk_idx, def_idx):
+  def attack(node):
+    player_board, opponent_board = node
+
+    attacker = list(player_board[atk_idx])
+    defender = list(opponent_board[def_idx])
+
+    ATK, HP = 0, 1
+
+    attacker[HP] -= defender[ATK]
+    defender[HP] -= attacker[ATK]
+
+    player_board = (*player_board[:atk_idx], tuple(attacker), *player_board[atk_idx + 1:])
+    opponent_board = (*opponent_board[:def_idx], tuple(defender), *opponent_board[def_idx + 1:])
+
+    return player_board, opponent_board
+
+  return attack
+
+
+t = TradingHS()
+t.reinit_game()
