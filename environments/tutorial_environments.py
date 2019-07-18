@@ -1,4 +1,5 @@
 import collections
+import random
 
 import fireplace.cards
 import numpy as np
@@ -32,6 +33,8 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         fireplace.cards.filter(name="Magma Rager", collectible=True),
         fireplace.cards.filter(name="Magma Rager", collectible=True),
       ]
+    elif level == 4:
+      self.generate_board()
     else:
       raise ValueError
     super(TradingHS, self).__init__(
@@ -54,27 +57,53 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     pass
 
   @classmethod
-  def solve_optimally(cls, player_board, opponent_board):
-    PLAYER, OPPONENT = 0, 1
-    ATK, HP = 0, 1
+  def generate_board(cls):
+    def encode(card):
+      return card.atk, card.health
+
+    def exit_condition(opponent_hp_left, player_hp_left):
+      return opponent_hp_left > 0 and player_hp_left > 0
 
     actions = []
 
+    player_board = tuple()
+    opponent_board = tuple()
+    player_board = tuple(encode(fireplace.cards.db[c]) for c, in player_board)
+    opponent_board = tuple(encode(fireplace.cards.db[c]) for c, in opponent_board)
+
+    for atk_idx in range(10):
+      for def_idx in range(10):
+        actions.append(make_attack(atk_idx, def_idx, sign=+1))
+    actions = tuple(actions)
+    return cls.bf_search(actions, exit_condition, opponent_board, player_board)
+
+  @classmethod
+  def solve_optimally(cls, player_board, opponent_board):
     def encode(card):
       return card.atk, card.health
+
+    def exit_condition(opponent_hp_left):
+      return opponent_hp_left <= 0
+
+    actions = []
 
     player_board = tuple(encode(fireplace.cards.db[c]) for c, in player_board)
     opponent_board = tuple(encode(fireplace.cards.db[c]) for c, in opponent_board)
 
     for atk_idx, src in enumerate(player_board):
       for def_idx, target in enumerate(opponent_board):
-        actions.append(make_attack(atk_idx, def_idx))
+        actions.append(make_attack(atk_idx, def_idx, sign=-1))
     actions = tuple(actions)
+    return cls.bf_search(actions, exit_condition, opponent_board, player_board)
 
+  @classmethod
+  def bf_search(cls, actions, exit_condition, opponent_board, player_board):
+    PLAYER, OPPONENT = 0, 1
+    ATK, HP = 0, 1
     open_nodes = [(player_board, opponent_board), ]
     forbidden_edges = collections.defaultdict(set)
     closed = set()
-
+    best_solution = -1
     while open_nodes:
       node1 = open_nodes.pop(0)
       if node1 in closed:
@@ -84,26 +113,31 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         if edge_idx in forbidden_edges[node1]:
           continue
 
-        node2 = edge(node1)
+        try:
+          node2 = edge(node1)
+        except IndexError:
+          continue
+        else:
+          if node2 not in closed:
+            forbidden_edges[node2].update(forbidden_edges[node1])
+            forbidden_edges[node2].add(edge_idx)
 
-        if node2 not in closed:
-          forbidden_edges[node2].update(forbidden_edges[node1])
-          forbidden_edges[node2].add(edge_idx)
+            player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
+            opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
 
-          player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
-          opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
+            if player_hp_left > 0:
+              if exit_condition(opponent_hp_left, player_hp_left):
+                best_solution = max(player_hp_left, best_solution)
 
-          if player_hp_left > 0:
-            if opponent_hp_left:
-              open_nodes.append(node2)
-            else:
-              print(node2, player_hp_left)
+              if opponent_hp_left:
+                open_nodes.append(node2)
 
       closed.add(node1)
+    return best_solution
 
   def reinit_game(self):
     super(TradingHS, self).reinit_game()
-    self.solve_optimally(self.player_board, self.opponent_board)
+    self.generate_board()
 
     for minion in self.player_board:
       self.simulation.player.summon(minion)
@@ -155,17 +189,23 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     return 'TradingHS:{}'.format(self.level, )
 
 
-def make_attack(atk_idx, def_idx):
+def make_attack(atk_idx, def_idx, sign=-1):
   def attack(node):
     player_board, opponent_board = node
+
+    if atk_idx == len(player_board):
+      player_board = (*player_board, (random.randint(0, 10), 0))
+
+    if def_idx == len(opponent_board):
+      opponent_board = (*opponent_board, (random.randint(0, 10), 0))
 
     attacker = list(player_board[atk_idx])
     defender = list(opponent_board[def_idx])
 
     ATK, HP = 0, 1
 
-    attacker[HP] -= defender[ATK]
-    defender[HP] -= attacker[ATK]
+    attacker[HP] += sign * defender[ATK]
+    defender[HP] += sign * attacker[ATK]
 
     player_board = (*player_board[:atk_idx], tuple(attacker), *player_board[atk_idx + 1:])
     opponent_board = (*opponent_board[:def_idx], tuple(defender), *opponent_board[def_idx + 1:])
