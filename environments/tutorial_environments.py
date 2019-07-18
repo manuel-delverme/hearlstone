@@ -34,7 +34,8 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         fireplace.cards.filter(name="Magma Rager", collectible=True),
       ]
     elif level == 4:
-      self.generate_board()
+      self.generate_board(nr_minions=4)
+      print(self.opponent_board, 'vs', self.player_board)
     else:
       raise ValueError
     super(TradingHS, self).__init__(
@@ -56,13 +57,12 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
   def generate_game(self):
     pass
 
-  @classmethod
-  def generate_board(cls):
+  def generate_board(self, nr_minions):
     def encode(card):
       return card.atk, card.health
 
-    def exit_condition(opponent_hp_left, player_hp_left):
-      return opponent_hp_left > 0 and player_hp_left > 0
+    def exit_condition(opponent_hp_left, player_hp_left, node):
+      return opponent_hp_left > 0 and player_hp_left > 0 and len(node[0]) + len(node[1]) == nr_minions
 
     actions = []
 
@@ -75,7 +75,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       for def_idx in range(10):
         actions.append(make_attack(atk_idx, def_idx, sign=+1))
     actions = tuple(actions)
-    return cls.bf_search(actions, exit_condition, opponent_board, player_board)
+    self.player_board, self.opponent_board = self.bf_search(actions, exit_condition, opponent_board, player_board)
 
   @classmethod
   def solve_optimally(cls, player_board, opponent_board):
@@ -117,30 +117,40 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
           node2 = edge(node1)
         except IndexError:
           continue
+        except ValueError:
+          continue
         else:
-          if node2 not in closed:
-            forbidden_edges[node2].update(forbidden_edges[node1])
-            forbidden_edges[node2].add(edge_idx)
+          if node2 in closed:
+            continue
 
-            player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
-            opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
+          print(node1[0], 'vs', node1[1], '->', node2[0], 'vs', node2[1])
+          forbidden_edges[node2].update(forbidden_edges[node1])
+          forbidden_edges[node2].add(edge_idx)
 
-            if player_hp_left > 0:
-              if exit_condition(opponent_hp_left, player_hp_left):
-                best_solution = max(player_hp_left, best_solution)
+          player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
+          opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
 
-              if opponent_hp_left:
-                open_nodes.append(node2)
+          if player_hp_left > 0:
+            if exit_condition(opponent_hp_left, player_hp_left, node2):
+              # best_solution = max(player_hp_left, best_solution)
+              break
+
+            if opponent_hp_left:
+              open_nodes.append(node2)
 
       closed.add(node1)
-    return best_solution
+    return node2
 
   def reinit_game(self):
     super(TradingHS, self).reinit_game()
-    self.generate_board()
+    statstick = fireplace.cards.filter(name="The Ancient One", collectible=False),
 
     for minion in self.player_board:
-      self.simulation.player.summon(minion)
+      if isinstance(minion, str):
+        self.simulation.player.summon(minion)
+      else:
+        self.simulation.player.summon(minion)
+        print(1)  # set hp
 
     for minion in self.opponent_board:
       self.simulation.opponent.summon(minion)
@@ -205,7 +215,11 @@ def make_attack(atk_idx, def_idx, sign=-1):
     ATK, HP = 0, 1
 
     attacker[HP] += sign * defender[ATK]
+    if 0 > attacker[HP] > 10:
+      raise ValueError
     defender[HP] += sign * attacker[ATK]
+    if 0 > attacker[HP] > 10:
+      raise ValueError
 
     player_board = (*player_board[:atk_idx], tuple(attacker), *player_board[atk_idx + 1:])
     opponent_board = (*opponent_board[:def_idx], tuple(defender), *opponent_board[def_idx + 1:])

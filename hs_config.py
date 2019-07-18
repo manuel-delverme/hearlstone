@@ -40,7 +40,7 @@ class VanillaHS:
 
   always_first_player = False
 
-  level = 3
+  level = 4
 
   @staticmethod
   def get_game_mode() -> Callable[[], base_env.BaseEnv]:
