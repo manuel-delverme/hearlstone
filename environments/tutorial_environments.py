@@ -2,16 +2,28 @@ import collections
 import random
 
 import fireplace.cards
+import fireplace.cards.utils
+import fireplace.dsl
+
 import numpy as np
 
 import agents.heuristic.hand_coded
 import environments.vanilla_hs
 import hs_config
 
+import hearthstone
+
+
+class EX1_178a:
+  play = fireplace.cards.utils.Buff(fireplace.dsl.SELF, fireplace.cards.utils.buff(atk=1))
+
+class EX1_178d:
+  play = fireplace.cards.utils.Buff(fireplace.dsl.SELF, fireplace.cards.utils.buff(atk=-1))
+
+#EX1_178be = buff(atk=5)
 
 class TradingHS(environments.vanilla_hs.VanillaHS):
   def __init__(self, level=hs_config.VanillaHS.level, seed=None, extra_seed=None):
-
     if level == 0:
       self.player_board = [fireplace.cards.filter(name="Bloodfen Raptor", collectible=True), ] * 1
       self.opponent_board = [fireplace.cards.filter(name="Wisp", collectible=True), ] * 1  # Wisp
@@ -35,7 +47,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       ]
     elif level == 4:
       self.generate_board(nr_minions=4)
-      print(self.opponent_board, 'vs', self.player_board)
+      # print(self.opponent_board, 'vs', self.player_board)
     else:
       raise ValueError
     super(TradingHS, self).__init__(
@@ -70,15 +82,17 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     opponent_board = tuple()
     player_board = tuple(encode(fireplace.cards.db[c]) for c, in player_board)
     opponent_board = tuple(encode(fireplace.cards.db[c]) for c, in opponent_board)
-
+    # how to avoid 0 health minion
     for atk_idx in range(10):
       for def_idx in range(10):
         actions.append(make_attack(atk_idx, def_idx, sign=+1))
     actions = tuple(actions)
     self.player_board, self.opponent_board = self.bf_search(actions, exit_condition, opponent_board, player_board)
 
-  @classmethod
-  def solve_optimally(cls, player_board, opponent_board):
+  def solve_optimally(self):
+    player_board = self.player_board
+    opponent_board = self.opponent_board
+
     def encode(card):
       return card.atk, card.health
 
@@ -123,7 +137,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
           if node2 in closed:
             continue
 
-          print(node1[0], 'vs', node1[1], '->', node2[0], 'vs', node2[1])
+          # print(node1[0], 'vs', node1[1], '->', node2[0], 'vs', node2[1])
           forbidden_edges[node2].update(forbidden_edges[node1])
           forbidden_edges[node2].add(edge_idx)
 
@@ -143,17 +157,45 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
 
   def reinit_game(self):
     super(TradingHS, self).reinit_game()
-    statstick = fireplace.cards.filter(name="The Ancient One", collectible=False),
+    # allowed_ids = ("GAME_005", "CS2_034", "CS2_102", "CS2_008")
+    # db = fireplace.cards.db
+    # for id, card in db.items():
+    #   if card.description == "" or card.id in allowed_ids:
+    #     if card.id in allowed_ids:
+    #       print("merged", card.name)
+    #     fireplace.cards.db[id] = fireplace.cards.db.merge(id, card)
+    (stat_stick,),  = fireplace.cards.filter(name="The Ancient One", collectible=False),
 
     for minion in self.player_board:
       if isinstance(minion, str):
         self.simulation.player.summon(minion)
       else:
-        self.simulation.player.summon(minion)
-        print(1)  # set hp
+        self.set_stats(self.simulation.player, minion, stat_stick)
 
     for minion in self.opponent_board:
-      self.simulation.opponent.summon(minion)
+      if isinstance(minion, str):
+        self.simulation.opponent.summon(minion)
+      else:
+        self.set_stats(self.simulation.opponent, minion, stat_stick)
+
+  def set_stats(self, player, minion, stat_stick):
+
+    player.summon(stat_stick)
+    minion_to_handle = player.characters[-1]
+    #print(minion_to_handle.exhausted)
+    MOONFIRE = "CS2_008"
+
+    actor = player.game.current_player
+    old_cards_in_hand = actor.max_hand_size
+    actor.max_hand_size = 1
+
+    while minion_to_handle.health > minion[1]:
+      card = actor.give(MOONFIRE)
+      card.play(target=minion_to_handle)
+
+    actor.max_hand_size = old_cards_in_hand
+    minion_to_handle.atk = minion_to_handle._atk = minion[0]
+    minion_to_handle.charge = True
 
   def gather_transition(self, autoreset):
     game_observation, reward, terminal, info = super(TradingHS, self).gather_transition(autoreset)
@@ -175,6 +217,8 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         info['possible_actions'] = new_info['possible_actions']
         info['observation'] = new_info['observation']
 
+    info['possible_actions'][0] = 0
+    assert info['possible_actions'].max(0) > 0
     # if autoreset and terminal:
     #   new_obs, _, _, new_info = self.reset()
     #   game_observation = new_obs
@@ -204,10 +248,10 @@ def make_attack(atk_idx, def_idx, sign=-1):
     player_board, opponent_board = node
 
     if atk_idx == len(player_board):
-      player_board = (*player_board, (random.randint(0, 10), 0))
+      player_board = (*player_board, (random.randint(1, 10), 0))
 
     if def_idx == len(opponent_board):
-      opponent_board = (*opponent_board, (random.randint(0, 10), 0))
+      opponent_board = (*opponent_board, (random.randint(1, 10), 0))
 
     attacker = list(player_board[atk_idx])
     defender = list(opponent_board[def_idx])
@@ -215,6 +259,7 @@ def make_attack(atk_idx, def_idx, sign=-1):
     ATK, HP = 0, 1
 
     attacker[HP] += sign * defender[ATK]
+
     if 0 > attacker[HP] > 10:
       raise ValueError
     defender[HP] += sign * attacker[ATK]
@@ -227,7 +272,3 @@ def make_attack(atk_idx, def_idx, sign=-1):
     return player_board, opponent_board
 
   return attack
-
-
-t = TradingHS()
-t.reinit_game()

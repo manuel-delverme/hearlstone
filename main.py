@@ -58,7 +58,9 @@ def train():
     game_manager.add_learning_opponent(sys.argv[2])
     player.enjoy(game_manager, checkpoint_file=sys.argv[1])
   else:
-    player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
+    # pass
+    # player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
+    player.train(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
 
 
 if __name__ == "__main__":

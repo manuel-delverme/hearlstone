@@ -15,7 +15,6 @@ benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
-DEBUG = False
 
 comment = "DELETEME" if DEBUG else "d10c4n3"
 device = torch.device("cuda:0" if use_gpu else "cpu")

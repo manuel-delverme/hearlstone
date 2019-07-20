@@ -482,9 +482,12 @@ class PPOAgent(agents.base_agent.Agent):
 
     except KeyboardInterrupt:
       print("Captured KeyboardInterrupt from user, quitting")
-      self.eval_envs.close()
-      self.envs.close()
-      self.validation_envs.close()
+      if self.eval_envs:
+        self.eval_envs.close()
+      if self.envs:
+        self.envs.close()
+      if self.validation_envs:
+        self.validation_envs.close()
       self.tensorboard.close()
 
   def __exit__(self, exc_type, exc_val, exc_tb):
