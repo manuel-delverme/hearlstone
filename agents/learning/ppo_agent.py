@@ -32,8 +32,8 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str) -> None:
     self.experiment_id = "-".join((
-      hs_config.VanillaHS.get_game_mode().__name__,
-      str(hs_config.VanillaHS.level),
+      hs_config.Environment.get_game_mode().__name__,
+      str(hs_config.Environment.level),
       hs_config.comment
     ))
     # assert isinstance(observation_space, gym.spaces.Box)
@@ -128,12 +128,12 @@ class PPOAgent(agents.base_agent.Agent):
         os.remove(f)
 
   def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-            num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+    num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     self.update_experiment_logging()
     return self._train(game_manager, checkpoint_file, num_updates, updates_offset)
 
   def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-             num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+    num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
 
     assert updates_offset >= 0
     envs, eval_envs, valid_envs = self.setup_envs(game_manager)
@@ -175,7 +175,8 @@ class PPOAgent(agents.base_agent.Agent):
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
 
-      good_training_performance = len(episode_rewards) == episode_rewards.maxlen and np.mean(episode_rewards) > 1 - (1 - hs_config.PPOAgent.winratio_cutoff) * 2
+      good_training_performance = len(episode_rewards) == episode_rewards.maxlen and np.mean(episode_rewards) > 1 - (
+        1 - hs_config.PPOAgent.winratio_cutoff) * 2
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or good_training_performance:
 
         performance = np.mean(self.eval_agent(envs, eval_envs))
@@ -284,6 +285,15 @@ class PPOAgent(agents.base_agent.Agent):
       with torch.no_grad():
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
+      if hs_config.Environment.render_after_step:
+        act = envs.vectorized_env.vectorized_env.remotes[0].render()
+        try:
+          act = int(chr(act))
+        except ValueError:
+          pass
+        else:
+          action[0] = act
+
       obs, reward, done, infos = envs.step(action)
 
       possible_actions = infos['possible_actions']
@@ -300,7 +310,7 @@ class PPOAgent(agents.base_agent.Agent):
         rewards.extend(i['outcome'].item() for i in infos['game_statistics'])
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
-                  explained_variance):
+    explained_variance):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -364,7 +374,8 @@ class PPOAgent(agents.base_agent.Agent):
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:
       print("[Train] Loading training environments")
-      self.enjoy_env = make_vec_envs(game_manager, num_processes=1, gamma=0, log_dir=None, device=hs_config.device, allow_early_resets=True)
+      self.enjoy_env = make_vec_envs(game_manager, num_processes=1, gamma=0, log_dir=None, device=hs_config.device,
+                                     allow_early_resets=True)
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents,
                                                      opponent_obs_rmss=game_manager.opponent_normalization_factors)

@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import IntEnum
 
 import gym
 
 
 class BaseEnv(gym.Env, ABC):
-  class GameActions(Enum):
+  class GameActions(IntEnum):
     PASS_TURN = 0
 
   @property

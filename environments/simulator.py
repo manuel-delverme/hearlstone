@@ -35,7 +35,7 @@ class CoinRules:
   """
 
   def pick_first_player(self):
-    if hs_config.VanillaHS.always_first_player:
+    if hs_config.Environment.always_first_player:
       winner = self.players[0]
       self.log("[FORCED] Player starts", winner)
     else:

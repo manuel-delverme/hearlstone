@@ -4,7 +4,6 @@ import pprint
 import random
 from typing import Tuple, Dict, Text, Any, Iterable
 
-from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 import fireplace
 import fireplace.logging
 import gym.spaces
@@ -16,6 +15,7 @@ from fireplace.game import PlayState
 
 import agents.base_agent
 import hs_config
+from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 from environments import base_env
 from environments import simulator
 from shared import utils
@@ -29,7 +29,7 @@ def get_hp(card):
 
 
 def episodic_log(func):
-  if not hs_config.VanillaHS.DEBUG:
+  if not hs_config.Environment.DEBUG:
     return func
 
   def wrapper(*args, **kwargs):
@@ -64,8 +64,8 @@ class VanillaHS(base_env.BaseEnv):
     max_cards_in_hand=simulator.HSsimulation._MAX_CARDS_IN_HAND,
     skip_mulligan=True,
     cheating_opponent=False,
-    starting_hp=hs_config.VanillaHS.starting_hp,
-    sort_decks=hs_config.VanillaHS.sort_decks,
+    starting_hp=hs_config.Environment.starting_hp,
+    sort_decks=hs_config.Environment.sort_decks,
     seed=None,
     extra_seed=None,
   ):
@@ -104,7 +104,7 @@ class VanillaHS(base_env.BaseEnv):
     db, xml = hearthstone.cardxml.load()
     self.log_call_depth = 0
 
-    if hs_config.VanillaHS.DEBUG:
+    if hs_config.Environment.DEBUG:
       self.log = collections.deque(maxlen=2)
       logger = logging.getLogger('fireplace')
       logger.setLevel(logging.INFO)
@@ -129,11 +129,30 @@ class VanillaHS(base_env.BaseEnv):
     self.starting_hp = starting_hp
     self.minions_in_board = 0
 
-    self.reinit_game()
+    self._observation_space = None
+    self._action_space = None
 
+  @property
+  def observation_space(self):
+    if self._observation_space is None:
+      self.cache_spaces()
+    return self._observation_space
+
+  @property
+  def action_space(self):
+    if self._action_space is None:
+      self.cache_spaces()
+    return self._action_space
+
+  def cache_spaces(self):
+    self.reinit_game()  # required to generate observation space
     obs, _, _, _ = self.gather_transition(autoreset=False)
-    self.observation_space = gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
-    self.action_space = gym.spaces.Discrete(self.num_actions)
+    self._observation_space = gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
+    self._action_space = gym.spaces.Discrete(self.num_actions)
+
+  def dump_log(self, log_file):
+    if self.log is None:
+      return
 
   def dump_log(self, log_file):
     if self.log is None:
@@ -198,7 +217,7 @@ class VanillaHS(base_env.BaseEnv):
       starting_hp=self.starting_hp,
       sort_decks=self.sort_decks,
     )
-    if random.random() < hs_config.VanillaHS.old_opponent_prob:
+    if random.random() < hs_config.Environment.old_opponent_prob:
       opponent_idx = random.randint(0, len(self.opponents) - 1)
     else:
       opponent_idx = -1
@@ -269,7 +288,7 @@ class VanillaHS(base_env.BaseEnv):
     self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=4, multiline=True)
 
     if mode == 'human':
-      self.gui.screen.getch()
+      return self.gui.screen.getch()
     else:
       raise NotImplementedError
 
@@ -316,7 +335,8 @@ class VanillaHS(base_env.BaseEnv):
   @episodic_log
   def set_opponents(self, opponents: Iterable[agents.base_agent.Agent], opponent_obs_rmss=None):
     assert [isinstance(opponent, (agents.base_agent.Agent, agents.base_agent.Bot)) for opponent in opponents]
-    assert [(opponent_obs_rms is None or isinstance(opponent_obs_rms, (RunningMeanStd,))) for opponent_obs_rms in opponent_obs_rmss]
+    assert [(opponent_obs_rms is None or isinstance(opponent_obs_rms, (RunningMeanStd,))) for opponent_obs_rms in
+            opponent_obs_rmss]
 
     self.opponents = opponents
     self.opponent_obs_rmss = opponent_obs_rmss
@@ -345,10 +365,11 @@ class VanillaHS(base_env.BaseEnv):
     encoded_info['original_info'] = self.game_info()
 
     action = self.opponent.choose(observation, encoded_info)
-    return self.step(action, autoreset=False)
+    return self.step([action, ], autoreset=False)
 
   @episodic_log
   def step(self, encoded_action, autoreset=True):
+    encoded_action, = encoded_action
     action = self.decode_action(int(encoded_action))
 
     self.action_history[-1].append(repr(action))
@@ -357,7 +378,7 @@ class VanillaHS(base_env.BaseEnv):
 
     assert isinstance(action, simulator.HSsimulation.Action)
     try:
-      if encoded_action == 0:
+      if encoded_action == self.GameActions.PASS_TURN:
         self.simulation.game.end_turn()
 
         if self.simulation.game.turn > 90:
@@ -372,7 +393,8 @@ class VanillaHS(base_env.BaseEnv):
     except GameOver as e:
       if not self.simulation.game.ended:
         raise e
-    return self.gather_transition(autoreset)
+    retr = self.gather_transition(autoreset)
+    return retr
 
   @episodic_log
   def gather_transition(self, autoreset) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:

@@ -4,33 +4,55 @@ import random
 import fireplace.cards
 import fireplace.cards.utils
 import fireplace.dsl
-
 import numpy as np
 
-import agents.heuristic.hand_coded
 import environments.vanilla_hs
 import hs_config
 
-import hearthstone
-
-
-class EX1_178a:
-  play = fireplace.cards.utils.Buff(fireplace.dsl.SELF, fireplace.cards.utils.buff(atk=1))
-
-class EX1_178d:
-  play = fireplace.cards.utils.Buff(fireplace.dsl.SELF, fireplace.cards.utils.buff(atk=-1))
-
-#EX1_178be = buff(atk=5)
 
 class TradingHS(environments.vanilla_hs.VanillaHS):
-  def __init__(self, level=hs_config.VanillaHS.level, seed=None, extra_seed=None):
-    if level == 0:
+  def __init__(self, level=hs_config.Environment.level, seed=None, extra_seed=None):
+    super(TradingHS, self).__init__(
+      max_cards_in_hand=0,
+      skip_mulligan=True,
+      starting_hp=hs_config.Environment.starting_hp,
+      sort_decks=hs_config.Environment.sort_decks,
+    )
+    self.level = level
+    self.opponent = hs_config.Environment.get_opponent()
+    self.minions_in_board = level
+
+  def generate_board(self, acceptable_minions):
+    def exit_condition(opponent_hp_left, player_hp_left, node):
+      return opponent_hp_left > 0 and player_hp_left > 0 and len(node[0]) + len(node[1]) in acceptable_minions
+
+    def prune_condition(opponent_hp_left, player_hp_left, node):
+      return len(node[0]) + len(node[1]) > max(acceptable_minions)
+
+    actions = [make_attack(atk_idx, def_idx, sign=+1) for atk_idx in range(10) for def_idx in range(10)]
+    player_board, opponent_board = tuple(), tuple()
+
+    # generate 1 turn strategy
+    # print('step 1')
+    (player_board, opponent_board), _ = bf_search(actions, exit_condition, prune_condition, player_board,
+                                                  opponent_board)
+    # print('step 2')
+    (player_board, opponent_board), _ = bf_search(actions, exit_condition, prune_condition, player_board,
+                                                  opponent_board)
+    # print('step -1')
+    player_board = (*player_board, (random.randint(1, 3), random.randint(1, 3)))
+    self.player_board, self.opponent_board = player_board, opponent_board
+
+  def reinit_game(self):
+    super(TradingHS, self).reinit_game()
+
+    if self.level == 0:
       self.player_board = [fireplace.cards.filter(name="Bloodfen Raptor", collectible=True), ] * 1
       self.opponent_board = [fireplace.cards.filter(name="Wisp", collectible=True), ] * 1  # Wisp
-    elif level == 1:
+    elif self.level == 1:
       self.player_board = [fireplace.cards.filter(name="Bloodfen Raptor", collectible=True), ] * 7
       self.opponent_board = [fireplace.cards.filter(name="Wisp", collectible=True), ] * 7  # Wisp
-    elif level == 3:
+    elif self.level == 3:
       self.player_board = [
         fireplace.cards.filter(name="Bloodfen Raptor", collectible=True),
         fireplace.cards.filter(name="Bloodfen Raptor", collectible=True),
@@ -45,144 +67,30 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         fireplace.cards.filter(name="Magma Rager", collectible=True),
         fireplace.cards.filter(name="Magma Rager", collectible=True),
       ]
-    elif level == 4:
-      self.generate_board(nr_minions=4)
-      # print(self.opponent_board, 'vs', self.player_board)
+    elif self.level == 4:
+      self.generate_board(acceptable_minions=(4, 5))  # 2 could be created at the same time
+      # assert len(self.opponent_board) <= len(self.player_board)
     else:
       raise ValueError
-    super(TradingHS, self).__init__(
-      max_cards_in_hand=0,
-      skip_mulligan=True,
-      starting_hp=hs_config.VanillaHS.starting_hp,
-      sort_decks=hs_config.VanillaHS.sort_decks,
-    )
-    self.level = level
 
-    immunity = fireplace.cards.utils.buff(immune=True)
-    self.simulation.player.hero.set_current_health(hs_config.VanillaHS.starting_hp)
-    self.simulation.player.hero.tags.update(immunity.tags)
-    self.simulation.opponent.hero.set_current_health(hs_config.VanillaHS.starting_hp)
-    self.simulation.opponent.hero.tags.update(immunity.tags)
-    self.opponent = agents.heuristic.hand_coded.PassingAgent()
-    self.minions_in_board = level
-
-  def generate_game(self):
-    pass
-
-  def generate_board(self, nr_minions):
-    def encode(card):
-      return card.atk, card.health
-
-    def exit_condition(opponent_hp_left, player_hp_left, node):
-      return opponent_hp_left > 0 and player_hp_left > 0 and len(node[0]) + len(node[1]) == nr_minions
-
-    actions = []
-
-    player_board = tuple()
-    opponent_board = tuple()
-    player_board = tuple(encode(fireplace.cards.db[c]) for c, in player_board)
-    opponent_board = tuple(encode(fireplace.cards.db[c]) for c, in opponent_board)
-    # how to avoid 0 health minion
-    for atk_idx in range(10):
-      for def_idx in range(10):
-        actions.append(make_attack(atk_idx, def_idx, sign=+1))
-    actions = tuple(actions)
-    self.player_board, self.opponent_board = self.bf_search(actions, exit_condition, opponent_board, player_board)
-
-  def solve_optimally(self):
-    player_board = self.player_board
-    opponent_board = self.opponent_board
-
-    def encode(card):
-      return card.atk, card.health
-
-    def exit_condition(opponent_hp_left):
-      return opponent_hp_left <= 0
-
-    actions = []
-
-    player_board = tuple(encode(fireplace.cards.db[c]) for c, in player_board)
-    opponent_board = tuple(encode(fireplace.cards.db[c]) for c, in opponent_board)
-
-    for atk_idx, src in enumerate(player_board):
-      for def_idx, target in enumerate(opponent_board):
-        actions.append(make_attack(atk_idx, def_idx, sign=-1))
-    actions = tuple(actions)
-    return cls.bf_search(actions, exit_condition, opponent_board, player_board)
-
-  @classmethod
-  def bf_search(cls, actions, exit_condition, opponent_board, player_board):
-    PLAYER, OPPONENT = 0, 1
-    ATK, HP = 0, 1
-    open_nodes = [(player_board, opponent_board), ]
-    forbidden_edges = collections.defaultdict(set)
-    closed = set()
-    best_solution = -1
-    while open_nodes:
-      node1 = open_nodes.pop(0)
-      if node1 in closed:
-        continue
-
-      for edge_idx, edge in enumerate(actions):
-        if edge_idx in forbidden_edges[node1]:
-          continue
-
-        try:
-          node2 = edge(node1)
-        except IndexError:
-          continue
-        except ValueError:
-          continue
-        else:
-          if node2 in closed:
-            continue
-
-          # print(node1[0], 'vs', node1[1], '->', node2[0], 'vs', node2[1])
-          forbidden_edges[node2].update(forbidden_edges[node1])
-          forbidden_edges[node2].add(edge_idx)
-
-          player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
-          opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
-
-          if player_hp_left > 0:
-            if exit_condition(opponent_hp_left, player_hp_left, node2):
-              # best_solution = max(player_hp_left, best_solution)
-              break
-
-            if opponent_hp_left:
-              open_nodes.append(node2)
-
-      closed.add(node1)
-    return node2
-
-  def reinit_game(self):
-    super(TradingHS, self).reinit_game()
-    # allowed_ids = ("GAME_005", "CS2_034", "CS2_102", "CS2_008")
-    # db = fireplace.cards.db
-    # for id, card in db.items():
-    #   if card.description == "" or card.id in allowed_ids:
-    #     if card.id in allowed_ids:
-    #       print("merged", card.name)
-    #     fireplace.cards.db[id] = fireplace.cards.db.merge(id, card)
-    (stat_stick,),  = fireplace.cards.filter(name="The Ancient One", collectible=False),
+    stat_stick, = fireplace.cards.filter(name="The Ancient One", collectible=False)
 
     for minion in self.player_board:
       if isinstance(minion, str):
         self.simulation.player.summon(minion)
       else:
-        self.set_stats(self.simulation.player, minion, stat_stick)
+        self.summon_minion(self.simulation.player, minion, stat_stick)
 
     for minion in self.opponent_board:
       if isinstance(minion, str):
         self.simulation.opponent.summon(minion)
       else:
-        self.set_stats(self.simulation.opponent, minion, stat_stick)
+        self.summon_minion(self.simulation.opponent, minion, stat_stick)
 
-  def set_stats(self, player, minion, stat_stick):
-
+  def summon_minion(self, player, minion, stat_stick):
     player.summon(stat_stick)
     minion_to_handle = player.characters[-1]
-    #print(minion_to_handle.exhausted)
+    # print(minion_to_handle.exhausted)
     MOONFIRE = "CS2_008"
 
     actor = player.game.current_player
@@ -201,8 +109,17 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
     game_observation, reward, terminal, info = super(TradingHS, self).gather_transition(autoreset)
     num_player_minions = len(self.simulation.player.characters[1:])
     num_opponent_minions = len(self.simulation.opponent.characters[1:])
-    if num_player_minions == 0 or num_opponent_minions == 0 or self.simulation.game.turn == hs_config.VanillaHS.max_turns:
+
+    # info['possible_actions'][0] = 0
+
+    if num_player_minions == 0:
       terminal = True
+    if num_opponent_minions == 0:
+      terminal = True
+    if self.simulation.game.turn == hs_config.Environment.max_turns:
+      terminal = True
+    # if info['possible_actions'].max(0) == 0:
+    #   terminal = True
 
     if terminal:
       info['game_statistics'] = {
@@ -216,14 +133,6 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
         game_observation = new_obs
         info['possible_actions'] = new_info['possible_actions']
         info['observation'] = new_info['observation']
-
-    info['possible_actions'][0] = 0
-    assert info['possible_actions'].max(0) > 0
-    # if autoreset and terminal:
-    #   new_obs, _, _, new_info = self.reset()
-    #   game_observation = new_obs
-    #   info['possible_actions'] = new_info['possible_actions']
-    #   info['observation'] = new_info['observation']
 
     return game_observation, reward, terminal, info
 
@@ -259,11 +168,11 @@ def make_attack(atk_idx, def_idx, sign=-1):
     ATK, HP = 0, 1
 
     attacker[HP] += sign * defender[ATK]
-
-    if 0 > attacker[HP] > 10:
+    if 0 > attacker[HP] or attacker[HP] > 10:
       raise ValueError
+
     defender[HP] += sign * attacker[ATK]
-    if 0 > attacker[HP] > 10:
+    if 0 > defender[HP] or defender[HP] > 10:
       raise ValueError
 
     player_board = (*player_board[:atk_idx], tuple(attacker), *player_board[atk_idx + 1:])
@@ -272,3 +181,55 @@ def make_attack(atk_idx, def_idx, sign=-1):
     return player_board, opponent_board
 
   return attack
+
+
+def bf_search(actions, exit_condition, prune_condition, player_board, opponent_board):
+  PLAYER, OPPONENT = 0, 1
+  ATK, HP = 0, 1
+  open_nodes = [(player_board, opponent_board), ]
+  forbidden_edges = collections.defaultdict(set)
+  sequences = collections.defaultdict(set)
+
+  closed = set()
+  best_solution = -1
+
+  while open_nodes:
+    node1 = open_nodes.pop(0)
+    if node1 in closed:
+      continue
+
+    random.shuffle(actions)
+    for edge_idx, edge in enumerate(actions):
+      if edge_idx in forbidden_edges[node1]:
+        continue
+
+      try:
+        node2 = edge(node1)
+      except IndexError:
+        # if hasattr(edge, 'idx'):
+        #   print('IndexError', node1, edge.idx)
+        continue
+      except ValueError:
+        # if hasattr(edge, 'idx'):
+        #   print('ValueError', node1, edge.idx)
+        continue
+      else:
+        if node2 in closed:
+          continue
+
+        # print(node1[0], 'vs', node1[1], '->', node2[0], 'vs', node2[1])
+        forbidden_edges[node2].update(forbidden_edges[node1])
+        forbidden_edges[node2].add(edge_idx)
+
+        player_hp_left = sum(max(c[HP], 0) for c in node2[PLAYER])
+        opponent_hp_left = sum(max(c[HP], 0) for c in node2[OPPONENT])
+
+        if player_hp_left > 0:
+          if exit_condition(opponent_hp_left, player_hp_left, node2):
+            break
+
+          if opponent_hp_left and not prune_condition(opponent_hp_left, player_hp_left, node2):
+            open_nodes.append(node2)
+
+    closed.add(node1)
+  return node2, forbidden_edges[node2]

@@ -3,19 +3,23 @@ from typing import Callable, Text, Optional
 
 import numpy as np
 import torch
-#from baselines.common import vec_env
-from baselines_repo.baselines.common import vec_env
-from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
-from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
-from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
-from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
 
 import environments.base_env
 import hs_config
 import specs
+# from baselines.common import vec_env
+from baselines_repo.baselines.common import vec_env
+from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
+from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
+from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
+from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
 
 
 class DummyVecEnv(_DummyVecEnv):
+  @property
+  def remotes(self):
+    return self.envs
+
   def reset(self):
     for e in range(self.num_envs):
       obs, self.buf_rews[e], self.buf_dones[e], self.buf_infos[e] = self.envs[e].reset()
@@ -111,7 +115,7 @@ def make_vec_envs(
   device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
   envs = [_make_env(load_env, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
 
-  if len(envs) == 1 or hs_config.VanillaHS.no_subprocess:
+  if len(envs) == 1 or hs_config.Environment.no_subprocess:
     vectorized_envs = DummyVecEnv(envs)
   else:
     vectorized_envs = SubprocVecEnv(envs)

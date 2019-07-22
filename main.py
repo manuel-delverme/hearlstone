@@ -10,6 +10,7 @@ import agents.learning.ppo_agent
 import game_utils
 import hs_config
 
+
 # torch.cuda.current_device()  # this is required for M$win driver to work
 
 
@@ -32,7 +33,7 @@ def train():
       torch.backends.cudnn.benchmark = False
       torch.backends.cudnn.deterministic = True
 
-  game_class = hs_config.VanillaHS.get_game_mode()
+  game_class = hs_config.Environment.get_game_mode()
   dummy_hs_env = game_class()
 
   player = agents.learning.ppo_agent.PPOAgent(

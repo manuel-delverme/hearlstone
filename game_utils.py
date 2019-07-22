@@ -1,7 +1,5 @@
 import tempfile
 
-#import baselines.common.running_mean_std
-from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 import torch
 
 import agents.base_agent
@@ -10,6 +8,8 @@ import agents.heuristic.random_agent
 import agents.learning.models.randomized_policy
 import agents.learning.ppo_agent
 import hs_config
+# import baselines.common.running_mean_std
+from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 
 
 class GameManager(object):
@@ -17,15 +17,14 @@ class GameManager(object):
     self.seed = seed
     self.use_heuristic_opponent = True
 
-    self.game_class = hs_config.VanillaHS.get_game_mode()
+    self.game_class = hs_config.Environment.get_game_mode()
     self.opponents = [agents.heuristic.random_agent.RandomAgent(), ]
     self.opponent_normalization_factors = [None]
 
   def __call__(self, extra_seed):
     hs_game = self.game_class(seed=self.seed, extra_seed=extra_seed)
-
     if self.use_heuristic_opponent:
-      hs_game.set_opponents(opponents=[hs_config.VanillaHS.get_opponent()()], opponent_obs_rmss=[None, ])
+      hs_game.set_opponents(opponents=[hs_config.Environment.get_opponent()()], opponent_obs_rmss=[None, ])
     else:
       hs_game.set_opponents(opponents=self.opponents, opponent_obs_rmss=self.opponent_normalization_factors)
 

@@ -22,11 +22,13 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 
 print_every = 20
 BIG_NUMBER = 9999999999999
+visualize_everything = 0
 
 
-class VanillaHS:
+class Environment:
+  render_after_step = visualize_everything or 0
   DEBUG = False
-  no_subprocess = False
+  no_subprocess = True
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True
@@ -54,7 +56,8 @@ class VanillaHS:
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
     # return agents.heuristic.hand_coded.PassingAgent
-    return agents.heuristic.hand_coded.HeuristicAgent
+    return agents.heuristic.hand_coded.TradingAgent
+
     # hs_config.VanillaHS.get_opponent = get_opponent
     # return agents.learning.ppo_agent.PPOAgent
 
