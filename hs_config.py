@@ -39,7 +39,7 @@ class Environment:
   max_cards_in_hand = 10
   max_turns = 50
 
-  always_first_player = False
+  always_first_player = True
 
   level = 4
 

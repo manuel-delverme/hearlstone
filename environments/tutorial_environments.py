@@ -18,6 +18,7 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
       starting_hp=hs_config.Environment.starting_hp,
       sort_decks=hs_config.Environment.sort_decks,
     )
+    assert hs_config.Environment.always_first_player
     self.level = level
     self.opponent = hs_config.Environment.get_opponent()
     self.minions_in_board = level
@@ -90,7 +91,6 @@ class TradingHS(environments.vanilla_hs.VanillaHS):
   def summon_minion(self, player, minion, stat_stick):
     player.summon(stat_stick)
     minion_to_handle = player.characters[-1]
-    # print(minion_to_handle.exhausted)
     MOONFIRE = "CS2_008"
 
     actor = player.game.current_player
