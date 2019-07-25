@@ -45,21 +45,17 @@ class Environment:
 
   @staticmethod
   def get_game_mode() -> Callable[[], base_env.BaseEnv]:
-    # if game_mode == "trading":
-    import environments.tutorial_environments
-    return environments.tutorial_environments.TradingHS
-    # else:
-    # import environments.vanilla_hs
-    # return environments.vanilla_hs.VanillaHS
+    # import environments.tutorial_environments
+    # return environments.tutorial_environments.TradingHS
+    import environments.vanilla_hs
+    return environments.vanilla_hs.VanillaHS
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
     # return agents.heuristic.hand_coded.PassingAgent
-    return agents.heuristic.hand_coded.TradingAgent
-
-    # hs_config.VanillaHS.get_opponent = get_opponent
-    # return agents.learning.ppo_agent.PPOAgent
+    # return agents.heuristic.hand_coded.TradingAgent
+    return agents.heuristic.hand_coded.HeuristicAgent
 
 
 class SelfPlay:

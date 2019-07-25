@@ -5,6 +5,7 @@ import random
 from typing import Tuple, Dict, Text, Any, Iterable
 
 import fireplace
+import fireplace.cards
 import fireplace.logging
 import gym.spaces
 import hearthstone
@@ -90,10 +91,10 @@ class VanillaHS(base_env.BaseEnv):
     self.action_history = collections.deque(maxlen=2)
     self.action_history.append([])
 
-    for src_idx in range(max_cards_in_hand):
+    for src_idx in range(hs_config.Environment.max_cards_in_hand):
       self.id_to_action.append((src_idx, -1))
-    for src_idx in range(max_cards_in_board):
-      for target_idx in range(max_cards_in_board + 1):
+    for src_idx in range(hs_config.Environment.max_cards_in_board + 1):
+      for target_idx in range(hs_config.Environment.max_cards_in_board + 1):
         self.id_to_action.append((src_idx, target_idx))
 
     self.action_to_id_dict = {v: k for k, v in enumerate(self.id_to_action)}
@@ -400,13 +401,6 @@ class VanillaHS(base_env.BaseEnv):
   def gather_transition(self, autoreset) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
-
-    # board_adv = len(self.simulation.player.characters) - len(self.simulation.opponent.characters)
-    # hand_adv = len(self.simulation.player.hand) - len(self.simulation.opponent.hand)
-    # board_mana_adv = sum((c.cost for c in self.simulation.player.characters)) - sum(
-    #   (c.cost for c in self.simulation.opponent.characters))
-    # stats = np.array([board_adv, hand_adv, board_mana_adv])
-    # game_observation = np.concatenate((game_observation, stats), axis=0)
 
     reward = self.calculate_reward()
     terminal = self.simulation.game.ended
