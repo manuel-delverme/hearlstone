@@ -3,6 +3,7 @@ import random
 import string
 from collections import defaultdict, OrderedDict
 
+import fireplace.cards
 import fireplace.game
 import numpy as np
 from fireplace.game import PlayState
@@ -323,19 +324,20 @@ class HSsimulation(object):
 
     # reduce variance by sorting
     # fill with nones
-    assert len(player.hand) <= self._MAX_CARDS_IN_HAND
+    assert len(player.hand) <= hs_config.Environment.max_cards_in_hand
 
-    player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_HAND
-    ents = [self.entity_to_vec(c) for c in player_hand[:self._MAX_CARDS_IN_HAND]]
+    player_hand = list(sorted(player.hand, key=lambda x: x.id)) + [None] * hs_config.Environment.max_cards_in_hand
+    ents = [self.entity_to_vec(c) for c in player_hand[:hs_config.Environment.max_cards_in_hand]]
     player_hand = np.hstack(ents) if ents else np.array(ents)
 
     # the player hero itself is not in the board
     player_board = player.characters[1:]
-    player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * self._MAX_CARDS_IN_BOARD
+    player_board = list(sorted(player_board, key=lambda x: x.id)) + [None] * hs_config.Environment.max_cards_in_board
 
-    assert len(player_board) < self._MAX_CARDS_IN_BOARD or not any(player_board[self._MAX_CARDS_IN_BOARD:])
+    assert len(player_board) < hs_config.Environment.max_cards_in_board or not any(
+      player_board[hs_config.Environment.max_cards_in_board:])
 
-    player_board = np.hstack([self.entity_to_vec(c) for c in player_board[:self._MAX_CARDS_IN_BOARD]])
+    player_board = np.hstack([self.entity_to_vec(c) for c in player_board[:hs_config.Environment.max_cards_in_board]])
 
     player_hero = self.entity_to_vec(player.characters[0])
     player_mana = player.max_mana

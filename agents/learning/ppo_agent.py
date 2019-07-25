@@ -30,17 +30,14 @@ class PPOAgent(agents.base_agent.Agent):
       value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
     return action
 
-  def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str) -> None:
+  def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
+    experts: Tuple[agents.base_agent.Agent]) -> None:
+
     self.experiment_id = "-".join((
       hs_config.Environment.get_game_mode().__name__,
       str(hs_config.Environment.level),
       hs_config.comment
     ))
-    # assert isinstance(observation_space, gym.spaces.Box)
-    # assert len(observation_space.shape) == 1
-
-    # assert isinstance(action_space, gym.spaces.Discrete)
-    # assert action_space.n > 1, 'the agent can only pass'
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
     self.sequential_experiment_num = 0
@@ -53,6 +50,8 @@ class PPOAgent(agents.base_agent.Agent):
     self.enjoy_env = None
 
     self.num_inputs = num_inputs
+    self.num_experts = len(experts)
+    self.experts = experts
     self.num_actions = num_possible_actions
 
     actor_critic_network = ActorCritic(self.num_inputs, self.num_actions)
@@ -143,11 +142,13 @@ class PPOAgent(agents.base_agent.Agent):
       self.load_checkpoint(checkpoint_file, envs)
 
     assert envs.observation_space.shape == (self.num_inputs,)
-    assert envs.action_space.n == self.num_actions
+    assert envs.action_space.n + self.num_experts == self.num_actions
 
     rollouts = RolloutStorage(self.num_inputs, self.num_actions)
     obs, _, _, info = envs.reset()
-    rollouts.store_first_transition(obs, info['possible_actions'])
+    possible_actions = self.update_possible_actions_for_expert(info)
+
+    rollouts.store_first_transition(obs, possible_actions)
     episode_rewards = deque(maxlen=10)
 
     start = time.time()
@@ -199,6 +200,13 @@ class PPOAgent(agents.base_agent.Agent):
     #   self.enjoy(game_manager, checkpoint_file)
 
     return checkpoint_file, test_performance, ppo_update_num + 1
+
+  def update_possible_actions_for_expert(self, info):
+    possible_actions = info['possible_actions']
+    if self.num_experts:
+      expert_actions = torch.ones(possible_actions.shape[0], self.num_experts)
+      possible_actions = torch.cat((possible_actions, expert_actions), dim=1)
+    return possible_actions
 
   def load_checkpoint(self, checkpoint_file, envs):
     self.actor_critic, ob_rms = torch.load(checkpoint_file)
@@ -271,7 +279,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     if rollouts is None:
       obs, _, _, infos = envs.reset()
-      possible_actions = infos['possible_actions']
+      possible_actions = self.update_possible_actions_for_expert(infos)
     else:
       obs, possible_actions = rollouts.get_observation(0)
 
@@ -285,18 +293,20 @@ class PPOAgent(agents.base_agent.Agent):
       with torch.no_grad():
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
-      if hs_config.Environment.render_after_step:
-        act = envs.vectorized_env.vectorized_env.remotes[0].render()
-        try:
-          act = int(chr(act))
-        except ValueError:
-          pass
-        else:
-          action[0] = act
+      self.maybe_render(action, envs)
+      # could be parallelized
+      for idx, a in enumerate(action):
+        if a >= envs.action_space.n:
+          expert_number = action[idx] - envs.action_space.n
+          with torch.no_grad():
+            _, expert_action, _ = self.experts[expert_number].act(
+              obs[idx:idx + 1, :],
+              possible_actions[idx: idx + 1, :envs.action_space.n], deterministic=deterministic)
+            action[idx, 0] = expert_action
 
       obs, reward, done, infos = envs.step(action)
 
-      possible_actions = infos['possible_actions']
+      possible_actions = self.update_possible_actions_for_expert(infos)
 
       if rollouts is not None:
         rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
@@ -308,6 +318,16 @@ class PPOAgent(agents.base_agent.Agent):
       assert 'game_statistics' in specs.OPTIONAL_INFO_KEYS
       if 'game_statistics' in infos:
         rewards.extend(i['outcome'].item() for i in infos['game_statistics'])
+
+  def maybe_render(self, action, envs):
+    if hs_config.Environment.render_after_step:
+      act = envs.vectorized_env.vectorized_env.remotes[0].render()
+      try:
+        act = int(chr(act))
+      except ValueError:
+        pass
+      else:
+        action[0] = act
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
     explained_variance):
@@ -347,7 +367,7 @@ class PPOAgent(agents.base_agent.Agent):
     # save_model = (self.actor_critic.state_dict(), self.optimizer, get_vec_normalize(envs).ob_rms)
     save_model = (model, shared.utils.get_vec_normalize(envs).ob_rms)
 
-    checkpoint_name = "{}:{}.pt".format(self.experiment_id, total_num_steps)
+    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}:inputs={self.num_inputs}.pt"
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
@@ -503,3 +523,20 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.tensorboard.close()
+
+
+class Expert(agents.base_agent.Agent):
+  def _choose(self, *args, **kwargs):
+    raise NotImplementedError
+
+  def __init__(self, checkpoint_file: str) -> None:
+    self.actor_critic, ob_rms = torch.load(checkpoint_file)
+    self.actor_critic.to(hs_config.device)
+    # shared.utils.get_vec_normalize(envs).ob_rms = ob_rms
+
+  def act(self, obs, possible_actions, deterministic):
+    # p1, p2 = obs[:, :55], obs[:, 55:]
+    # p1 = p1[:, 30:]  # hide player's hand
+    # p2 = p2[:, 30:]  # hide opponent's hand
+    # obs = torch.cat((p1, p2), dim=1)
+    return self.actor_critic(obs, possible_actions, deterministic=deterministic)

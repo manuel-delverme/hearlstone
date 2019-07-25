@@ -7,6 +7,7 @@ import torch
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
 import agents.learning.ppo_agent
+import environments.tutorial_environments
 import game_utils
 import hs_config
 
@@ -36,10 +37,22 @@ def train():
   game_class = hs_config.Environment.get_game_mode()
   dummy_hs_env = game_class()
 
+  # trading_expert = agents.learning.ppo_agent.Expert("ppo_save_dir/TradingHS-4-d10c4n3:2688.pt")
+  num_actions = dummy_hs_env.action_space.n
+
+  if hs_config.Environment.get_game_mode() is environments.tutorial_environments.TradingHS:
+    experts = tuple()
+  else:
+    trading_expert = agents.learning.ppo_agent.Expert(
+      "/home/esac/projects/hearlstone/ppo_save_dir/id=TradingHS-4-d10c4n3:steps=96:inputs=110.pt")
+    experts = (trading_expert,)
+    num_actions += len(experts)
+
   player = agents.learning.ppo_agent.PPOAgent(
     num_inputs=dummy_hs_env.observation_space.shape[0],
-    num_possible_actions=dummy_hs_env.action_space.n,
+    num_possible_actions=num_actions,
     log_dir=os.path.join(os.getcwd(), 'ppo_log'),
+    experts=experts,
   )
   del dummy_hs_env
   game_manager = game_utils.GameManager(hs_config.seed)
