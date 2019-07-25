@@ -46,11 +46,13 @@ class Environment:
   @staticmethod
   def get_game_mode() -> Callable[[], base_env.BaseEnv]:
     # if game_mode == "trading":
-    import environments.tutorial_environments
-    return environments.tutorial_environments.TradingHS
+    # import environments.tutorial_environments
+    # return environments.tutorial_environments.TradingHS
     # else:
     # import environments.vanilla_hs
     # return environments.vanilla_hs.VanillaHS
+    import sb_env.SabberStone_python_client.simulator
+    return sb_env.SabberStone_python_client.simulator.Sabbertsone
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:

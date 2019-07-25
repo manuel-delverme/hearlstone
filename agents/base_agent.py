@@ -36,7 +36,7 @@ class Bot(ABC):
                                                                                            'original_info'}
     assert isinstance(info['original_info'], dict)
     assert isinstance(info['original_info']['possible_actions'], tuple)
-    assert info['original_info']['possible_actions'][0].card is None
+    # assert info['original_info']['possible_actions'][0].card is None
     # import environments.simulator
     # assert isinstance(info['original_info']['possible_actions'][0], environments.simulator.HSsimulation.Action)
 
