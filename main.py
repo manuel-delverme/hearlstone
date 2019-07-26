@@ -36,11 +36,10 @@ def train():
 
   game_class = hs_config.Environment.get_game_mode()
   dummy_hs_env = game_class()
-
-  # trading_expert = agents.learning.ppo_agent.Expert("ppo_save_dir/TradingHS-4-d10c4n3:2688.pt")
   num_actions = dummy_hs_env.action_space.n
 
-  if hs_config.Environment.get_game_mode() is environments.tutorial_environments.TradingHS:
+  if not hs_config.PPOAgent.load_experts or (
+    hs_config.Environment.get_game_mode() is environments.tutorial_environments.TradingHS):
     experts = tuple()
   else:
     trading_expert = agents.learning.ppo_agent.Expert(

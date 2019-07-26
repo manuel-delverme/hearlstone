@@ -27,8 +27,8 @@ visualize_everything = 0
 
 class Environment:
   render_after_step = visualize_everything or 0
-  DEBUG = False
-  no_subprocess = True
+  DEBUG = True
+  no_subprocess = DEBUG or False
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True
@@ -58,8 +58,8 @@ class Environment:
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
     # return agents.heuristic.hand_coded.PassingAgent
-    return agents.heuristic.hand_coded.TradingAgent
-
+    # return agents.heuristic.hand_coded.TradingAgent
+    return agents.heuristic.hand_coded.PassingAgent
     # hs_config.VanillaHS.get_opponent = get_opponent
     # return agents.learning.ppo_agent.PPOAgent
 
@@ -99,3 +99,4 @@ class PPOAgent:
   clip_epsilon = 0.2  # PPO paper
 
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
+  load_experts = False

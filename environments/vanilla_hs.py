@@ -1,6 +1,5 @@
 import collections
 import logging
-import pprint
 import random
 from typing import Tuple, Dict, Text, Any, Iterable
 
@@ -16,6 +15,7 @@ from fireplace.game import PlayState
 
 import agents.base_agent
 import hs_config
+import shared.env_utils
 from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 from environments import base_env
 from environments import simulator
@@ -27,35 +27,6 @@ def get_hp(card):
     return card.hp
   except AttributeError:
     return card.health
-
-
-def episodic_log(func):
-  if not hs_config.Environment.DEBUG:
-    return func
-
-  def wrapper(*args, **kwargs):
-    self = args[0]
-
-    func_name = func.__name__
-    new_episode = func_name == 'reinit_game'
-
-    if new_episode:
-      self.log.append([])
-      self.log_call_depth = 0
-    extra_info = tuple()  # (inspect.stack()[1:], r)
-
-    pre = tuple(''.join((' ',) * self.log_call_depth))
-    self.log[-1].append(tuple(pre + (func_name,) + args[1:] + tuple(kwargs) + extra_info))
-
-    self.log_call_depth += 1
-    retr = func(*args, **kwargs)
-    self.log_call_depth -= 1
-
-    pre = tuple(''.join((' ',) * self.log_call_depth))
-    self.log[-1].append(tuple(pre + (func_name,) + (retr,) + extra_info))
-    return retr
-
-  return wrapper
 
 
 class VanillaHS(base_env.BaseEnv):
@@ -103,14 +74,11 @@ class VanillaHS(base_env.BaseEnv):
     fireplace.cards.db.initialized = True
     print("Initializing card database")
     db, xml = hearthstone.cardxml.load()
-    self.log_call_depth = 0
 
     if hs_config.Environment.DEBUG:
-      self.log = collections.deque(maxlen=2)
       logger = logging.getLogger('fireplace')
       logger.setLevel(logging.INFO)
     else:
-      self.log = None
       logging.getLogger("fireplace").setLevel(logging.ERROR)
 
     # allow coin, mage and warrior hero powers and moonfire (to cheat)
@@ -151,23 +119,7 @@ class VanillaHS(base_env.BaseEnv):
     self._observation_space = gym.spaces.Box(low=-1, high=100, shape=obs.shape, dtype=np.int)
     self._action_space = gym.spaces.Discrete(self.num_actions)
 
-  def dump_log(self, log_file):
-    if self.log is None:
-      return
-
-  def dump_log(self, log_file):
-    if self.log is None:
-      return
-
-    with open(log_file, 'w') as fout:
-      for episode in self.log:
-        fout.write('=' * 100)
-        fout.write('\n')
-        for event in episode:
-          fout.write(pprint.pformat(event))
-          fout.write('\n')
-
-  @episodic_log
+  @shared.env_utils.episodic_log
   def encode_actions(self, actions: Tuple[simulator.HSsimulation.Action]):
     assert isinstance(actions, tuple)
     assert isinstance(actions[0], simulator.HSsimulation.Action)
@@ -180,12 +132,12 @@ class VanillaHS(base_env.BaseEnv):
       encoded_actions.append(action_id)
     return tuple(encoded_actions)
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def decode_action(self, encoded_action: int) -> simulator.HSsimulation.Action:
     assert isinstance(encoded_action, (int, np.int64))
     return self.lookup_action_id_to_obj[encoded_action]
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def action_to_id(self, possible_action) -> Tuple:
 
     if possible_action.card is None:
@@ -210,7 +162,7 @@ class VanillaHS(base_env.BaseEnv):
       print(possible_action)
       raise e
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def reinit_game(self):
     self.simulation = simulator.HSsimulation(
       skip_mulligan=self.skip_mulligan,
@@ -235,7 +187,7 @@ class VanillaHS(base_env.BaseEnv):
     self.games_finished = 0
     self.info = None
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def game_value(self):
     player = self.simulation.player
     if player.playstate == PlayState.WON:
@@ -261,7 +213,7 @@ class VanillaHS(base_env.BaseEnv):
         self.simulation.player.playstate))
 
   @property
-  @episodic_log
+  @shared.env_utils.episodic_log
   def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
 
@@ -312,7 +264,7 @@ class VanillaHS(base_env.BaseEnv):
     offset += 1
     return offset, [board[-1], ] + board[:-1], hand, mana
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def reset(self):
     self.reinit_game()
 
@@ -321,7 +273,7 @@ class VanillaHS(base_env.BaseEnv):
     self.games_played += 1
     return self.gather_transition(autoreset=False)
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def calculate_reward(self):
     if self.simulation.game.ended:
       reward = self.game_value()
@@ -333,7 +285,7 @@ class VanillaHS(base_env.BaseEnv):
       # reward = (self.simulation.player.hero.health - self.simulation.opponent.hero.health) / self.starting_hp
     return np.array(reward, dtype=np.float32)
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def set_opponents(self, opponents: Iterable[agents.base_agent.Agent], opponent_obs_rmss=None):
     assert [isinstance(opponent, (agents.base_agent.Agent, agents.base_agent.Bot)) for opponent in opponents]
     assert [(opponent_obs_rms is None or isinstance(opponent_obs_rms, (RunningMeanStd,))) for opponent_obs_rms in
@@ -342,13 +294,13 @@ class VanillaHS(base_env.BaseEnv):
     self.opponents = opponents
     self.opponent_obs_rmss = opponent_obs_rmss
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def play_opponent_turn(self):
     assert self.simulation.game.current_player.controller.name == 'Opponent'
     while self.simulation.game.current_player.controller.name == 'Opponent':
       self.play_opponent_action()
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def play_opponent_action(self):
     assert self.simulation.game.current_player.controller.name == 'Opponent'
     observation, _, terminal, encoded_info = self.gather_transition(autoreset=False)
@@ -368,7 +320,7 @@ class VanillaHS(base_env.BaseEnv):
     action = self.opponent.choose(observation, encoded_info)
     return self.step([action, ], autoreset=False)
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def step(self, encoded_action, autoreset=True):
     encoded_action, = encoded_action
     action = self.decode_action(int(encoded_action))
@@ -383,7 +335,7 @@ class VanillaHS(base_env.BaseEnv):
         self.simulation.game.end_turn()
 
         if self.simulation.game.turn > 90:
-          episodic_log(lambda a, b, c: None)(self, 'sudden_death', self.simulation.game.turn)
+          shared.env_utils.episodic_log(lambda a, b, c: None)(self, 'sudden_death', self.simulation.game.turn)
           self.simulation.sudden_death()
           raise GameOver
 
@@ -397,7 +349,7 @@ class VanillaHS(base_env.BaseEnv):
     retr = self.gather_transition(autoreset)
     return retr
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def gather_transition(self, autoreset) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
     possible_actions = self.simulation.actions()
     game_observation = self.simulation.observe()
@@ -436,7 +388,7 @@ class VanillaHS(base_env.BaseEnv):
     self.last_info = info
     return game_observation, reward, terminal, info
 
-  @episodic_log
+  @shared.env_utils.episodic_log
   def game_info(self):
     possible_actions = self.simulation.actions()
     info = {

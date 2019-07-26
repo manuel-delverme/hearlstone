@@ -1,3 +1,5 @@
+import collections
+import pprint
 from collections import defaultdict
 from typing import Callable, Text, Optional
 
@@ -134,3 +136,83 @@ class StdOutWrapper:
 
   def get_text(self, beg, end):
     return '\n'.join(self.text.split('\n')[beg:end])
+
+
+def episodic_log(func):
+  if not hs_config.Environment.DEBUG:
+    return func
+
+  def wrapper(*args, **kwargs):
+    self = args[0]
+    if not hasattr(self, '__episodic_log_log_call_depth'):
+      self.__episodic_log_log_call_depth = 0
+
+    if not hasattr(self, '__episodic_log_log'):
+      self.__episodic_log_log = collections.deque(maxlen=2)
+
+    func_name = func.__name__
+    new_episode = func_name == 'reset'
+
+    if new_episode:
+      self.__episodic_log_log.append([])
+      self.__episodic_log_log_call_depth = 0
+    extra_info = tuple()  # (inspect.stack()[1:], r)
+
+    pre = tuple(''.join((' ',) * self.__episodic_log_log_call_depth))
+
+    log_row = tuple(pre + (func_name,) + args[1:] + tuple(kwargs) + extra_info)
+    self.__episodic_log_log[-1].append(log_row)
+
+    self.__episodic_log_log_call_depth += 1
+    retr = func(*args, **kwargs)
+    self.__episodic_log_log_call_depth -= 1
+
+    pretty_retr = []
+    if retr:
+      for r in retr:
+        if isinstance(r, dict):
+          r = dict(r)
+          if 'possible_actions' in r:
+            r['possible_actions'] = f'PARSED: {np.argwhere(r["possible_actions"]).flatten()}'
+          if 'observation' in r:
+            r['observation'] = f'PARSED: min:{r["observation"].min()} max:{r["observation"].max()}'
+          pr = str(r)
+        elif len(str(r)) > 50:
+          post = "..."
+          pr = str(r)[:50] + post
+        else:
+          pr = str(r)
+        pretty_retr.append(pr)
+    else:
+      pretty_retr = retr
+
+    pre = tuple(''.join((' ',) * self.__episodic_log_log_call_depth))
+    self.__episodic_log_log[-1].append(tuple(pre + (func_name,) + (pretty_retr,) + extra_info))
+    return retr
+
+  return wrapper
+
+
+def print_log(self):
+  log = self.__episodic_log_log
+  if log is None:
+    return
+
+  for episode in log:
+    print('=' * 100)
+    for event in episode:
+      print(pprint.pformat(event))
+
+
+def dump_log(self):
+  log = self.__episodic_log_log
+  if log is None:
+    return
+
+  with open('/tmp/episodic_log.txt', 'w') as fout:
+    for episode in log:
+      fout.write('=' * 100)
+      fout.write('\n')
+      for event in episode:
+        fout.write(pprint.pformat(event, width=4000))
+        fout.write('\n')

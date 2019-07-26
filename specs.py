@@ -36,7 +36,7 @@ def check_observation(num_inputs, observation):
 
 
 def check_action(action):
-  assert action.dtype == torch.int64
+  assert action.dtype in (torch.int64, np.int64)
   assert len(action.size()) == 2  # batch_size, 1
   assert action.size(1) == 1
   return True
