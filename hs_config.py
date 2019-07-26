@@ -27,7 +27,7 @@ visualize_everything = 0
 
 class Environment:
   render_after_step = visualize_everything or 0
-  DEBUG = False
+  DEBUG = True
   no_subprocess = DEBUG or False
   old_opponent_prob = 0.2
   sort_decks = False
