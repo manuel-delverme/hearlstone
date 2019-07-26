@@ -27,7 +27,7 @@ visualize_everything = 0
 
 class Environment:
   render_after_step = visualize_everything or 0
-  DEBUG = True
+  DEBUG = False
   no_subprocess = DEBUG or False
   old_opponent_prob = 0.2
   sort_decks = False
@@ -51,8 +51,10 @@ class Environment:
     # else:
     # import environments.vanilla_hs
     # return environments.vanilla_hs.VanillaHS
-    import sb_env.SabberStone_python_client.simulator
-    return sb_env.SabberStone_python_client.simulator.Sabbertsone
+    # import sb_env.SabberStone_python_client.simulator
+    # return sb_env.SabberStone_python_client.simulator.Sabbertsone
+    import environments.sabber_hs
+    return environments.sabber_hs.Sabbertsone
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:

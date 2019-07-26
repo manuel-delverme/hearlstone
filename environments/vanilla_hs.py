@@ -5,8 +5,6 @@ from typing import Tuple, Dict, Text, Any, Iterable
 
 import fireplace
 import fireplace.cards
-import fireplace.logging
-import gym.spaces
 import hearthstone
 import numpy as np
 import torch
