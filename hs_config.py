@@ -41,7 +41,7 @@ class Environment:
 
   always_first_player = True
 
-  level = 4
+  level = -1
 
   @staticmethod
   def get_game_mode() -> Callable[[], base_env.BaseEnv]:

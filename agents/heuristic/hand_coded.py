@@ -1,5 +1,4 @@
 import collections
-import enum
 import random
 from typing import Dict, Text, Any
 
@@ -11,19 +10,6 @@ import agents.base_agent
 import agents.heuristic.random_agent
 import hs_config
 import specs
-
-
-# the coin 1746
-# Arcane Missels 3 damage randomly 564
-# Mirror Image summon 2 minons with taunt 1084
-# Arcane Explosion 1 damage all minion  447
-# Frostbolt 3 damage + freeze 662
-# Arcane Intellect draw 2 cards 555
-# Frost Nova freeze all minionk 587
-# Fireball 6 damage 315
-# Polymoroph transform a minion in a ship 77
-# FlameStrike 4 damage to all minion 1004
-
 # SPELLS = OrderedDict({
 #   77: 'Polymorph',  # transform in a sheep
 #   315: 'Fireball',  # 6 damage
@@ -36,21 +22,20 @@ import specs
 #   1084: 'Mirror Image',  # summon two minions
 #   1746: 'The Coin',  # + 1 mana
 # })
-class SPELLS(enum.IntEnum):
-  Polymorph = 77  # transform in a sheep
-  Fireball = 315  # 6 damage
-  ArcaneExplosion = 447  # 1 damage all
-  ArcaneIntellect = 555  # 2 cards
-  FrostNova = 587  # freeze all TODO: implement
-  ArcaneMissels = 564  # 3 random damage
-  Frostbolt = 662  # 3 damage  + freze
-  Flamestrike = 1004  # 4 damage all minions
-  MirrorImage = 1084  # summon two minions
-  TheCoin = 1746  # + 1 mana
+from shared.constants import SPELLS
 
+# the coin 1746
+# Arcane Missels 3 damage randomly 564
+# Mirror Image summon 2 minons with taunt 1084
+# Arcane Explosion 1 damage all minion  447
+# Frostbolt 3 damage + freeze 662
+# Arcane Intellect draw 2 cards 555
+# Frost Nova freeze all minionk 587
+# Fireball 6 damage 315
+# Polymoroph transform a minion in a ship 77
+# FlameStrike 4 damage to all minion 1004
 
 SPELL_IDS = set(SPELLS)
-
 
 from environments.sabber_hs import PlayerTaskType, parse_hero, parse_card, parse_minion
 
@@ -65,8 +50,10 @@ class PassingAgent(agents.base_agent.Agent):
 
 class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self, level: int = hs_config.Environment.level):
-    assert -1 < level < 7
+    assert -2 < level < 7
     super().__init__()
+    if level == -1:
+      level = 6
     self.randomness = [
       None,  # 0 is passing
       1,  # 1 is always random
@@ -174,8 +161,6 @@ class SabberAgent(HeuristicAgent):
     possible_actions = encoded_info['original_info']['possible_actions']
     player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
 
-    cost = lambda x: (x.atk + x.health) / 2
-
     if len(possible_actions) == 1:
       selected_action = 0
     else:
@@ -183,70 +168,26 @@ class SabberAgent(HeuristicAgent):
       values = collections.defaultdict(int)
       end_turn = None
       for idx, action in possible_actions.items():
-        if action.type != PlayerTaskType.END_TURN:
-          actions.append(idx)
-          if action.type == PlayerTaskType.PLAY_CARD and 'Pos' in action.print:
-            values[idx] += hand_zone[action.source_position].cost
-            is_spell = False
-          else:
-            if action.type == PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in SPELL_IDS:
-              values[idx] += hand_zone[action.source_position].cost
-              is_spell = True
-            else:  # action.type == PlayerTaskType.MINION_ATTACK or action.type == PlayerTaskType.HERO_POWER:
-              is_spell = False
-
-            if not is_spell:
-              # check position
-              if action.target_position == 0:
-                target = player_hero
-              elif action.target_position == 8:
-                target = opponent_hero
-              elif action.target_position < 8:
-                target = player_board[action.target_position - 1]
-              elif action.target_position > 8:
-                target = opponent_board[action.target_position - 9]
-              else:
-                raise IndexError
-
-              attacker = player_hero if action.source_position == 0 else player_board[action.source_position - 1]
-              atk_dies = attacker.health <= target.atk
-              def_dies = target.health <= attacker.atk
-
-              if action.target_position == 8:
-                atk_dies = False
-                is_hero = True
-              else:
-                is_hero = False
-              if def_dies and is_hero:
-                values[idx] += float('inf')
-              elif atk_dies and def_dies:
-                values[idx] += cost(target) - cost(attacker)
-              elif atk_dies and not def_dies:
-                values[idx] -= float('inf')
-              elif not atk_dies and def_dies:
-                overkill = target.health / attacker.atk
-                if overkill > 2 and not is_hero:
-                  values[idx] = cost(target)
-              elif not atk_dies and not def_dies:
-                values[idx] += attacker.atk / target.health
-            else:
-              card_id = hand_zone[action.source_position].id
-              if len(opponent_board) == 0 and card_id in [SPELLS.ArcaneIntellect, SPELLS.MirrorImage, SPELLS.Fireball,
-                                                          SPELLS.Frostbolt] and action.target_position > 8:
-                values[idx] = opponent_board[action.target_position - 1].health
-              elif len(opponent_board) == 0 and card_id in [SPELLS.MirrorImage, SPELLS.ArcaneIntellect]:
-                values[idx] = 50
-              else:
-                if len(opponent_board) > 3 and card_id in [SPELLS.ArcaneMissels, SPELLS.Flamestrike,
-                                                           SPELLS.ArcaneExplosion] and action.target_position > 8:
-                  values[idx] = opponent_board[action.target_position - 1].health
-                elif len(opponent_board) > 0 and opponent_board[action.target_position - 1].atk > 3 and card_id in [
-                  SPELLS.Polymorph]:
-                  values[idx] = opponent_board[action.target_position - 1].health
-                else:
-                  values[idx] = 0
-        else:
+        if action.type == PlayerTaskType.END_TURN:
           end_turn = idx
+          continue
+
+        actions.append(idx)
+
+        if self.action_is_play_minion(action):
+          minion = hand_zone[action.source_position]
+          # value = (minion.base_health + minion.atk) / 2
+          value = minion.cost * 10000  # play minions first
+          print(f"{action.print}[PLAY_MINION] has value of {value}")
+        elif self.action_is_spell(action, hand_zone):
+          value = self.evaluate_spell(action, hand_zone, opponent_board, opponent_hero)
+          print(f"{action.print}[SPELL] on {action.target_position} has value of {value}")
+        else:
+          continue
+          value = self.evaluate_trade(action, cost, opponent_board, opponent_hero, player_board, player_hero)
+          print(f"{action.print}[TRADE] has value of {value}")
+
+        values[idx] = value
 
       actions = sorted(actions, key=lambda x: values[x], reverse=True)
       if values[actions[0]] < 0:
@@ -254,6 +195,133 @@ class SabberAgent(HeuristicAgent):
       else:
         selected_action = actions[0]
     return selected_action
+
+  def action_is_play_minion(self, action):
+    return action.type == PlayerTaskType.PLAY_CARD and 'Pos' in action.print
+
+  def action_is_spell(self, action, hand_zone):
+    if action.type == PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in SPELL_IDS:
+      is_spell = True
+    else:  # action.type == PlayerTaskType.MINION_ATTACK or action.type == PlayerTaskType.HERO_POWER:
+      is_spell = False
+    return is_spell
+
+  def evaluate_trade(self, action, cost, opponent_board, opponent_hero, player_board, player_hero):
+    value = 0
+
+    # check position
+    if action.target_position == 0:
+      target = player_hero
+    elif action.target_position == 8:
+      target = opponent_hero
+    elif action.target_position < 8:
+      target = player_board[action.target_position - 1]
+    elif action.target_position > 8:
+      target = opponent_board[action.target_position - 9]
+    else:
+      raise IndexError
+
+    attacker = player_hero if action.source_position == 0 else player_board[action.source_position - 1]
+    atk_dies = attacker.health <= target.atk
+    def_dies = target.health <= attacker.atk
+    if action.target_position == 8:
+      atk_dies = False
+      is_hero = True
+    else:
+      is_hero = False
+    if def_dies and is_hero:
+      value += float('inf')
+    elif atk_dies and def_dies:
+      value += cost(target) - cost(attacker)
+    elif atk_dies and not def_dies:
+      value -= float('inf')
+    elif not atk_dies and def_dies:
+      overkill = target.health / attacker.atk
+      if overkill > 2 and not is_hero:
+        value = cost(target)
+    elif not atk_dies and not def_dies:
+      value += attacker.atk / target.health
+    return value
+
+  def evaluate_spell(self, action, hand_zone, opponent_board, opponent_hero):
+    card_id = hand_zone[action.source_position].id
+    if action.target_position < 8:
+      return -1  # hitting your own minions as mage is not a good idea
+
+    if action.target_position == -1:
+      target_minion = None
+    elif action.target_position < 8:
+      target_minion = opponent_board[action.target_position - 1]
+    elif action.target_position == 8:
+      target_minion = opponent_hero
+    else:
+      target_minion = opponent_board[action.target_position - 9]
+
+    def minion_value(m):
+      return m.atk / 2 + m.health / 2.
+
+    value = -1
+    if card_id == SPELLS.ArcaneIntellect:
+      if len(hand_zone) < 4:
+        value = 0.01
+    elif card_id == SPELLS.MirrorImage:
+      for target_minion in opponent_board:
+        if target_minion.atk > 6:  # slow down big minions
+          value += 0.2 * target_minion.atk
+    elif card_id == SPELLS.Fireball:
+      if action.target_position == 8 and opponent_hero.health <= 6:  # kill him!
+        value = float('inf')
+      elif target_minion.health in (4, 5, 6):  # kill minion
+        value = target_minion.atk
+      else:  # slow down big minions
+        value = -1
+    elif card_id == SPELLS.Frostbolt:
+      if action.target_position == 8 and opponent_hero.health <= 3:  # kill him!
+        value = float('inf')
+      elif target_minion.health in (2, 3):  # kill minion
+        value = target_minion.atk
+      else:  # slow down big minions
+        value = 1 - 0.2 * target_minion.atk
+    elif card_id == SPELLS.Polymorph:
+      value = minion_value(target_minion) - 1
+    elif card_id == SPELLS.ArcaneExplosion:
+      for target_minion in opponent_board:
+        if target_minion.health == 1:  # slow down big minions
+          value += target_minion.atk
+    elif card_id == SPELLS.FrostNova:
+      if len(opponent_board) > 2:
+        for target_minion in opponent_board:
+          value += 0.2 * minion_value(target_minion)
+    elif card_id == SPELLS.ArcaneMissels:
+      if opponent_hero.health < 2:
+        value = float('inf')
+      else:
+        for target_minion in opponent_board:
+          if target_minion.health == 1:  # slow down big minions
+            value += 3. / len(opponent_board)
+    elif card_id == SPELLS.Flamestrike:
+      for target_minion in opponent_board:
+        if target_minion.health <= 4:  # slow down big minions
+          value += minion_value(target_minion)
+    elif card_id == SPELLS.TheCoin:
+      value = random.choice((float('inf'), -1))
+
+    # if len(opponent_board) == 0 and card_id in [SPELLS.ArcaneIntellect, SPELLS.MirrorImage, SPELLS.Fireball,
+    #                                             SPELLS.Frostbolt] and action.target_position > 8:
+    #   value = opponent_board[action.target_position - 1].health
+
+    # elif len(opponent_board) == 0 and card_id in [SPELLS.MirrorImage, SPELLS.ArcaneIntellect]:
+    #   value = 50
+    # else:
+    #   if len(opponent_board) > 3 and card_id in [SPELLS.ArcaneMissels, SPELLS.Flamestrike,
+    #                                              SPELLS.ArcaneExplosion] and action.target_position > 8:
+    #     value = opponent_board[action.target_position - 1].health
+    #   elif len(opponent_board) > 0 and opponent_board[action.target_position - 1].atk > 3 and card_id in [
+    #     SPELLS.Polymorph]:
+    #     value = opponent_board[action.target_position - 1].health
+    #   else:
+    #     value = 0
+    return value
 
 
 class TradingAgent(agents.base_agent.Bot):
