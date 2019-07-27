@@ -1,7 +1,9 @@
-import specs
-from . import VecEnvWrapper
-from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
+import warnings
+
 import numpy as np
+
+from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
+from . import VecEnvWrapper
 
 
 class VecNormalize(VecEnvWrapper):
@@ -22,8 +24,13 @@ class VecNormalize(VecEnvWrapper):
 
   def step_wait(self):
     obs, rews, news, infos = self.vectorized_env.step_wait()
+    warnings.warn('fixme')
+    for oi, ri, info in zip(obs, rews, infos):
+      info['game_statistics'] = (oi, ri)
+
     self.ret = self.ret * self.gamma + rews
     obs = self._obfilt(obs)
+
     if self.ret_rms:
       self.ret_rms.update(self.ret)
       rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)

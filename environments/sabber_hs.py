@@ -13,7 +13,7 @@ import hs_config
 import sb_env.SabberStone_python_client.python_pb2 as python_pb2
 import sb_env.SabberStone_python_client.python_pb2_grpc as python_pb2_grpc
 import shared.env_utils
-import specs
+import shared.utils
 
 _MAX_CARDS_IN_HAND = 10
 _MAX_CARDS_IN_PLAYER_BOARD = 7 + 1  # opponent face
@@ -21,9 +21,6 @@ _MAX_CARDS_IN_BOARD = _MAX_CARDS_IN_PLAYER_BOARD * 2
 _MAX_TYPE = 7
 _ACTION_SPACE = 249
 _STATE_SPACE = 92  # state space includes card_index
-
-AGENT_ID = 1
-OPPONENT_ID = 2
 
 
 class PlayerTaskType(IntEnum):
@@ -36,11 +33,18 @@ class PlayerTaskType(IntEnum):
   PLAY_CARD = 6
 
 
+def parse_hero(hero):
+  # TODO change damage in health
+  return np.array([hero.atk, hero.damage, hero.exhausted, hero.power.exhausted])
+
 # TODO add card repr
 def parse_card(card):
   return np.array((card.card_id, card.atk, card.base_health, card.cost))
 
-  # TODO parse spells and minion differently
+
+# TODO parse spells and minion differently
+
+
 def parse_minion(card):
   return np.array([card.atk, card.base_health - card.damage, card.exhausted])
 
@@ -160,20 +164,18 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
     if player.play_state == python_pb2.Controller.WON:  # maybe PlayState
       reward = 1
-    elif player.play_state == python_pb2.Controller.LOST:
+    elif player.play_state in (python_pb2.Controller.LOST, python_pb2.Controller.TIED):
       reward = -1
     else:
       reward = 0
-
-    warnings.warn('check if opponent wins/loses the reward goes to the agent')
     return np.array(reward, dtype=np.float32)
-
-  def is_terminal(self):
-    return terminal
 
   def original_info(self):
     possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
-    return {"possible_actions": tuple(possible_options)}
+    return {
+      "observation": self.game_ref,
+      "possible_actions": self.parse_options(self.game_ref, self.action_to_id),
+    }
 
   @classmethod
   def parse_options(cls, game, option_id_to_dict):
@@ -190,8 +192,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray, auto_reset: bool = True):
-    assert specs.check_positive_type(action_id, (np.ndarray, int), strict=False)
-    assert isinstance(action_id, int) or (action_id.dtype == np.int64 and action_id.size == 1)
+    assert hasattr(action_id, '__int__')
     action_id = int(action_id)
 
     actions = Sabbertsone.parse_options(self.game_ref, self.action_to_id)
@@ -221,7 +222,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
   @shared.env_utils.episodic_log
   def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    assert not auto_reset or self.game_ref.CurrentPlayer.id == AGENT_ID  # the opponent cannot auto_reset
+    assert shared.utils.can_autoreset(auto_reset, self.game_ref), f"current_player {self.game_ref.CurrentPlayer.id}"
 
     terminal = self.game_ref.state == python_pb2.Game.COMPLETE
     reward = self.game_value()
@@ -245,7 +246,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
       'action_history': [],
     }
 
-    assert info['possible_actions'].max() == 1
+    assert info['possible_actions'].max() == 1 or terminal
     return state, reward, terminal, info
 
   def _sample_opponent(self):
@@ -286,4 +287,5 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
   def close(self):
     # Not sure about this.
-    python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close()
+    # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close()
+    warnings.warn("not closing cleanly, restart the server")

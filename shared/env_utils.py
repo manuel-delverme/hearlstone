@@ -1,5 +1,6 @@
 import collections
 import pprint
+import warnings
 from collections import defaultdict
 from typing import Callable, Text, Optional
 
@@ -55,6 +56,9 @@ class VecNormalize(_VecNormalize):
     Reset all environments
     """
     obs, rewards, dones, infos = self.vectorized_env.reset()
+    warnings.warn('fixme')
+    for oi, ri, info in zip(obs, rewards, infos):
+      info['game_statistics'] = (oi, ri)
     filtered_obs = self._obfilt(obs)
     return filtered_obs, rewards, dones, infos
 
@@ -139,7 +143,7 @@ class StdOutWrapper:
 
 
 def episodic_log(func):
-  if not hs_config.Environment.DEBUG:
+  if not hs_config.Environment._DEBUG:
     return func
 
   def wrapper(*args, **kwargs):

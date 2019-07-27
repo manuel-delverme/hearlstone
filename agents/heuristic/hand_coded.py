@@ -1,4 +1,5 @@
 import collections
+import enum
 import random
 from typing import Dict, Text, Any
 
@@ -11,6 +12,7 @@ import agents.heuristic.random_agent
 import hs_config
 import specs
 
+
 # the coin 1746
 # Arcane Missels 3 damage randomly 564
 # Mirror Image summon 2 minons with taunt 1084
@@ -22,20 +24,33 @@ import specs
 # Polymoroph transform a minion in a ship 77
 # FlameStrike 4 damage to all minion 1004
 
-from collections import OrderedDict
+# SPELLS = OrderedDict({
+#   77: 'Polymorph',  # transform in a sheep
+#   315: 'Fireball',  # 6 damage
+#   447: 'Arcane Explosion',  # 1 damage all
+#   555: 'Arcane Intellect',  # 2 cards
+#   587: 'Frost nova',  # freeze all
+#   564: 'Arcane Missels',  # 3 random damage
+#   662: 'Frostbolt',  # 3 damage  + freze
+#   1004: 'Flamestrike',  # 4 damage all minions
+#   1084: 'Mirror Image',  # summon two minions
+#   1746: 'The Coin',  # + 1 mana
+# })
+class SPELLS(enum.IntEnum):
+  Polymorph = 77  # transform in a sheep
+  Fireball = 315  # 6 damage
+  ArcaneExplosion = 447  # 1 damage all
+  ArcaneIntellect = 555  # 2 cards
+  FrostNova = 587  # freeze all TODO: implement
+  ArcaneMissels = 564  # 3 random damage
+  Frostbolt = 662  # 3 damage  + freze
+  Flamestrike = 1004  # 4 damage all minions
+  MirrorImage = 1084  # summon two minions
+  TheCoin = 1746  # + 1 mana
 
-SPELLS = OrderedDict({
-  77: 'Polymorph', # transform in a sheep
-  315: 'Fireball', # 6 damage
-  447: 'Arcane Explosion', # 1 damage all
-  555: 'Arcane Intellect', # 2 cards
-  587: 'Frost nova', # freeze all
-  564: 'Arcane Missels', #  3 random damage
-  662: 'Frostbolt', # 3 damage  + freze
-  1004: 'Flamestrike', # 4 damage all minions
-  1084: 'Mirror Image', # summon two minions
-  1746: 'The Coin', #  + 1 mana
-})
+
+SPELL_IDS = set(SPELLS)
+
 
 from environments.sabber_hs import PlayerTaskType, parse_hero, parse_card, parse_minion
 
@@ -174,10 +189,10 @@ class SabberAgent(HeuristicAgent):
             values[idx] += hand_zone[action.source_position].cost
             is_spell = False
           else:
-            if action.type == PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in SPELLS.keys():
+            if action.type == PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in SPELL_IDS:
               values[idx] += hand_zone[action.source_position].cost
               is_spell = True
-            else: #action.type == PlayerTaskType.MINION_ATTACK or action.type == PlayerTaskType.HERO_POWER:
+            else:  # action.type == PlayerTaskType.MINION_ATTACK or action.type == PlayerTaskType.HERO_POWER:
               is_spell = False
 
             if not is_spell:
@@ -216,14 +231,17 @@ class SabberAgent(HeuristicAgent):
                 values[idx] += attacker.atk / target.health
             else:
               card_id = hand_zone[action.source_position].id
-              if len(opponent_board) == 0 and card_id in [555, 1084, 315, 662] and action.target_position > 8:
+              if len(opponent_board) == 0 and card_id in [SPELLS.ArcaneIntellect, SPELLS.MirrorImage, SPELLS.Fireball,
+                                                          SPELLS.Frostbolt] and action.target_position > 8:
                 values[idx] = opponent_board[action.target_position - 1].health
-              elif len(opponent_board) == 0 and card_id in[1746, 555]:
+              elif len(opponent_board) == 0 and card_id in [SPELLS.MirrorImage, SPELLS.ArcaneIntellect]:
                 values[idx] = 50
               else:
-                if len(opponent_board) > 3 and card_id in [564,1004, 447] and action.target_position > 8:
+                if len(opponent_board) > 3 and card_id in [SPELLS.ArcaneMissels, SPELLS.Flamestrike,
+                                                           SPELLS.ArcaneExplosion] and action.target_position > 8:
                   values[idx] = opponent_board[action.target_position - 1].health
-                elif len(opponent_board) > 0 and opponent_board[action.target_position - 1].atk > 3 and card_id in [77]:
+                elif len(opponent_board) > 0 and opponent_board[action.target_position - 1].atk > 3 and card_id in [
+                  SPELLS.Polymorph]:
                   values[idx] = opponent_board[action.target_position - 1].health
                 else:
                   values[idx] = 0

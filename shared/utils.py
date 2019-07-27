@@ -13,9 +13,11 @@ import tqdm
 from hearthstone.enums import CardClass, CardType
 from numpy import ndarray
 
+import shared.constants as C
 import shared.env_utils
 from agents.base_agent import Agent
 from environments import base_env
+from sb_env.SabberStone_python_client import python_pb2
 
 
 def to_tuples(list_of_lists):
@@ -161,3 +163,15 @@ def init(module, weight_init, bias_init, gain=1):
   weight_init(module.weight.data, gain=gain)
   bias_init(module.bias.data)
   return module
+
+
+def can_autoreset(auto_reset, game_ref):
+  # the opponent cannot auto_reset
+  if not auto_reset:
+    return True
+  if game_ref.CurrentPlayer.id == C.AGENT_ID:
+    return True
+  if game_ref.state == python_pb2.Game.COMPLETE:
+    return True
+
+  return False

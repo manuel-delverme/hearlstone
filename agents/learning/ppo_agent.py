@@ -7,12 +7,13 @@ import os
 import shutil
 import tempfile
 import time
-from collections import deque
+import warnings
 from typing import Text, Optional, Tuple
 
 import numpy as np
 import tensorboardX
 import torch
+import tqdm
 
 import agents.base_agent
 import game_utils
@@ -31,7 +32,7 @@ class PPOAgent(agents.base_agent.Agent):
     return action
 
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
-    experts: Tuple[agents.base_agent.Agent]) -> None:
+    experts: Tuple[agents.base_agent.Agent] = tuple(), ) -> None:
 
     self.experiment_id = "-".join((
       hs_config.Environment.get_game_mode().__name__,
@@ -133,7 +134,6 @@ class PPOAgent(agents.base_agent.Agent):
 
   def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
     num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
-
     assert updates_offset >= 0
     envs, eval_envs, valid_envs = self.setup_envs(game_manager)
 
@@ -149,7 +149,7 @@ class PPOAgent(agents.base_agent.Agent):
     possible_actions = self.update_possible_actions_for_expert(info)
 
     rollouts.store_first_transition(obs, possible_actions)
-    episode_rewards = deque(maxlen=10)
+    episode_rewards = collections.deque(maxlen=10)
 
     start = time.time()
     total_num_steps = None
@@ -311,13 +311,10 @@ class PPOAgent(agents.base_agent.Agent):
       if rollouts is not None:
         rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
-      # else:
-      #   assert isinstance(reward, torch.Tensor)
-      #   rewards.append(reward)
-
       assert 'game_statistics' in specs.OPTIONAL_INFO_KEYS
       if 'game_statistics' in infos:
-        rewards.extend(i['outcome'].item() for i in infos['game_statistics'])
+        warnings.warn('breaks if reward shaping')
+        rewards.extend(i[1] for i in infos['game_statistics'] if i[1] != 0)
 
   def maybe_render(self, action, envs):
     if hs_config.Environment.render_after_step:
@@ -493,6 +490,7 @@ class PPOAgent(agents.base_agent.Agent):
     updates_schedule = [1, ]
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
     old_win_ratio = -1
+    pbar = tqdm.tqdm(total=sum(updates_schedule))
     try:
       for self_play_iter, num_updates in enumerate(updates_schedule):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
@@ -510,6 +508,7 @@ class PPOAgent(agents.base_agent.Agent):
         game_manager.add_learning_opponent(checkpoint_file)
         # self.actor_critic.reset_actor()
         self.optimizer.state = collections.defaultdict(dict)  # Reset state
+        pbar.update(num_updates)
 
     except KeyboardInterrupt:
       print("Captured KeyboardInterrupt from user, quitting")
