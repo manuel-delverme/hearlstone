@@ -33,9 +33,43 @@ class PlayerTaskType(IntEnum):
   PLAY_CARD = 6
 
 
+class BoardPosition(IntEnum):
+  RightMost = -1
+  Hero = 0
+  B1 = 1
+  B2 = 2
+  B3 = 3
+  B4 = 4
+  B5 = 5
+  B6 = 6
+  B7 = 7
+  oHero = 0 + 8
+  oB1 = 1 + 8
+  oB2 = 2 + 8
+  oB3 = 3 + 8
+  oB4 = 4 + 8
+  oB5 = 5 + 8
+  oB6 = 6 + 8
+  oB7 = 7 + 8
+
+
+class HandPosition(IntEnum):
+  H1 = 0
+  H2 = 1
+  H3 = 2
+  H4 = 3
+  H5 = 4
+  H6 = 5
+  H7 = 6
+  H8 = 7
+  H9 = 8
+  HA = 9
+
+
 def parse_hero(hero):
   # TODO change damage in health
   return np.array([hero.atk, hero.damage, hero.exhausted, hero.power.exhausted])
+
 
 # TODO add card repr
 def parse_card(card):
@@ -43,8 +77,6 @@ def parse_card(card):
 
 
 # TODO parse spells and minion differently
-
-
 def parse_minion(card):
   return np.array([card.atk, card.base_health - card.damage, card.exhausted])
 
@@ -93,48 +125,27 @@ def full_random_game(stub, deck1, deck2):
 def enumerate_actions():
   id_to_action = [(PlayerTaskType.END_TURN, 0, 0)]
 
-  # place minions
+  # place minions or play spell
   for src_id in range(_MAX_CARDS_IN_HAND):
     for target_id in range(_MAX_CARDS_IN_BOARD):
-      id_to_action.append((PlayerTaskType.PLAY_CARD, src_id, target_id))
+      id_to_action.append((PlayerTaskType.PLAY_CARD, HandPosition(src_id), BoardPosition(target_id)))
 
   # attack
   for src_id in range(_MAX_CARDS_IN_PLAYER_BOARD):
     for target_id in range(_MAX_CARDS_IN_PLAYER_BOARD, _MAX_CARDS_IN_PLAYER_BOARD * 2):
-      id_to_action.append((PlayerTaskType.MINION_ATTACK, src_id, target_id))
+      id_to_action.append((PlayerTaskType.MINION_ATTACK, BoardPosition(src_id), BoardPosition(target_id)))
 
   # hero power`
   for target_id in range(_MAX_CARDS_IN_BOARD):
-    id_to_action.append((PlayerTaskType.HERO_POWER, 0, target_id))
+    id_to_action.append((PlayerTaskType.HERO_POWER, BoardPosition(0), BoardPosition(target_id)))
 
   # hero attack
   for target_id in range(_MAX_CARDS_IN_PLAYER_BOARD, _MAX_CARDS_IN_PLAYER_BOARD * 2):
-    id_to_action.append((PlayerTaskType.HERO_ATTACK, 0, target_id))
+    id_to_action.append((PlayerTaskType.HERO_ATTACK, BoardPosition(0), BoardPosition(target_id)))
 
   action_to_id_dict = {v: k for k, v in enumerate(id_to_action)}
   assert len(id_to_action) == _ACTION_SPACE
   return action_to_id_dict
-
-
-# class Stub:
-#   stub = connect()
-#
-#   def __init__(self):
-#     pass
-#
-#   def __getattribute__(self, name):
-#     attr = object.__getattribute__(Stub.stub, name)
-#     if hasattr(attr, '__call__'):
-#       def newfunc(*args, **kwargs):
-#         print('>calling', name)
-#         result = attr(*args, **kwargs)
-#         print('<<<<<< calling', name)
-#         return result
-#
-#       return newfunc
-#     else:
-#       return attr
-# stub = Stub()
 
 
 class Sabbertsone(environments.base_env.BaseEnv):
@@ -143,6 +154,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
   address = "localhost:50052"
   channel = grpc.insecure_channel(address)
   stub = python_pb2_grpc.SabberStonePythonStub(channel)
+  action_to_id = enumerate_actions()
 
   def __init__(self, seed: int = None, extra_seed: int = None):
     super().__init__()
@@ -153,8 +165,6 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
-
-    self.action_to_id = enumerate_actions()
 
   def cards_in_hand(self):
     raise len(self.game_ref.player1.hand_zone)
@@ -174,19 +184,64 @@ class Sabbertsone(environments.base_env.BaseEnv):
     possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
     return {
       "observation": self.game_ref,
-      "possible_actions": self.parse_options(self.game_ref, self.action_to_id),
+      "possible_actions": self.parse_options(self.game_ref),
     }
 
   @classmethod
-  def parse_options(cls, game, option_id_to_dict):
+  def parse_options(cls, game):
     options = cls.stub.GetOptions(game.id).list
+    where_the_fuck_am_i = {m.card_id: idx for idx, m in enumerate(game.CurrentPlayer.board_zone.minions)}
+    where_the_fuck_are_you = {m.card_id: idx + 9 for idx, m in enumerate(game.CurrentOpponent.board_zone.minions)}
+
     possible_options = {}
+
     for option in options:
-      # removing chooses taks
-      if option.type == PlayerTaskType.CHOOSE:
+      option_type = PlayerTaskType(option.type)
+
+      if option_type == PlayerTaskType.CHOOSE:
         raise NotImplementedError
-      action = option_id_to_dict[(option.type, option.source_position, option.target_position)]
-      possible_options[action] = option
+
+      action_type = PlayerTaskType(option.type)
+
+      if option_type == PlayerTaskType.END_TURN:
+        action_id = cls.GameActions.PASS_TURN
+      else:
+        if option_type == PlayerTaskType.PLAY_CARD:
+          source = HandPosition(option.source_position)
+          target = BoardPosition(option.target_position)
+
+          playing_spell = "]'(Pos " not in option.print
+          if playing_spell:
+            if option.target_id == 0:
+              target = BoardPosition(0)  # spells with no target
+            elif option.target_position == 0 and option.target_id not in (4, 6):
+              target = BoardPosition(where_the_fuck_am_i[option.target_id])
+            elif option.target_position == 8 and option.target_id not in (4, 6):
+              target = BoardPosition(where_the_fuck_are_you[option.target_id])
+            elif option.target_position > 8:
+              raise NotImplementedError('Fail fails to fail')
+
+        elif option_type == PlayerTaskType.MINION_ATTACK:
+          source = BoardPosition(option.source_position)
+          target = BoardPosition(option.target_position)
+        elif option_type == PlayerTaskType.HERO_ATTACK:
+          source = BoardPosition(option.source_position)
+          target = BoardPosition(option.target_position)
+          assert source == BoardPosition.Hero
+        elif option_type == PlayerTaskType.HERO_POWER:
+          source = BoardPosition(option.source_position)
+          target = BoardPosition(option.target_position)
+          assert source == BoardPosition.Hero
+        else:
+          raise NotImplementedError
+
+        action_hash = (action_type, source, target)
+        # action_hash = (PlayerTaskType(option.type), BoardPosition(option.source_position), BoardPosition(target_position))
+        action_id = cls.action_to_id[action_hash]
+
+      assert action_id not in possible_options
+      possible_options[action_id] = option
+
     assert len(possible_options) > 0  # pass should always be there
     return possible_options
 
@@ -195,7 +250,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
     assert hasattr(action_id, '__int__')
     action_id = int(action_id)
 
-    actions = Sabbertsone.parse_options(self.game_ref, self.action_to_id)
+    actions = Sabbertsone.parse_options(self.game_ref)
     selected_action = actions[action_id]
     self.game_ref = Sabbertsone.stub.Process(selected_action)
 
@@ -230,7 +285,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
     possible_actions = np.zeros(_ACTION_SPACE, dtype=np.float32)
     if not terminal:
-      actions = Sabbertsone.parse_options(self.game_ref, self.action_to_id)
+      actions = Sabbertsone.parse_options(self.game_ref)
       possible_actions[list(actions.keys())] = 1
 
     if terminal:
