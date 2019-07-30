@@ -11,6 +11,7 @@ import environments.base_env
 import hs_config
 import sb_env.SabberStone_python_client.python_pb2 as python_pb2
 import sb_env.SabberStone_python_client.python_pb2_grpc as python_pb2_grpc
+import shared.constants as C
 import shared.env_utils
 import shared.utils
 from shared.constants import PlayerTaskType, BoardPosition, HandPosition, GameStatistics, _ACTION_SPACE, _STATE_SPACE
@@ -42,7 +43,7 @@ def parse_player(player):
   hero = np.array(
     [player.hero.atk, player.hero.base_health - player.hero.damage, player.hero.exhausted, player.hero.power.exhausted])
   hand_zone = pad(player.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse_card=parse_card)
-  board_zone = pad(player.board_zone.minions, length=(hs_config.Environment.max_cards_in_board - 1) * 3,
+  board_zone = pad(player.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3,
                    parse_card=parse_minion)
   return hero, board_zone, hand_zone
 
@@ -71,26 +72,27 @@ def full_random_game(stub, deck1, deck2):
     options_list.clear()
 
 
-# check for zone
+
 def enumerate_actions():
   id_to_action = [(PlayerTaskType.END_TURN, 0, 0)]
 
   # place minions or play spell
   for src_id in range(hs_config.Environment.max_cards_in_hand):
-    for target_id in range(hs_config.Environment.max_cards_in_board * 2):
+    for target_id in range(hs_config.Environment.max_entities_in_board * 2):
       id_to_action.append((PlayerTaskType.PLAY_CARD, HandPosition(src_id), BoardPosition(target_id)))
 
   # attack
-  for src_id in range(hs_config.Environment.max_cards_in_board):
-    for target_id in range(hs_config.Environment.max_cards_in_board, hs_config.Environment.max_cards_in_board * 2):
+  for src_id in range(hs_config.Environment.max_entities_in_board):
+    for target_id in range(hs_config.Environment.max_entities_in_board,
+                           hs_config.Environment.max_entities_in_board * 2):
       id_to_action.append((PlayerTaskType.MINION_ATTACK, BoardPosition(src_id), BoardPosition(target_id)))
 
   # hero power`
-  for target_id in range(hs_config.Environment.max_cards_in_board * 2):
+  for target_id in range(hs_config.Environment.max_entities_in_board * 2):
     id_to_action.append((PlayerTaskType.HERO_POWER, BoardPosition(0), BoardPosition(target_id)))
 
   # hero attack
-  for target_id in range(hs_config.Environment.max_cards_in_board, hs_config.Environment.max_cards_in_board * 2):
+  for target_id in range(hs_config.Environment.max_entities_in_board, hs_config.Environment.max_entities_in_board * 2):
     id_to_action.append((PlayerTaskType.HERO_ATTACK, BoardPosition(0), BoardPosition(target_id)))
 
   action_to_id_dict = {v: k for k, v in enumerate(id_to_action)}
@@ -129,7 +131,7 @@ def game_stats(game):
 class Sabbertsone(environments.base_env.BaseEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-  address = "sabberstone:50052"
+  address = "localhost:50052"
   channel = grpc.insecure_channel(address)
   stub = python_pb2_grpc.SabberStonePythonStub(channel)
   action_to_id = enumerate_actions()
@@ -139,7 +141,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
     if seed is not None or extra_seed is not None:
       warnings.warn("Setting the seed is not implemented")
 
-    self.game_ref = Sabbertsone.stub.NewGame(python_pb2.DeckStrings(deck1=self.DECK1, deck2=self.DECK2))
+    self.game_ref = Sabbertsone.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2))
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
@@ -239,10 +241,10 @@ class Sabbertsone(environments.base_env.BaseEnv):
   def reset(self):
     self.game_ref = Sabbertsone.stub.Reset(self.game_ref.id)
     self._sample_opponent()
-    self.turn_stats = []
+    # self.turn_stats = []
     # self.episode_steps = 0
     # self.info = None
-    if self.game_ref.CurrentPlayer.id == 2:
+    if self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
       self.play_opponent_turn()
     return self.gather_transition(auto_reset=False)
 
@@ -251,6 +253,9 @@ class Sabbertsone(environments.base_env.BaseEnv):
     assert shared.utils.can_autoreset(auto_reset, self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
 
     terminal = self.game_ref.state == python_pb2.Game.COMPLETE
+    assert self.game_ref.state in (
+    python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
+
     reward = self.game_value()
     state = build_state(self.game_ref)
 
@@ -284,7 +289,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
   def _sample_opponent(self):
     pick = np.random.uniform()
-    if pick < 0.5:
+    if pick < hs_config.Environment.newest_opponent_prob:
       k = -1
     else:
       k = random.randint(0, len(self.opponents) - 1)
@@ -311,9 +316,9 @@ class Sabbertsone(environments.base_env.BaseEnv):
     return self.step(action, auto_reset=False)
 
   def play_opponent_turn(self):
-    assert self.game_ref.CurrentPlayer.id == 2
+    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
     try:
-      while self.game_ref.CurrentPlayer.id == 2:
+      while self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
         self.play_opponent_action()
     except self.GameOver:
       pass
