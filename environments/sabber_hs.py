@@ -254,7 +254,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
     terminal = self.game_ref.state == python_pb2.Game.COMPLETE
     assert self.game_ref.state in (
-    python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
+      python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
 
     reward = self.game_value()
     state = build_state(self.game_ref)
