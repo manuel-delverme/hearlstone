@@ -275,7 +275,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval)
     return rewards
 
-  def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False):
+  def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False, game_stats=None):
 
     if rollouts is None:
       obs, _, _, infos = envs.reset()

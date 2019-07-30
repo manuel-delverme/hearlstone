@@ -147,11 +147,40 @@ def enumerate_actions():
   assert len(id_to_action) == _ACTION_SPACE
   return action_to_id_dict
 
+import collections
+GameStatistics = collections.namedtuple('GameStatistics', ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv','n_turns_left', 'minion_adv'])
+
+def game_stats(game):
+  player = game.CurrentPlayer
+  opponent = game.CurrentOpponent
+
+  power = [(minion.atk, minion.base_health) for minion in player.board_zone.minions]
+  if len(power):
+    power, value = np.sum(power,axis=0)
+  else:
+    power = 0
+    value = 0
+  defense = sum([minion.base_health for minion in opponent.board_zone.minions])
+
+  opponent_life = opponent.hero.base_health - opponent.hero.damage
+  hero_life = player.hero.base_health - player.hero.damage
+
+  n_remaining_turns = power/(opponent_life)
+
+  mana_adv = (player.base_mana - player.remaining_mana)
+  hand_adv = (len(player.hand_zone.entities) - len(opponent.hand_zone.entities))
+  draw_adv = (len(player.deck_zone.entities) - len(opponent.deck_zone.entities))  # number of remaining cards
+  life_adv = opponent_life - hero_life
+  minion_adv = value - defense
+
+  return GameStatistics(mana_adv, hand_adv, draw_adv, life_adv,n_remaining_turns, minion_adv)
+  # return {'mana_adv': mana_adv, 'hand_adv': hand_adv, 'draw_adv': draw_adv, 'life_adv': life_dav,
+  #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
 
 class Sabbertsone(environments.base_env.BaseEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-  address = "localhost:50052"
+  address = "192.168.99.100:50052"
   channel = grpc.insecure_channel(address)
   stub = python_pb2_grpc.SabberStonePythonStub(channel)
   action_to_id = enumerate_actions()
@@ -165,6 +194,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
+    self.turn_stats = []
 
   def cards_in_hand(self):
     raise len(self.game_ref.player1.hand_zone)
@@ -181,7 +211,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
     return np.array(reward, dtype=np.float32)
 
   def original_info(self):
-    possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
+    # possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
     return {
       "observation": self.game_ref,
       "possible_actions": self.parse_options(self.game_ref),
@@ -190,8 +220,8 @@ class Sabbertsone(environments.base_env.BaseEnv):
   @classmethod
   def parse_options(cls, game):
     options = cls.stub.GetOptions(game.id).list
-    where_the_fuck_am_i = {m.card_id: idx for idx, m in enumerate(game.CurrentPlayer.board_zone.minions)}
-    where_the_fuck_are_you = {m.card_id: idx + 9 for idx, m in enumerate(game.CurrentOpponent.board_zone.minions)}
+    # where_the_fuck_am_i = {m.card_id: idx for idx, m in enumerate(game.CurrentPlayer.board_zone.minions)}
+    # where_the_fuck_are_you = {m.card_id: idx + 9 for idx, m in enumerate(game.CurrentOpponent.board_zone.minions)}
 
     possible_options = {}
 
@@ -210,16 +240,16 @@ class Sabbertsone(environments.base_env.BaseEnv):
           source = HandPosition(option.source_position)
           target = BoardPosition(option.target_position)
 
-          playing_spell = "]'(Pos " not in option.print
-          if playing_spell:
-            if option.target_id == 0:
-              target = BoardPosition(0)  # spells with no target
-            elif option.target_position == 0 and option.target_id not in (4, 6):
-              target = BoardPosition(where_the_fuck_am_i[option.target_id])
-            elif option.target_position == 8 and option.target_id not in (4, 6):
-              target = BoardPosition(where_the_fuck_are_you[option.target_id])
-            elif option.target_position > 8:
-              raise NotImplementedError('Fail fails to fail')
+          # playing_spell = "]'(Pos " not in option.print
+          # if playing_spell:
+          #   if option.target_id == 0:
+          #     target = BoardPosition(0)  # spells with no target
+          #   elif option.target_position == 0 and option.target_id not in (4, 6):
+          #     target = BoardPosition(where_the_fuck_am_i[option.target_id])
+          #   elif option.target_position == 8 and option.target_id not in (4, 6):
+          #     target = BoardPosition(where_the_fuck_are_you[option.target_id])
+          #   elif option.target_position > 8:
+          #     raise NotImplementedError('Fail fails to fail')
 
         elif option_type == PlayerTaskType.MINION_ATTACK:
           source = BoardPosition(option.source_position)
@@ -245,6 +275,11 @@ class Sabbertsone(environments.base_env.BaseEnv):
     assert len(possible_options) > 0  # pass should always be there
     return possible_options
 
+  def update_stats(self):
+    if self.game_ref.CurrentPlayer.id == 1:
+      new_stats = game_stats(self.game_ref)
+      self.turn_stats.append(new_stats)
+
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray, auto_reset: bool = True):
     assert hasattr(action_id, '__int__')
@@ -252,6 +287,9 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
     actions = Sabbertsone.parse_options(self.game_ref)
     selected_action = actions[action_id]
+
+    # self.update_stats()
+
     self.game_ref = Sabbertsone.stub.Process(selected_action)
 
     if self.game_ref.turn > hs_config.Environment.max_turns:
@@ -269,6 +307,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
   def reset(self):
     self.game_ref = Sabbertsone.stub.Reset(self.game_ref.id)
     self._sample_opponent()
+    self.turn_stats = []
     # self.episode_steps = 0
     # self.info = None
     if self.game_ref.CurrentPlayer.id == 2:
@@ -288,18 +327,26 @@ class Sabbertsone(environments.base_env.BaseEnv):
       actions = Sabbertsone.parse_options(self.game_ref)
       possible_actions[list(actions.keys())] = 1
 
-    if terminal:
-      if auto_reset:
-        state, _, _, info = self.reset()
-      else:
-        raise self.GameOver
-
     info = {
       'observation': state,
       'reward': reward,
       'possible_actions': possible_actions,
       'action_history': [],
     }
+    if terminal:
+      # TODO Track it properly
+      # game_stats = GameStatistics(*zip(*self.turn_stats))
+      # game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
+      # game_stats['outcome'] = reward
+      # game_stats['life_adv'] = self.turn_stats[-1].life_adv
+      # info['game_statistics'] = game_stats
+      if auto_reset:
+        state, _, _, info = self.reset()
+        info['observation'] = state
+        info['possible_actions'] = info['possible_actions']
+      else:
+        raise self.GameOver
+
 
     assert info['possible_actions'].max() == 1 or terminal
     return state, reward, terminal, info
@@ -342,5 +389,5 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
   def close(self):
     # Not sure about this.
-    # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close()
+    # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close(self.game_ref)
     warnings.warn("not closing cleanly, restart the server")
