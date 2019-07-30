@@ -16,6 +16,7 @@ from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
 from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
+from shared import env_utils
 
 
 class DummyVecEnv(_DummyVecEnv):
@@ -143,7 +144,7 @@ class StdOutWrapper:
 
 
 def episodic_log(func):
-  if not hs_config.Environment._DEBUG:
+  if not hs_config.Environment.ENV_DEBUG:
     return func
 
   def wrapper(*args, **kwargs):
@@ -164,11 +165,19 @@ def episodic_log(func):
 
     pre = tuple(''.join((' ',) * self.__episodic_log_log_call_depth))
 
-    log_row = tuple(pre + (func_name,) + args[1:] + tuple(kwargs) + extra_info)
+    log_row = tuple(pre + (func_name,) + args[1:] + tuple(kwargs.items()) + extra_info)
     self.__episodic_log_log[-1].append(log_row)
 
     self.__episodic_log_log_call_depth += 1
-    retr = func(*args, **kwargs)
+    try:
+      retr = func(*args, **kwargs)
+    except environments.base_env.BaseEnv.GameOver as e:
+      raise e
+    except Exception as e:
+      # env_utils.dump_log(self)
+      # print('ENV logs dumped!')
+      raise e
+
     self.__episodic_log_log_call_depth -= 1
 
     pretty_retr = []

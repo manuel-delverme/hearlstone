@@ -173,5 +173,4 @@ def can_autoreset(auto_reset, game_ref):
     return True
   if game_ref.state == python_pb2.Game.COMPLETE:
     return True
-
   return False

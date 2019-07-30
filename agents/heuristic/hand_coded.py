@@ -22,7 +22,7 @@ import specs
 #   1084: 'Mirror Image',  # summon two minions
 #   1746: 'The Coin',  # + 1 mana
 # })
-from shared.constants import SPELLS
+from shared.constants import SPELLS, PlayerTaskType
 
 # the coin 1746
 # Arcane Missels 3 damage randomly 564
@@ -37,7 +37,12 @@ from shared.constants import SPELLS
 
 SPELL_IDS = set(SPELLS)
 
-from environments.sabber_hs import PlayerTaskType, parse_hero, parse_card, parse_minion
+
+def minion_value(m):
+  return m.atk / 2 + m.health / 2.
+
+
+from environments.sabber_hs import parse_hero, parse_card, parse_minion
 
 
 class PassingAgent(agents.base_agent.Agent):
@@ -142,9 +147,9 @@ def parse_game(info):
   return player_hero, opponent_hero, hand_zone, player_board, opponent_board
 
 
-Minion = collections.namedtuple('minion', ['id', 'atk', 'health'])
+Minion = collections.namedtuple('minion', ['atk', 'health', 'exausted'])
 Card = collections.namedtuple('card', ['id', 'atk', 'base_health', 'cost'])
-Hero = collections.namedtuple('hero', ['id', 'atk', 'health', 'exhausted'])
+Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exausted'])
 
 
 class SabberAgent(HeuristicAgent):
@@ -160,6 +165,8 @@ class SabberAgent(HeuristicAgent):
 
     possible_actions = encoded_info['original_info']['possible_actions']
     player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
+    if hs_config.Environment.ENV_DEBUG:
+      desk = {}
 
     if len(possible_actions) == 1:
       selected_action = 0
@@ -177,70 +184,124 @@ class SabberAgent(HeuristicAgent):
         if self.action_is_play_minion(action):
           minion = hand_zone[action.source_position]
           # value = (minion.base_health + minion.atk) / 2
-          value = minion.cost * 10000  # play minions first
-          print(f"{action.print}[PLAY_MINION] has value of {value}")
+          value = minion.cost
+          if hs_config.Environment.ENV_DEBUG:
+            desk[idx] = f"{action.print}[PLAY_MINION] has value of {value}"
+
         elif self.action_is_spell(action, hand_zone):
           value = self.evaluate_spell(action, hand_zone, opponent_board, opponent_hero)
-          print(f"{action.print}[SPELL] on {action.target_position} has value of {value}")
+          try:
+            target_entity = player_board[action.target_position] if action.target_position < 9 else opponent_board[
+              action.target_position]
+          except Exception:
+            target_entity = None
+          if hs_config.Environment.ENV_DEBUG:
+            desk[idx] = f"{action.print}[SPELL] on {target_entity} has value of {value}"
+
+        elif self.action_is_trade(action, hand_zone):
+          value = self.evaluate_trade(action, opponent_board, opponent_hero, player_board, player_hero)
+          if hs_config.Environment.ENV_DEBUG:
+            desk[idx] = f"{action.print}[TRADE] has value of {value}"
+
+        elif self.action_is_hero_power(action, hand_zone):
+          if hs_config.Environment.ENV_DEBUG:
+            desk[idx] = f"{action.print}[TRADE] SKIPPED"
+
+          value = self.evaluate_hero_power(action, hand_zone, opponent_board, opponent_hero)
+          if hs_config.Environment.ENV_DEBUG:
+            desk[idx] = f"{action.print}[TRADE] has value of {value}"
         else:
-          continue
-          value = self.evaluate_trade(action, cost, opponent_board, opponent_hero, player_board, player_hero)
-          print(f"{action.print}[TRADE] has value of {value}")
+          raise NotImplementedError
 
         values[idx] = value
 
       actions = sorted(actions, key=lambda x: values[x], reverse=True)
+      if hs_config.Environment.ENV_DEBUG:
+        for idx in actions:
+          print(desk[idx], values[idx])
+
       if values[actions[0]] < 0:
+        if hs_config.Environment.ENV_DEBUG:
+          print('Passing')
         selected_action = end_turn
       else:
         selected_action = actions[0]
+        if hs_config.Environment.ENV_DEBUG:
+          print('Playing', desk[selected_action])
     return selected_action
 
   def action_is_play_minion(self, action):
     return action.type == PlayerTaskType.PLAY_CARD and 'Pos' in action.print
 
+  def action_is_trade(self, action, hand_zone):
+    return action.type == PlayerTaskType.MINION_ATTACK
+
+  def action_is_hero_power(self, action, hand_zone):
+    return action.type == PlayerTaskType.HERO_POWER
+
+  def action_is_hero_attack(self, action, hand_zone):
+    return action.type == PlayerTaskType.HERO_ATTACK
+
   def action_is_spell(self, action, hand_zone):
-    if action.type == PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in SPELL_IDS:
-      is_spell = True
-    else:  # action.type == PlayerTaskType.MINION_ATTACK or action.type == PlayerTaskType.HERO_POWER:
-      is_spell = False
-    return is_spell
+    return action.type == PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in SPELL_IDS
 
-  def evaluate_trade(self, action, cost, opponent_board, opponent_hero, player_board, player_hero):
+  def evaluate_trade(self, action, opponent_board, opponent_hero, player_board, player_hero):
     value = 0
-
     # check position
     if action.target_position == 0:
       target = player_hero
+      is_hero = True
     elif action.target_position == 8:
       target = opponent_hero
+      is_hero = True
     elif action.target_position < 8:
       target = player_board[action.target_position - 1]
+      is_hero = False
     elif action.target_position > 8:
       target = opponent_board[action.target_position - 9]
+      is_hero = False
     else:
       raise IndexError
 
     attacker = player_hero if action.source_position == 0 else player_board[action.source_position - 1]
     atk_dies = attacker.health <= target.atk
     def_dies = target.health <= attacker.atk
-    if action.target_position == 8:
+    if action.target_position in (0, 8):
       atk_dies = False
-      is_hero = True
-    else:
-      is_hero = False
+
     if def_dies and is_hero:
       value += float('inf')
     elif atk_dies and def_dies:
-      value += cost(target) - cost(attacker)
+      value += minion_value(target) - minion_value(attacker)
     elif atk_dies and not def_dies:
       value -= float('inf')
     elif not atk_dies and def_dies:
       overkill = target.health / attacker.atk
       if overkill > 2 and not is_hero:
-        value = cost(target)
+        value = minion_value(target)
     elif not atk_dies and not def_dies:
       value += attacker.atk / target.health
+    return value
+
+  def evaluate_hero_power(self, action, hand_zone, opponent_board, opponent_hero):
+    if action.target_position < 8:
+      return -1  # hitting your own minions as mage is not a good idea
+
+    if action.target_position == -1:
+      target_minion = None
+    elif action.target_position < 8:
+      target_minion = opponent_board[action.target_position - 1]
+    elif action.target_position == 8:
+      target_minion = opponent_hero
+    else:
+      target_minion = opponent_board[action.target_position - 9]
+
+    if action.target_position == 8 and opponent_hero.health <= 1:  # kill him!
+      value = float('inf')
+    elif target_minion.health in (1,):  # kill minion
+      value = target_minion.atk
+    else:
+      value = 0.001
     return value
 
   def evaluate_spell(self, action, hand_zone, opponent_board, opponent_hero):
@@ -256,9 +317,6 @@ class SabberAgent(HeuristicAgent):
       target_minion = opponent_hero
     else:
       target_minion = opponent_board[action.target_position - 9]
-
-    def minion_value(m):
-      return m.atk / 2 + m.health / 2.
 
     value = -1
     if card_id == SPELLS.ArcaneIntellect:

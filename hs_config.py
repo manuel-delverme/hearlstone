@@ -26,9 +26,10 @@ visualize_everything = 0
 
 
 class Environment:
+  newest_opponent_prob = 0.5
   render_after_step = visualize_everything or 0
-  _DEBUG = DEBUG
-  no_subprocess = _DEBUG or 0
+  ENV_DEBUG = DEBUG
+  no_subprocess = ENV_DEBUG or 0
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True
@@ -36,6 +37,7 @@ class Environment:
 
   # this is now level
   max_cards_in_board = 7
+  max_entities_in_board = max_cards_in_board + 1
   max_cards_in_hand = 10
   max_turns = 50
 
@@ -59,13 +61,11 @@ class Environment:
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
-    # import agents.heuristic.random_agent
+    import agents.heuristic.random_agent
     # return agents.heuristic.hand_coded.PassingAgent
     # return agents.heuristic.hand_coded.TradingAgent
-    # return agents.heuristic.random_agent.RandomAgent
-    return agents.heuristic.hand_coded.SabberAgent
-    # hs_config.VanillaHS.get_opponent = get_opponent
-    # return agents.learning.ppo_agent.PPOAgent
+    return agents.heuristic.random_agent.RandomAgent
+    # return agents.heuristic.hand_coded.SabberAgent
 
 
 class SelfPlay:
@@ -81,9 +81,7 @@ class PPOAgent:
   eval_interval = 40
   save_interval = 100
   save_dir = "ppo_save_dir/"
-  # Optimizer
   adam_lr = 7e-4
-  # adam_lr = 2.5e-4  # 7e-4 in reference implementation
 
   # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
@@ -106,7 +104,7 @@ class PPOAgent:
   load_experts = False
 
 
-if Environment._DEBUG:
+if Environment.ENV_DEBUG:
   print('''
                                     _.---"'"""""'`--.._
                              _,.-'                   `-._
