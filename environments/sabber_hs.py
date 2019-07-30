@@ -1,6 +1,5 @@
 import random
 import warnings
-from enum import IntEnum
 from typing import Tuple, Dict, Text, Any
 
 import grpc
@@ -14,61 +13,11 @@ import sb_env.SabberStone_python_client.python_pb2 as python_pb2
 import sb_env.SabberStone_python_client.python_pb2_grpc as python_pb2_grpc
 import shared.env_utils
 import shared.utils
-
-_MAX_CARDS_IN_HAND = 10
-_MAX_CARDS_IN_PLAYER_BOARD = 7 + 1  # opponent face
-_MAX_CARDS_IN_BOARD = _MAX_CARDS_IN_PLAYER_BOARD * 2
-_MAX_TYPE = 7
-_ACTION_SPACE = 249
-_STATE_SPACE = 92  # state space includes card_index
-
-
-class PlayerTaskType(IntEnum):
-  CHOOSE = 0
-  CONCEDE = 1
-  END_TURN = 2
-  HERO_ATTACK = 3
-  HERO_POWER = 4
-  MINION_ATTACK = 5
-  PLAY_CARD = 6
-
-
-class BoardPosition(IntEnum):
-  RightMost = -1
-  Hero = 0
-  B1 = 1
-  B2 = 2
-  B3 = 3
-  B4 = 4
-  B5 = 5
-  B6 = 6
-  B7 = 7
-  oHero = 0 + 8
-  oB1 = 1 + 8
-  oB2 = 2 + 8
-  oB3 = 3 + 8
-  oB4 = 4 + 8
-  oB5 = 5 + 8
-  oB6 = 6 + 8
-  oB7 = 7 + 8
-
-
-class HandPosition(IntEnum):
-  H1 = 0
-  H2 = 1
-  H3 = 2
-  H4 = 3
-  H5 = 4
-  H6 = 5
-  H7 = 6
-  H8 = 7
-  H9 = 8
-  HA = 9
+from shared.constants import PlayerTaskType, BoardPosition, HandPosition, GameStatistics, _ACTION_SPACE, _STATE_SPACE
 
 
 def parse_hero(hero):
-  # TODO change damage in health
-  return np.array([hero.atk, hero.damage, hero.exhausted, hero.power.exhausted])
+  return np.array([hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted])
 
 
 # TODO add card repr
@@ -92,8 +41,9 @@ def pad(x, length, parse_card):
 def parse_player(player):
   hero = np.array(
     [player.hero.atk, player.hero.base_health - player.hero.damage, player.hero.exhausted, player.hero.power.exhausted])
-  hand_zone = pad(player.hand_zone.entities, length=_MAX_CARDS_IN_HAND * 4, parse_card=parse_card)
-  board_zone = pad(player.board_zone.minions, length=(_MAX_CARDS_IN_PLAYER_BOARD - 1) * 3, parse_card=parse_minion)
+  hand_zone = pad(player.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse_card=parse_card)
+  board_zone = pad(player.board_zone.minions, length=(hs_config.Environment.max_cards_in_board - 1) * 3,
+                   parse_card=parse_minion)
   return hero, board_zone, hand_zone
 
 
@@ -126,29 +76,27 @@ def enumerate_actions():
   id_to_action = [(PlayerTaskType.END_TURN, 0, 0)]
 
   # place minions or play spell
-  for src_id in range(_MAX_CARDS_IN_HAND):
-    for target_id in range(_MAX_CARDS_IN_BOARD):
+  for src_id in range(hs_config.Environment.max_cards_in_hand):
+    for target_id in range(hs_config.Environment.max_cards_in_board * 2):
       id_to_action.append((PlayerTaskType.PLAY_CARD, HandPosition(src_id), BoardPosition(target_id)))
 
   # attack
-  for src_id in range(_MAX_CARDS_IN_PLAYER_BOARD):
-    for target_id in range(_MAX_CARDS_IN_PLAYER_BOARD, _MAX_CARDS_IN_PLAYER_BOARD * 2):
+  for src_id in range(hs_config.Environment.max_cards_in_board):
+    for target_id in range(hs_config.Environment.max_cards_in_board, hs_config.Environment.max_cards_in_board * 2):
       id_to_action.append((PlayerTaskType.MINION_ATTACK, BoardPosition(src_id), BoardPosition(target_id)))
 
   # hero power`
-  for target_id in range(_MAX_CARDS_IN_BOARD):
+  for target_id in range(hs_config.Environment.max_cards_in_board * 2):
     id_to_action.append((PlayerTaskType.HERO_POWER, BoardPosition(0), BoardPosition(target_id)))
 
   # hero attack
-  for target_id in range(_MAX_CARDS_IN_PLAYER_BOARD, _MAX_CARDS_IN_PLAYER_BOARD * 2):
+  for target_id in range(hs_config.Environment.max_cards_in_board, hs_config.Environment.max_cards_in_board * 2):
     id_to_action.append((PlayerTaskType.HERO_ATTACK, BoardPosition(0), BoardPosition(target_id)))
 
   action_to_id_dict = {v: k for k, v in enumerate(id_to_action)}
   assert len(id_to_action) == _ACTION_SPACE
   return action_to_id_dict
 
-import collections
-GameStatistics = collections.namedtuple('GameStatistics', ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv','n_turns_left', 'minion_adv'])
 
 def game_stats(game):
   player = game.CurrentPlayer
@@ -156,7 +104,7 @@ def game_stats(game):
 
   power = [(minion.atk, minion.base_health) for minion in player.board_zone.minions]
   if len(power):
-    power, value = np.sum(power,axis=0)
+    power, value = np.sum(power, axis=0)
   else:
     power = 0
     value = 0
@@ -165,7 +113,7 @@ def game_stats(game):
   opponent_life = opponent.hero.base_health - opponent.hero.damage
   hero_life = player.hero.base_health - player.hero.damage
 
-  n_remaining_turns = power/(opponent_life)
+  n_remaining_turns = power / opponent_life
 
   mana_adv = (player.base_mana - player.remaining_mana)
   hand_adv = (len(player.hand_zone.entities) - len(opponent.hand_zone.entities))
@@ -173,14 +121,15 @@ def game_stats(game):
   life_adv = opponent_life - hero_life
   minion_adv = value - defense
 
-  return GameStatistics(mana_adv, hand_adv, draw_adv, life_adv,n_remaining_turns, minion_adv)
+  return GameStatistics(mana_adv, hand_adv, draw_adv, life_adv, n_remaining_turns, minion_adv)
   # return {'mana_adv': mana_adv, 'hand_adv': hand_adv, 'draw_adv': draw_adv, 'life_adv': life_dav,
   #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
+
 
 class Sabbertsone(environments.base_env.BaseEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-  address = "192.168.99.100:50052"
+  address = "sabberstone:50052"
   channel = grpc.insecure_channel(address)
   stub = python_pb2_grpc.SabberStonePythonStub(channel)
   action_to_id = enumerate_actions()
@@ -224,6 +173,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
     # where_the_fuck_are_you = {m.card_id: idx + 9 for idx, m in enumerate(game.CurrentOpponent.board_zone.minions)}
 
     possible_options = {}
+    board_to_board = {PlayerTaskType.MINION_ATTACK, PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER}
 
     for option in options:
       option_type = PlayerTaskType(option.type)
@@ -239,34 +189,16 @@ class Sabbertsone(environments.base_env.BaseEnv):
         if option_type == PlayerTaskType.PLAY_CARD:
           source = HandPosition(option.source_position)
           target = BoardPosition(option.target_position)
-
-          # playing_spell = "]'(Pos " not in option.print
-          # if playing_spell:
-          #   if option.target_id == 0:
-          #     target = BoardPosition(0)  # spells with no target
-          #   elif option.target_position == 0 and option.target_id not in (4, 6):
-          #     target = BoardPosition(where_the_fuck_am_i[option.target_id])
-          #   elif option.target_position == 8 and option.target_id not in (4, 6):
-          #     target = BoardPosition(where_the_fuck_are_you[option.target_id])
-          #   elif option.target_position > 8:
-          #     raise NotImplementedError('Fail fails to fail')
-
-        elif option_type == PlayerTaskType.MINION_ATTACK:
+        elif option_type in board_to_board:
           source = BoardPosition(option.source_position)
           target = BoardPosition(option.target_position)
-        elif option_type == PlayerTaskType.HERO_ATTACK:
-          source = BoardPosition(option.source_position)
-          target = BoardPosition(option.target_position)
-          assert source == BoardPosition.Hero
-        elif option_type == PlayerTaskType.HERO_POWER:
-          source = BoardPosition(option.source_position)
-          target = BoardPosition(option.target_position)
-          assert source == BoardPosition.Hero
         else:
           raise NotImplementedError
 
+        assert (
+          option_type not in (PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER) or source == BoardPosition.Hero)
+
         action_hash = (action_type, source, target)
-        # action_hash = (PlayerTaskType(option.type), BoardPosition(option.source_position), BoardPosition(target_position))
         action_id = cls.action_to_id[action_hash]
 
       assert action_id not in possible_options
@@ -316,7 +248,7 @@ class Sabbertsone(environments.base_env.BaseEnv):
 
   @shared.env_utils.episodic_log
   def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    assert shared.utils.can_autoreset(auto_reset, self.game_ref), f"current_player {self.game_ref.CurrentPlayer.id}"
+    assert shared.utils.can_autoreset(auto_reset, self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
 
     terminal = self.game_ref.state == python_pb2.Game.COMPLETE
     reward = self.game_value()
@@ -346,7 +278,6 @@ class Sabbertsone(environments.base_env.BaseEnv):
         info['possible_actions'] = info['possible_actions']
       else:
         raise self.GameOver
-
 
     assert info['possible_actions'].max() == 1 or terminal
     return state, reward, terminal, info
