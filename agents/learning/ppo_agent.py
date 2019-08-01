@@ -32,9 +32,9 @@ class PPOAgent(agents.base_agent.Agent):
     return action
 
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
-               experts: Tuple[agents.base_agent.Agent] = tuple()) -> None:
+    experts: Tuple[agents.base_agent.Agent] = tuple()) -> None:
 
-    self.experiment_id = "-".join((hs_config.Environment.env_name, str(hs_config.Environment.level), hs_config.comment))
+    self.experiment_id = hs_config.comment
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
     self.sequential_experiment_num = 0
@@ -124,18 +124,20 @@ class PPOAgent(agents.base_agent.Agent):
         os.remove(f)
 
   def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-            num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+    num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     self.update_experiment_logging()
     return self._train(game_manager, checkpoint_file, num_updates, updates_offset)
 
   def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-             num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+    num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     assert updates_offset >= 0
+
     envs, eval_envs, valid_envs = self.setup_envs(game_manager)
 
     if checkpoint_file:
       print('[Train] loading checkpoint:', checkpoint_file)
       self.load_checkpoint(checkpoint_file, envs)
+
       assert game_manager.use_heuristic_opponent is False
 
     assert envs.observation_space.shape == (self.num_inputs,)
@@ -174,7 +176,7 @@ class PPOAgent(agents.base_agent.Agent):
         self.save_model(envs, total_num_steps)
 
       good_training_performance = len(episode_rewards) == episode_rewards.maxlen and np.mean(episode_rewards) > 1 - (
-              1 - hs_config.PPOAgent.winratio_cutoff) * 2
+        1 - hs_config.PPOAgent.winratio_cutoff) * 2
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or good_training_performance:
 
         performance = np.mean(self.eval_agent(envs, eval_envs))
@@ -330,7 +332,7 @@ class PPOAgent(agents.base_agent.Agent):
         action[0] = act
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
-                  explained_variance):
+    explained_variance):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -507,7 +509,6 @@ class PPOAgent(agents.base_agent.Agent):
         new_checkpoint_file, win_ratio, updates_so_far = self._train(
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
-
 
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
         if win_ratio >= old_win_ratio:

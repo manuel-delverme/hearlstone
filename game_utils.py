@@ -1,3 +1,5 @@
+# import baselines.common.running_mean_std
+import collections
 import tempfile
 
 import torch
@@ -8,8 +10,6 @@ import agents.heuristic.random_agent
 import agents.learning.models.randomized_policy
 import agents.learning.ppo_agent
 import hs_config
-# import baselines.common.running_mean_std
-from collections import deque
 from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 
 
@@ -19,7 +19,8 @@ class GameManager(object):
     self._use_heuristic_opponent = True
 
     self.game_class = hs_config.Environment.get_game_mode(address)
-    self.opponents = deque([agents.heuristic.random_agent.RandomAgent()], maxlen=hs_config.Environment.max_opponents)
+    self.opponents = collections.deque([agents.heuristic.random_agent.RandomAgent()],
+                                       maxlen=hs_config.Environment.max_opponents)
     self.opponent_normalization_factors = [None]
     self.game_matrix = []
 

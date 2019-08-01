@@ -217,12 +217,14 @@ class SabberAgent(HeuristicAgent):
 
       if values[actions[0]] < 0:
         if hs_config.Environment.ENV_DEBUG:
-          print('Passing')
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
+            print('Passing')
         selected_action = end_turn
       else:
         selected_action = actions[0]
         if hs_config.Environment.ENV_DEBUG_HEURISTIC:
-          print('Playing', desk[selected_action])
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
+            print('Playing', desk[selected_action])
     return selected_action
 
   def action_is_play_minion(self, action):

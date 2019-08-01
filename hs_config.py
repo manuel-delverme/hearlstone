@@ -1,3 +1,4 @@
+import functools
 import sys
 from typing import Callable, Type
 
@@ -26,10 +27,14 @@ visualize_everything = 0
 
 
 class Environment:
+  ENV_DEBUG = DEBUG
+  ENV_DEBUG_HEURISTIC = False
+  no_subprocess = ENV_DEBUG or 0
+
+  max_opponents = 5
   newest_opponent_prob = 0.5
   render_after_step = visualize_everything or 0
-  ENV_DEBUG = DEBUG
-  no_subprocess = ENV_DEBUG or 0
+
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True
@@ -44,7 +49,6 @@ class Environment:
   always_first_player = True
 
   level = -1
-  env_name = "sabberstone"
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], base_env.BaseEnv]:
     # if game_mode == "trading":
@@ -56,7 +60,11 @@ class Environment:
     # import sb_env.SabberStone_python_client.simulator
     # return sb_env.SabberStone_python_client.simulator.Sabbertsone
     import environments.sabber_hs
-    return environments.sabber_hs.bind_address(_address=address)
+    out = functools.partial(
+      environments.sabber_hs.Sabbertsone,
+      address
+    )
+    return out
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:

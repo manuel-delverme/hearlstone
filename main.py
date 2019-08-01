@@ -39,7 +39,7 @@ def train(args):
   num_actions = dummy_hs_env.action_space.n
 
   if not hs_config.PPOAgent.load_experts or (
-          hs_config.Environment.get_game_mode(args.address) is environments.tutorial_environments.TradingHS):
+    hs_config.Environment.get_game_mode(args.address) is environments.tutorial_environments.TradingHS):
     experts = tuple()
   else:
     trading_expert = agents.learning.ppo_agent.Expert(
@@ -47,9 +47,12 @@ def train(args):
     experts = (trading_expert,)
     num_actions += len(experts)
 
-  player = agents.learning.ppo_agent.PPOAgent(num_inputs=dummy_hs_env.observation_space.shape[0],
-                                              num_possible_actions=num_actions,
-                                              log_dir=os.path.join(os.getcwd(), 'ppo_log'), experts=experts)
+  player = agents.learning.ppo_agent.PPOAgent(
+    num_inputs=dummy_hs_env.observation_space.shape[0],
+    num_possible_actions=num_actions,
+    log_dir=os.path.join(os.getcwd(), 'ppo_log'),
+    experts=experts,
+  )
   del dummy_hs_env
   game_manager = game_utils.GameManager(hs_config.seed, address=args.address)
 

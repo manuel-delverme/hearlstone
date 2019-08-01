@@ -129,231 +129,227 @@ def random_subset(opponents: list, k: int) -> tuple:
   return result[0]
 
 
-def bind_address(_address):
-  class Sabbertsone(environments.base_env.RenderableEnv):
-    DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-    DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+class Sabbertsone(environments.base_env.RenderableEnv):
+  DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+  DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 
-    action_to_id = enumerate_actions()
+  action_to_id = enumerate_actions()
 
-    address = _address
-    channel = grpc.insecure_channel(address)
-    stub = python_pb2_grpc.SabberStonePythonStub(channel)
-    hand_encoding_size = 4  # atk, health, exhaust
-    hero_encoding_size = 4  # atk, health, exhaust, hero_power
-    minion_encoding_size = 3  # atk, health, exhaust
-    board_to_board = {PlayerTaskType.MINION_ATTACK, PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER}
+  hand_encoding_size = 4  # atk, health, exhaust
+  hero_encoding_size = 4  # atk, health, exhaust, hero_power
+  minion_encoding_size = 3  # atk, health, exhaust
+  board_to_board = {PlayerTaskType.MINION_ATTACK, PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER}
 
-    def __init__(self, seed: int = None, extra_seed: int = None):
-      super().__init__()
-      self.gui = None
-      if seed is not None or extra_seed is not None:
-        warnings.warn("Setting the seed is not implemented")
-      self.game_ref = Sabbertsone.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2))
+  def __init__(self, address: str, seed: int = None, extra_seed: int = None):
+    super().__init__()
+    self.gui = None
+    if seed is not None or extra_seed is not None:
+      warnings.warn("Setting the seed is not implemented")
 
-      self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
-      self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
-      self.turn_stats = []
-      self._game_matrix = {}
+    self.channel = grpc.insecure_channel(address)
+    self.stub = python_pb2_grpc.SabberStonePythonStub(self.channel)
+    self.game_ref = self.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2))
 
-    def cards_in_hand(self):
-      raise len(self.game_ref.player1.hand_zone)
+    self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
+    self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
+    self.turn_stats = []
+    self._game_matrix = {}
 
-    def game_value(self):
-      player = self.game_ref.CurrentPlayer
+  def cards_in_hand(self):
+    raise len(self.game_ref.player1.hand_zone)
 
-      if player.play_state == python_pb2.Controller.WON:  # maybe PlayState
-        reward = 1
-      elif player.play_state in (python_pb2.Controller.LOST, python_pb2.Controller.TIED):
-        reward = -1
+  def game_value(self):
+    player = self.game_ref.CurrentPlayer
+
+    if player.play_state == python_pb2.Controller.WON:  # maybe PlayState
+      reward = 1
+    elif player.play_state in (python_pb2.Controller.LOST, python_pb2.Controller.TIED):
+      reward = -1
+    else:
+      reward = 0
+    return np.array(reward, dtype=np.float32)
+
+  def original_info(self):
+    warnings.warn("minimize stub calls (superslow), options can be reused here")
+    # possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
+    return {
+      "observation": self.game_ref,
+      "possible_actions": self.parse_options(self.game_ref),
+    }
+
+  def parse_options(self, game, return_options=False):
+    options = self.stub.GetOptions(game.id).list
+    possible_options = {}
+
+    for option in options:
+      option_type = option.type
+      assert option_type != PlayerTaskType.CHOOSE
+
+      if option_type == PlayerTaskType.END_TURN:
+        action_id = self.GameActions.PASS_TURN
       else:
-        reward = 0
-      return np.array(reward, dtype=np.float32)
+        source = option.source_position
+        target = option.target_position
 
-    def original_info(self):
-      warnings.warn("minimize stub calls (superslow), options can be reused here")
-      # possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
-      return {
-        "observation": self.game_ref,
-        "possible_actions": self.parse_options(self.game_ref),
-      }
+        assert (option_type not in (PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER)
+                or source == BoardPosition.Hero)
 
-    @classmethod
-    def parse_options(cls, game, return_options=False):
-      options = cls.stub.GetOptions(game.id).list
-      possible_options = {}
+        action_hash = (option_type, source, target)
+        action_id = self.action_to_id[action_hash]
 
-      for option in options:
-        option_type = option.type
-        assert option_type != PlayerTaskType.CHOOSE
+      assert action_id not in possible_options
+      possible_options[action_id] = option
 
-        if option_type == PlayerTaskType.END_TURN:
-          action_id = cls.GameActions.PASS_TURN
-        else:
-          source = option.source_position
-          target = option.target_position
+    assert len(possible_options) > 0  # pass should always be there
 
-          assert (option_type not in (PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER)
-                  or source == BoardPosition.Hero)
+    if return_options:
+      return possible_options, options
+    else:
+      return possible_options
 
-          action_hash = (option_type, source, target)
-          action_id = cls.action_to_id[action_hash]
+  def update_stats(self):
+    if self.game_ref.CurrentPlayer.id == 1:
+      new_stats = game_stats(self.game_ref)
+      self.turn_stats.append(new_stats)
 
-        assert action_id not in possible_options
-        possible_options[action_id] = option
+  @shared.env_utils.episodic_log
+  def step(self, action_id: np.ndarray, auto_reset: bool = True):
+    assert hasattr(action_id, '__int__')
+    action_id = int(action_id)
 
-      assert len(possible_options) > 0  # pass should always be there
+    actions = self.parse_options(self.game_ref)
+    selected_action = actions[action_id]
 
-      if return_options:
-        return possible_options, options
+    # self.update_stats()
+
+    self.game_ref = self.stub.Process(selected_action)
+
+    if self.game_ref.turn > hs_config.Environment.max_turns:
+      state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
+      done = True
+      reward = 0.
+      return state, reward, done, info
+
+    if self.game_ref.CurrentPlayer.id == 2:
+      self.play_opponent_turn()
+
+    return self.gather_transition(auto_reset=auto_reset)
+
+  @shared.env_utils.episodic_log
+  def reset(self):
+    self.game_ref = self.stub.Reset(self.game_ref.id)
+    self._sample_opponent()
+    # self.turn_stats = []
+    # self.episode_steps = 0
+    # self.info = None
+    if self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
+      self.play_opponent_turn()
+    return self.gather_transition(auto_reset=False)
+
+  @shared.env_utils.episodic_log
+  def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
+    assert shared.utils.can_autoreset(auto_reset,
+                                      self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
+
+    terminal = self.game_ref.state == python_pb2.Game.COMPLETE
+    assert self.game_ref.state in (
+      python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
+
+    reward = self.game_value()
+    state = build_state(self.game_ref)
+
+    possible_actions = np.zeros(_ACTION_SPACE, dtype=np.float32)
+    if not terminal:
+      actions = self.parse_options(self.game_ref)
+      possible_actions[list(actions.keys())] = 1
+
+    info = {
+      'observation': state,
+      'reward': reward,
+      'possible_actions': possible_actions,
+      'action_history': [],
+      'game_statistics': {}
+    }
+    if terminal:
+      self.game_matrix(self.current_k, reward)
+      # # TODO Track it properly
+      # game_stats = GameStatistics(*zip(*self.turn_stats))
+      # game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
+      # game_stats['outcome'] = reward
+      # game_stats['life_adv'] = self.turn_stats[-1].life_adv
+      # counts = np.array([v[1] for v in self._game_matrix.values()])
+      # game_stats['opponent_var'] = counts.var()
+      # game_stats['opponent_mean'] = counts.mean()
+      # info['game_statistics'] = game_stats
+      if auto_reset:
+        state, _, _, _info = self.reset()
+        info['observation'] = state
+        info['possible_actions'] = _info['possible_actions']
       else:
-        return possible_options
+        raise self.GameOver
 
-    def update_stats(self):
-      if self.game_ref.CurrentPlayer.id == 1:
-        new_stats = game_stats(self.game_ref)
-        self.turn_stats.append(new_stats)
+    assert info['possible_actions'].max() == 1 or terminal
+    return state, reward, terminal, info
 
-    @shared.env_utils.episodic_log
-    def step(self, action_id: np.ndarray, auto_reset: bool = True):
-      assert hasattr(action_id, '__int__')
-      action_id = int(action_id)
+  def game_matrix(self, idx, reward):
+    try:
+      n, score = self._game_matrix[idx]
+    except KeyError:
+      n = 0
+      score = 0
+    self._game_matrix[idx] = (n + 1, score + reward)
 
-      actions = Sabbertsone.parse_options(self.game_ref)
-      selected_action = actions[action_id]
+  def print_nash(self):
+    # t = lambda y, x: f"player {y}: played {x[0]}, score {x[1]}"
+    # print("\n".join(list(map(t, self._game_matrix.items()))))
+    for k, v in self._game_matrix.items():
+      print(f"[ENV NASH]\t agent:{k}, N:{v[0]}, score:{v[1]}")
 
-      # self.update_stats()
+  def _sample_opponent(self):
+    p = np.ones(shape=(len(self.opponents)))
 
-      self.game_ref = Sabbertsone.stub.Process(selected_action)
+    if len(self.opponents) > 1:
+      if len(self._game_matrix.values()) > 1:
+        counts = [v[0] for v in self._game_matrix.values()]
+        counts = 1 / np.array(counts)
+        p[:len(counts)] = counts
 
-      if self.game_ref.turn > hs_config.Environment.max_turns:
-        state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
-        done = True
-        reward = 0.
-        return state, reward, done, info
+      p /= p.sum()  # TODO: check division by 0
 
-      if self.game_ref.CurrentPlayer.id == 2:
-        self.play_opponent_turn()
+    k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
+    self.opponent = self.opponents[k]
 
-      return self.gather_transition(auto_reset=auto_reset)
+    if self.opponent_obs_rmss is not None:
+      self.opponent_obs_rmss = self.opponent_obs_rmss[k]
 
-    @shared.env_utils.episodic_log
-    def reset(self):
-      self.game_ref = Sabbertsone.stub.Reset(self.game_ref.id)
-      self._sample_opponent()
-      # self.turn_stats = []
-      # self.episode_steps = 0
-      # self.info = None
-      if self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
-        self.play_opponent_turn()
-      return self.gather_transition(auto_reset=False)
+    self.current_k = k
 
-    @shared.env_utils.episodic_log
-    def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-      assert shared.utils.can_autoreset(auto_reset,
-                                        self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
+  def play_opponent_action(self):
+    observation, _, terminal, info = self.gather_transition(auto_reset=False)
 
-      terminal = self.game_ref.state == python_pb2.Game.COMPLETE
-      assert self.game_ref.state in (
-        python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
+    if self.opponent_obs_rms is not None:
+      observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
 
-      reward = self.game_value()
-      state = build_state(self.game_ref)
+    observation = torch.FloatTensor(observation)
+    observation = observation.unsqueeze(0)
 
-      possible_actions = np.zeros(_ACTION_SPACE, dtype=np.float32)
-      if not terminal:
-        actions = self.parse_options(self.game_ref)
-        possible_actions[list(actions.keys())] = 1
+    pa = info['possible_actions']
+    pa = torch.FloatTensor(pa)
+    info['possible_actions'] = pa.unsqueeze(0)
+    info['original_info'] = self.original_info()
 
-      info = {
-        'observation': state,
-        'reward': reward,
-        'possible_actions': possible_actions,
-        'action_history': [],
-        'game_statistics':{}
-      }
-      if terminal:
-        self.game_matrix(self.current_k, reward)
-        # # TODO Track it properly
-        # game_stats = GameStatistics(*zip(*self.turn_stats))
-        # game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
-        # game_stats['outcome'] = reward
-        # game_stats['life_adv'] = self.turn_stats[-1].life_adv
-        # counts = np.array([v[1] for v in self._game_matrix.values()])
-        # game_stats['opponent_var'] = counts.var()
-        # game_stats['opponent_mean'] = counts.mean()
-        # info['game_statistics'] = game_stats
-        if auto_reset:
-          state, _, _, _info = self.reset()
-          info['observation'] = state
-          info['possible_actions'] = _info['possible_actions']
-        else:
-          raise self.GameOver
+    action = self.opponent.choose(observation, info)
+    return self.step(action, auto_reset=False)
 
-      assert info['possible_actions'].max() == 1 or terminal
-      return state, reward, terminal, info
+  def play_opponent_turn(self):
+    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
+    try:
+      while self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
+        self.play_opponent_action()
+    except self.GameOver:
+      pass
 
-    def game_matrix(self, idx, reward):
-      try:
-        n, score = self._game_matrix[idx]
-      except KeyError:
-        n = 0
-        score = 0
-      self._game_matrix[idx] = (n+1, score+reward)
-
-    def print_nash(self):
-      # t = lambda y, x: f"player {y}: played {x[0]}, score {x[1]}"
-      # print("\n".join(list(map(t, self._game_matrix.items()))))
-      for k,v in self._game_matrix.items():
-        print(f"[ENV NASH]\t agent:{k}, N:{v[0]}, score:{v[1]}")
-
-    def _sample_opponent(self):
-      p = np.ones(shape=(len(self.opponents)))
-
-      if len(self.opponents) > 1:
-        if len(self._game_matrix.values()) > 1:
-          counts = [v[0] for v in self._game_matrix.values()]
-          counts = 1/np.array(counts)
-          p[:len(counts)] = counts
-
-        p /= p.sum()  # TODO: check division by 0
-
-      k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
-      self.opponent = self.opponents[k]
-
-      if self.opponent_obs_rmss is not None:
-        self.opponent_obs_rmss = self.opponent_obs_rmss[k]
-
-      self.current_k = k
-
-    def play_opponent_action(self):
-      observation, _, terminal, info = self.gather_transition(auto_reset=False)
-
-      if self.opponent_obs_rms is not None:
-        observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
-
-      observation = torch.FloatTensor(observation)
-      observation = observation.unsqueeze(0)
-
-      pa = info['possible_actions']
-      pa = torch.FloatTensor(pa)
-      info['possible_actions'] = pa.unsqueeze(0)
-      info['original_info'] = self.original_info()
-
-      action = self.opponent.choose(observation, info)
-      return self.step(action, auto_reset=False)
-
-    def play_opponent_turn(self):
-      assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
-      try:
-        while self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
-          self.play_opponent_action()
-      except self.GameOver:
-        pass
-
-    def close(self):
-      # Not sure about this.
-      # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close(self.game_ref)
-      warnings.warn("not closing cleanly, restart the server")
-
-  return Sabbertsone
+  def close(self):
+    # Not sure about this.
+    # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close(self.game_ref)
+    warnings.warn("not closing cleanly, restart the server")
