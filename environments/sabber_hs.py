@@ -160,13 +160,14 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   def game_value(self):
     player = self.game_ref.CurrentPlayer
-
     if player.play_state == python_pb2.Controller.WON:  # maybe PlayState
       reward = 1
     elif player.play_state in (python_pb2.Controller.LOST, python_pb2.Controller.TIED):
       reward = -1
     else:
       reward = 0
+    if self.game_ref.state == python_pb2.Game.COMPLETE:
+      reward = reward if player.id == C.AGENT_ID else -reward
     return np.array(reward, dtype=np.float32)
 
   def original_info(self):
@@ -237,7 +238,6 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     except self.GameOver:
       assert self.game_ref.state == python_pb2.Game.COMPLETE
-      auto_reset = True
 
     return self.gather_transition(auto_reset=auto_reset)
 
@@ -276,7 +276,6 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       'game_statistics': {}
     }
     if terminal:
-      self.game_matrix(self.current_k, reward)
       # # TODO Track it properly
       # game_stats = GameStatistics(*zip(*self.turn_stats))
       # game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
@@ -287,6 +286,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       # game_stats['opponent_mean'] = counts.mean()
       # info['game_statistics'] = game_stats
       if auto_reset:
+        self.game_matrix(self.current_k, reward)
         state, _, _, _info = self.reset()
         info['observation'] = state
         info['possible_actions'] = _info['possible_actions']
@@ -331,6 +331,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.current_k = k
 
   def play_opponent_action(self):
+    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
     observation, _, terminal, info = self.gather_transition(auto_reset=False)
 
     if self.opponent_obs_rms is not None:
@@ -345,15 +346,18 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     info['original_info'] = self.original_info()
 
     action = self.opponent.choose(observation, info)
+    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
     return self.step(action, auto_reset=False)
 
   def play_opponent_turn(self):
-    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
-    try:
-      while self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:#  and self.game_ref.state != python_pb2.Game.COMPLETE:
-        self.play_opponent_action()
-    except self.GameOver:
-      raise self.GameOver
+    for _ in range(1000):
+      if not self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+        break
+      assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
+      self.play_opponent_action()
+    else:
+      raise TimeoutError
+
 
   def close(self):
     # Not sure about this.

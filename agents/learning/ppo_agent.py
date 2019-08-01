@@ -310,6 +310,8 @@ class PPOAgent(agents.base_agent.Agent):
             action[idx, 0] = expert_action
 
       obs, reward, done, infos = envs.step(action)
+      assert not done or infos['reward'][0] in (-1., +1.)
+      #assert not done and infos['reward'][0] == 0
 
       possible_actions = self.update_possible_actions_for_expert(infos)
 
