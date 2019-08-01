@@ -47,7 +47,6 @@ class GameManager(object):
       self.opponents = []
       self.opponent_normalization_factors = []
       self.use_heuristic_opponent = False
-
     opponent_network, opponent_obs_rms = torch.load(checkpoint_file)
 
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
@@ -56,6 +55,7 @@ class GameManager(object):
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions,
                                                   log_dir=tempfile.mktemp())
 
+    del opponent.logger
     del opponent.optimizer
     opponent_network.eval()
     for network in (opponent_network.actor, opponent_network.critic, opponent_network.actor_logits):

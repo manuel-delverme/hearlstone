@@ -65,8 +65,8 @@ class BaseEnv(gym.Env, ABC):
 
   class GameOver(Exception):
     pass
-
   def __init__(self):
+
     self.opponent = None
     self.opponents = [None, ]
 

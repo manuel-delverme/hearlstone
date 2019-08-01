@@ -24,11 +24,11 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 print_every = 20
 BIG_NUMBER = 9999999999999
 visualize_everything = 0
-
+verbosity = 1 if DEBUG else 0
 
 class Environment:
   ENV_DEBUG = DEBUG
-  ENV_DEBUG_HEURISTIC = False
+  ENV_DEBUG_HEURISTIC = True
   no_subprocess = ENV_DEBUG or 0
 
   max_opponents = 5

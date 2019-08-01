@@ -23,6 +23,7 @@ import specs
 from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
+from shared.utils import Timer
 
 
 class PPOAgent(agents.base_agent.Agent):
@@ -33,6 +34,8 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
     experts: Tuple[agents.base_agent.Agent] = tuple()) -> None:
+    assert isinstance(__class__.__name__,str)
+    self.timer = Timer(__class__.__name__, verbosity=hs_config.verbosity)
 
     self.experiment_id = hs_config.comment
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
@@ -126,19 +129,23 @@ class PPOAgent(agents.base_agent.Agent):
   def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
     num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     self.update_experiment_logging()
-    return self._train(game_manager, checkpoint_file, num_updates, updates_offset)
+    with self.timer("train"):
+      out = self._train(game_manager, checkpoint_file, num_updates, updates_offset)
+    return out
 
   def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
     num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     assert updates_offset >= 0
 
-    envs, eval_envs, valid_envs = self.setup_envs(game_manager)
+    with self.timer("setup_envs"):
+      envs, eval_envs, valid_envs = self.setup_envs(game_manager)
 
-    if checkpoint_file:
-      print('[Train] loading checkpoint:', checkpoint_file)
-      self.load_checkpoint(checkpoint_file, envs)
+    with self.timer("load_ckpt"):
+      if checkpoint_file:
+        self.timer.info(f"[TRAIN] Loading ckpt {checkpoint_file}")
+        self.load_checkpoint(checkpoint_file, envs)
 
-      assert game_manager.use_heuristic_opponent is False
+        assert game_manager.use_heuristic_opponent is False
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n + self.num_experts == self.num_actions
@@ -158,19 +165,23 @@ class PPOAgent(agents.base_agent.Agent):
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
-      self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
+      with self.timer("gather_rollouts"):
+        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
 
       with torch.no_grad():
         next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
 
-      rollouts.compute_returns(next_value)
+      with self.timer("compute_returns"):
+        rollouts.compute_returns(next_value)
 
-      value_loss, action_loss, dist_entropy, policy_ratio, explained_variance = self.update(rollouts)
+      with self.timer("update"):
+        value_loss, action_loss, dist_entropy, policy_ratio, explained_variance = self.update(rollouts)
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
-      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
-                       explained_variance)
+      with self.timer("print_tb"):
+        self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
+                         explained_variance)
 
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
@@ -182,14 +193,16 @@ class PPOAgent(agents.base_agent.Agent):
         performance = np.mean(self.eval_agent(envs, eval_envs))
         self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
         if performance > hs_config.PPOAgent.winratio_cutoff:
-          p = self.eval_agent(envs, eval_envs)
+          with self.timer("eval_agents_self_play"):
+            p = self.eval_agent(envs, eval_envs)
           performance = np.mean(p)
-          print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
+          self.timer.info("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
           break
 
     checkpoint_file = self.save_model(envs, total_num_steps)
 
-    outcome = self.eval_agent(envs, valid_envs)
+    with self.timer("eval_agents_hs"):
+      outcome = self.eval_agent(envs, valid_envs)
     # import pdb; pdb.set_trace()
     test_performance = float(np.mean(outcome))
 
@@ -300,17 +313,18 @@ class PPOAgent(agents.base_agent.Agent):
 
       self.maybe_render(action, envs)
       # could be parallelized
-      for idx, a in enumerate(action):
-        if a >= envs.action_space.n:
-          expert_number = action[idx] - envs.action_space.n
-          with torch.no_grad():
-            _, expert_action, _ = self.experts[expert_number].act(
-              obs[idx:idx + 1, :],
-              possible_actions[idx: idx + 1, :envs.action_space.n], deterministic=deterministic)
-            action[idx, 0] = expert_action
+      # for idx, a in enumerate(action):
+      #   if a >= envs.action_space.n:
+      #     expert_number = action[idx] - envs.action_space.n
+      #     with torch.no_grad():
+      #       _, expert_action, _ = self.experts[expert_number].act(
+      #         obs[idx:idx + 1, :],
+      #         possible_actions[idx: idx + 1, :envs.action_space.n], deterministic=deterministic)
+      #       action[idx, 0] = expert_action
 
-      obs, reward, done, infos = envs.step(action)
-      assert not done or infos['reward'][0] in (-1., +1.)
+      with self.timer("agent_step"):
+        obs, reward, done, infos = envs.step(action)
+      assert not all(done) or all(r in (-1., -.1) for r in infos['reward'])
       #assert not done and infos['reward'][0] == 0
 
       possible_actions = self.update_possible_actions_for_expert(infos)

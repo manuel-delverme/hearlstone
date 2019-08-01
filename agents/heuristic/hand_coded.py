@@ -54,8 +54,10 @@ class PassingAgent(agents.base_agent.Agent):
     return 0
 
 
+from shared.utils import Timer
 class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self, level: int = hs_config.Environment.level):
+    self.logger = Timer(__name__, verbosity=hs_config.verbosity)
     assert -2 < level < 7
     super().__init__()
     if level == -1:
@@ -213,18 +215,18 @@ class SabberAgent(HeuristicAgent):
       actions = sorted(actions, key=lambda x: values[x], reverse=True)
       if hs_config.Environment.ENV_DEBUG_HEURISTIC:
         for idx in actions:
-          print(desk[idx], values[idx])
+          self.logger.debug(desk[idx]) # value[idx]
 
       if values[actions[0]] < 0:
         if hs_config.Environment.ENV_DEBUG:
           if hs_config.Environment.ENV_DEBUG_HEURISTIC:
-            print('Passing')
+            self.logger.debug('Passing')
         selected_action = end_turn
       else:
         selected_action = actions[0]
         if hs_config.Environment.ENV_DEBUG_HEURISTIC:
           if hs_config.Environment.ENV_DEBUG_HEURISTIC:
-            print('Playing', desk[selected_action])
+            self.logger.debug("".join(['Playing', desk[selected_action]]))
     return selected_action
 
   def action_is_play_minion(self, action):
