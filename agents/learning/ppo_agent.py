@@ -310,8 +310,8 @@ class PPOAgent(agents.base_agent.Agent):
             action[idx, 0] = expert_action
 
       obs, reward, done, infos = envs.step(action)
-      assert not done or infos['reward'][0] in (-1., +1.)
-      #assert not done and infos['reward'][0] == 0
+      # assert not done or infos['reward'][0] in (-1., +1.)
+      # assert not done and infos['reward'][0] == 0
 
       possible_actions = self.update_possible_actions_for_expert(infos)
 
@@ -503,7 +503,7 @@ class PPOAgent(agents.base_agent.Agent):
     updates_so_far = 0
     updates_schedule = [1, ]
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
-    old_win_ratio = -1
+    old_win_ratio = -2
     pbar = tqdm.tqdm(total=sum(updates_schedule))
     try:
       for self_play_iter, num_updates in enumerate(updates_schedule):
@@ -524,7 +524,9 @@ class PPOAgent(agents.base_agent.Agent):
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
         game_manager.add_learning_opponent(checkpoint_file)
 
-        #self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
+        print('print_nash()')
+        # self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
+
         # self.actor_critic.reset_actor()
         self.optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

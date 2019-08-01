@@ -17,44 +17,60 @@ from shared.constants import PlayerTaskType, BoardPosition, HandPosition, GameSt
 
 
 def parse_hero(hero):
-  return np.array([hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted])
+  return hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted
 
 
 # TODO add card repr
 def parse_card(card):
-  return np.array((card.card_id, card.atk, card.base_health, card.cost))
+  return card.card_id, card.atk, card.base_health, card.cost
 
 
 # TODO parse spells and minion differently
 def parse_minion(card):
-  return np.array([card.atk, card.base_health - card.damage, card.exhausted])
+  return card.atk, card.base_health - card.damage, card.exhausted
 
 
-def pad(x, length, parse_card):
-  v = -np.ones(length)
-  if x:
-    _v = np.hstack([parse_card(xi) for xi in x])
-    v[:_v.shape[0]] = _v
-  return v
+def pad(x, length, parse):
+  _x = []
+  for xi in x:
+    _x.extend(parse(xi))
+  _x.extend((-1,) * (length - len(_x)))
+  return _x
 
 
 def parse_player(player):
-  hero = np.array(
-    [player.hero.atk, player.hero.base_health - player.hero.damage, player.hero.exhausted, player.hero.power.exhausted])
-  hand_zone = pad(player.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse_card=parse_card)
-  board_zone = pad(player.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3,
-                   parse_card=parse_minion)
-  return hero, board_zone, hand_zone
+  return (
+    player.hero.atk,
+    player.hero.base_health - player.hero.damage,
+    player.hero.exhausted,
+    player.hero.power.exhausted,
+    *pad(player.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
+    *pad(player.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
+  )
 
 
 def build_state(game):
-  hero_p2, board_p2, _ = parse_player(game.CurrentOpponent)
-  return np.hstack((
-    game.CurrentPlayer.remaining_mana,
-    *parse_player(game.CurrentPlayer),
-    game.CurrentOpponent.remaining_mana,
-    *hero_p2,
-    *board_p2
+  o = game.CurrentOpponent
+  p = game.CurrentPlayer
+
+  return np.array((
+    # player
+    p.remaining_mana,
+    p.hero.atk,
+    p.hero.base_health - p.hero.damage,
+    p.hero.exhausted,
+    p.hero.power.exhausted,
+    *pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
+    *pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
+
+    # opponent
+    o.remaining_mana,
+    o.hero.atk,
+    o.hero.base_health - o.hero.damage,
+    o.hero.exhausted,
+    o.hero.power.exhausted,
+    # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
+    *pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
   ))
 
 
@@ -91,10 +107,11 @@ def game_stats(game):
 
   power = [(minion.atk, minion.base_health) for minion in player.board_zone.minions]
   if len(power):
-    power, value = np.sum(power, axis=0)
+    power, value = sum(power)  # it was np.sum(.., axis=0), replaced.. maybe bugs?
   else:
     power = 0
     value = 0
+
   defense = sum([minion.base_health for minion in opponent.board_zone.minions])
 
   opponent_life = opponent.hero.base_health - opponent.hero.damage
@@ -357,7 +374,6 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       self.play_opponent_action()
     else:
       raise TimeoutError
-
 
   def close(self):
     # Not sure about this.

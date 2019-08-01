@@ -90,6 +90,10 @@ class BaseEnv(gym.Env, ABC):
     self.opponents = opponents
     self.opponent_obs_rmss = opponent_obs_rmss
 
+  @abstractmethod
+  def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
+    raise NotImplementedError
+
 
 class RenderableEnv(BaseEnv):
   hand_encoding_size = None  # atk, health, exhaust
