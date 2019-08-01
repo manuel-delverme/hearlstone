@@ -522,7 +522,7 @@ class PPOAgent(agents.base_agent.Agent):
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
         game_manager.add_learning_opponent(checkpoint_file)
 
-        self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
+        #self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
         # self.actor_critic.reset_actor()
         self.optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

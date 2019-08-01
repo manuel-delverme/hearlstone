@@ -311,9 +311,10 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     if len(self.opponents) > 1:
       if len(self._game_matrix.values()) > 1:
         counts = [v[0] for v in self._game_matrix.values()]
+        idxs = list(self._game_matrix.keys())
         counts = 1 / np.array(counts)
-        p[:len(counts)] = counts
-
+        p[idxs] = counts
+      assert p.sum() > 0
       p /= p.sum()  # TODO: check division by 0
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
