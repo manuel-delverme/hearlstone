@@ -5,10 +5,11 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-
 # from environments.vanilla_hs import VanillaHS
+from environments.sabber_hs import Sabbertsone
+
 # env = VanillaHS(skip_mulligan=True)
-# env = bind_address('localhost:50052')()
+env = Sabbertsone('localhost:50052')
 # env.set_opponents([SabberAgent(level=6)])
 
 

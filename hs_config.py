@@ -6,7 +6,6 @@ import torch
 
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
-from environments import base_env
 
 enjoy = False
 # game_mode = "trading"
@@ -50,7 +49,7 @@ class Environment:
 
   level = -1
   @staticmethod
-  def get_game_mode(address: str) -> Callable[[], base_env.BaseEnv]:
+  def get_game_mode(address: str) -> Callable[[], Callable]:
     # if game_mode == "trading":
     # import environments.tutorial_environments
     # return environments.tutorial_environments.TradingHS
