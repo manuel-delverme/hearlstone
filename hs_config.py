@@ -16,7 +16,7 @@ make_deterministic = False  # Supposedly slows by a lot
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 
-comment = "DELETEME" if DEBUG else ""  # d10c4n3
+comment = "DELETEME" if DEBUG else "d10c4n3"
 device = torch.device("cuda:0" if use_gpu else "cpu")
 # device = 'gpu' if use_gpu else 'cpu'
 
@@ -29,8 +29,7 @@ class Environment:
   newest_opponent_prob = 0.5
   render_after_step = visualize_everything or 0
   ENV_DEBUG = DEBUG
-  ENV_DEBUG_HEURISTIC = False
-  no_subprocess = ENV_DEBUG
+  no_subprocess = ENV_DEBUG or 0
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True
@@ -45,9 +44,9 @@ class Environment:
   always_first_player = True
 
   level = -1
-
+  env_name = "sabberstone"
   @staticmethod
-  def get_game_mode() -> Callable[[], base_env.BaseEnv]:
+  def get_game_mode(address: str) -> Callable[[], base_env.BaseEnv]:
     # if game_mode == "trading":
     # import environments.tutorial_environments
     # return environments.tutorial_environments.TradingHS
@@ -57,16 +56,16 @@ class Environment:
     # import sb_env.SabberStone_python_client.simulator
     # return sb_env.SabberStone_python_client.simulator.Sabbertsone
     import environments.sabber_hs
-    return environments.sabber_hs.Sabbertsone
+    return environments.sabber_hs.bind_address(_address=address)
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
-    import agents.heuristic.random_agent
+    return agents.heuristic.hand_coded.SabberAgent
+    # import agents.heuristic.random_agent
+    # return agents.heuristic.random_agent.RandomAgent
     # return agents.heuristic.hand_coded.PassingAgent
     # return agents.heuristic.hand_coded.TradingAgent
-    # return agents.heuristic.random_agent.RandomAgent
-    return agents.heuristic.hand_coded.SabberAgent
 
 
 class SelfPlay:
