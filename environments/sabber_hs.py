@@ -217,21 +217,27 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     assert hasattr(action_id, '__int__')
     action_id = int(action_id)
 
-    actions = self.parse_options(self.game_ref)
-    selected_action = actions[action_id]
+    try:
+      actions = self.parse_options(self.game_ref)
+      selected_action = actions[action_id]
 
-    # self.update_stats()
+      # self.update_stats()
 
-    self.game_ref = self.stub.Process(selected_action)
+      assert self.game_ref.state != python_pb2.Game.COMPLETE
+      self.game_ref = self.stub.Process(selected_action)
 
-    if self.game_ref.turn > hs_config.Environment.max_turns:
-      state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
-      done = True
-      reward = 0.
-      return state, reward, done, info
+      if self.game_ref.turn > hs_config.Environment.max_turns:
+        state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
+        done = True
+        reward = 0.
+        return state, reward, done, info
 
-    if self.game_ref.CurrentPlayer.id == 2:
-      self.play_opponent_turn()
+      if self.game_ref.CurrentPlayer.id == 2:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+        self.play_opponent_turn()
+
+    except self.GameOver:
+      assert self.game_ref.state == python_pb2.Game.COMPLETE
+      auto_reset = True
 
     return self.gather_transition(auto_reset=auto_reset)
 
@@ -248,8 +254,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   @shared.env_utils.episodic_log
   def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    assert shared.utils.can_autoreset(auto_reset,
-                                      self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
+    assert shared.utils.can_autoreset(auto_reset, self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
 
     terminal = self.game_ref.state == python_pb2.Game.COMPLETE
     assert self.game_ref.state in (
@@ -345,10 +350,10 @@ class Sabbertsone(environments.base_env.RenderableEnv):
   def play_opponent_turn(self):
     assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
     try:
-      while self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
+      while self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:#  and self.game_ref.state != python_pb2.Game.COMPLETE:
         self.play_opponent_action()
     except self.GameOver:
-      pass
+      raise self.GameOver
 
   def close(self):
     # Not sure about this.
