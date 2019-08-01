@@ -5,6 +5,7 @@ import time
 import numpy as np
 from tqdm import tqdm
 
+import agents.heuristic.random_agent
 # from environments.vanilla_hs import VanillaHS
 from environments.sabber_hs import Sabbertsone
 
@@ -31,6 +32,7 @@ def HSenv_test():
 
 
 def test_wrapperFPS():
+  env.set_opponents([agents.heuristic.random_agent.RandomAgent()])
   s0, reward, terminal, info = env.reset()
   for _ in tqdm(itertools.count()):
     pa = info['possible_actions']

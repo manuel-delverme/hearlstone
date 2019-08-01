@@ -16,6 +16,31 @@ import shared.utils
 from shared.constants import PlayerTaskType, BoardPosition, HandPosition, GameStatistics, _ACTION_SPACE, _STATE_SPACE
 
 
+class GameRef:
+  def __init__(self, game_ref):
+    self.game_ref = game_ref
+
+  @property
+  def id(self):
+    return self.game_ref.id
+
+  @property
+  def turn(self):
+    return self.game_ref.turn
+
+  @property
+  def state(self):
+    return self.game_ref.state
+
+  @property
+  def CurrentPlayer(self):
+    return self.game_ref.CurrentPlayer
+
+  @property
+  def CurrentOpponent(self):
+    return self.game_ref.CurrentOpponent
+
+
 def parse_hero(hero):
   return hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted
 
@@ -165,7 +190,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     self.channel = grpc.insecure_channel(address)
     self.stub = python_pb2_grpc.SabberStonePythonStub(self.channel)
-    self.game_ref = self.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2))
+    self.game_ref = GameRef(self.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2)))
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
@@ -188,42 +213,43 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     return np.array(reward, dtype=np.float32)
 
   def original_info(self):
-    warnings.warn("minimize stub calls (superslow), options can be reused here")
-    # possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
     return {
       "observation": self.game_ref,
       "possible_actions": self.parse_options(self.game_ref),
     }
 
   def parse_options(self, game, return_options=False):
-    options = self.stub.GetOptions(game.id).list
-    possible_options = {}
+    if not hasattr(game, '_options'):
+      options = self.stub.GetOptions(game.id).list
+      possible_options = {}
 
-    for option in options:
-      option_type = option.type
-      assert option_type != PlayerTaskType.CHOOSE
+      for option in options:
+        option_type = option.type
+        assert option_type != PlayerTaskType.CHOOSE
 
-      if option_type == PlayerTaskType.END_TURN:
-        action_id = self.GameActions.PASS_TURN
-      else:
-        source = option.source_position
-        target = option.target_position
+        if option_type == PlayerTaskType.END_TURN:
+          action_id = self.GameActions.PASS_TURN
+        else:
+          source = option.source_position
+          target = option.target_position
 
-        assert (option_type not in (PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER)
-                or source == BoardPosition.Hero)
+          assert (option_type not in (PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER)
+                  or source == BoardPosition.Hero)
 
-        action_hash = (option_type, source, target)
-        action_id = self.action_to_id[action_hash]
+          action_hash = (option_type, source, target)
+          action_id = self.action_to_id[action_hash]
 
-      assert action_id not in possible_options
-      possible_options[action_id] = option
+        assert action_id not in possible_options
+        possible_options[action_id] = option
 
-    assert len(possible_options) > 0  # pass should always be there
+      assert len(possible_options) > 0  # pass should always be there
+      game._options = options
+      game._possible_options = possible_options
 
     if return_options:
-      return possible_options, options
+      return game._possible_options, game._options
     else:
-      return possible_options
+      return game._possible_options
 
   def update_stats(self):
     if self.game_ref.CurrentPlayer.id == 1:
@@ -242,7 +268,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       # self.update_stats()
 
       assert self.game_ref.state != python_pb2.Game.COMPLETE
-      self.game_ref = self.stub.Process(selected_action)
+      self.game_ref = GameRef(self.stub.Process(selected_action))
 
       if self.game_ref.turn > hs_config.Environment.max_turns:
         state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
@@ -260,7 +286,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   @shared.env_utils.episodic_log
   def reset(self):
-    self.game_ref = self.stub.Reset(self.game_ref.id)
+    self.game_ref = GameRef(self.stub.Reset(self.game_ref.id))
     self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0
@@ -362,7 +388,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     info['possible_actions'] = pa.unsqueeze(0)
     info['original_info'] = self.original_info()
 
-    action = self.opponent.choose(observation, info)
+    action = self.opponent.choose(observation=observation, info=info)
     assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
     return self.step(action, auto_reset=False)
 
