@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 import torch
 
@@ -14,9 +15,8 @@ import hs_config
 
 # torch.cuda.current_device()  # this is required for M$win driver to work
 
-
-def train():
-  if not hs_config.comment and len(sys.argv) == 1:
+def train(args):
+  if not hs_config.comment and args.comment is None:
     import tkinter.simpledialog
     # comment = "256h32bs"
     try:
@@ -34,12 +34,13 @@ def train():
       torch.backends.cudnn.benchmark = False
       torch.backends.cudnn.deterministic = True
 
-  game_class = hs_config.Environment.get_game_mode()
+  game_class = hs_config.Environment.get_game_mode(args.address)
+
   dummy_hs_env = game_class()
   num_actions = dummy_hs_env.action_space.n
 
   if not hs_config.PPOAgent.load_experts or (
-    hs_config.Environment.get_game_mode() is environments.tutorial_environments.TradingHS):
+          hs_config.Environment.get_game_mode(args.address) is environments.tutorial_environments.TradingHS):
     experts = tuple()
   else:
     trading_expert = agents.learning.ppo_agent.Expert(
@@ -47,16 +48,13 @@ def train():
     experts = (trading_expert,)
     num_actions += len(experts)
 
-  player = agents.learning.ppo_agent.PPOAgent(
-    num_inputs=dummy_hs_env.observation_space.shape[0],
-    num_possible_actions=num_actions,
-    log_dir=os.path.join(os.getcwd(), 'ppo_log'),
-    experts=experts,
-  )
+  player = agents.learning.ppo_agent.PPOAgent(num_inputs=dummy_hs_env.observation_space.shape[0],
+                                              num_possible_actions=num_actions,
+                                              log_dir=os.path.join(os.getcwd(), 'ppo_log'), experts=experts)
   del dummy_hs_env
-  game_manager = game_utils.GameManager(hs_config.seed)
+  game_manager = game_utils.GameManager(hs_config.seed, address=args.address)
 
-  if len(sys.argv) == 2:
+  if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu = False
     hs_config.device = torch.device('cpu')
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
@@ -64,16 +62,22 @@ def train():
 
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*{}-*'.format(hs_config.VanillaHS.level))
 
-    player.enjoy(game_manager, checkpoint_file=sys.argv[1])
-  elif len(sys.argv) == 3:
+    player.enjoy(game_manager, checkpoint_file=args.p1)
+  elif args.p1 is not None and args.p2 is not None:
     hs_config.use_gpu = False
     hs_config.device = torch.device('cpu')
-    game_manager.add_learning_opponent(sys.argv[2])
-    player.enjoy(game_manager, checkpoint_file=sys.argv[1])
+    game_manager.add_learning_opponent(args.p1)
+    player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
     # pass
     player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
 
 
 if __name__ == "__main__":
-  train()
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--address", default="0.0.0.0:50052")
+  parser.add_argument("--p1", default=None)
+  parser.add_argument("--p2", default=None)
+  parser.add_argument("--comment", default=None)
+  args = parser.parse_args()
+  train(args)

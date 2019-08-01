@@ -32,13 +32,9 @@ class PPOAgent(agents.base_agent.Agent):
     return action
 
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
-    experts: Tuple[agents.base_agent.Agent] = tuple(), ) -> None:
+               experts: Tuple[agents.base_agent.Agent] = tuple()) -> None:
 
-    self.experiment_id = "-".join((
-      hs_config.Environment.get_game_mode().__name__,
-      str(hs_config.Environment.level),
-      hs_config.comment
-    ))
+    self.experiment_id = "-".join((hs_config.Environment.env_name, str(hs_config.Environment.level), hs_config.comment))
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
     self.sequential_experiment_num = 0
@@ -128,18 +124,19 @@ class PPOAgent(agents.base_agent.Agent):
         os.remove(f)
 
   def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-    num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+            num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     self.update_experiment_logging()
     return self._train(game_manager, checkpoint_file, num_updates, updates_offset)
 
   def _train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-    num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
+             num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     assert updates_offset >= 0
     envs, eval_envs, valid_envs = self.setup_envs(game_manager)
 
     if checkpoint_file:
       print('[Train] loading checkpoint:', checkpoint_file)
       self.load_checkpoint(checkpoint_file, envs)
+      assert game_manager.use_heuristic_opponent is False
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n + self.num_experts == self.num_actions
@@ -177,7 +174,7 @@ class PPOAgent(agents.base_agent.Agent):
         self.save_model(envs, total_num_steps)
 
       good_training_performance = len(episode_rewards) == episode_rewards.maxlen and np.mean(episode_rewards) > 1 - (
-        1 - hs_config.PPOAgent.winratio_cutoff) * 2
+              1 - hs_config.PPOAgent.winratio_cutoff) * 2
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or good_training_performance:
 
         performance = np.mean(self.eval_agent(envs, eval_envs))
@@ -190,10 +187,10 @@ class PPOAgent(agents.base_agent.Agent):
 
     checkpoint_file = self.save_model(envs, total_num_steps)
 
-    game_manager.set_heuristic_opponent()
     outcome = self.eval_agent(envs, valid_envs)
     # import pdb; pdb.set_trace()
     test_performance = float(np.mean(outcome))
+
     # print("[Train] test performance", checkpoint_file, ppo_update_num, test_performance)
 
     # if test_performance > 0.9:
@@ -221,24 +218,27 @@ class PPOAgent(agents.base_agent.Agent):
 
     if self.envs is None:
       print("[Train] Loading training environments")
+      game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                                 hs_config.device, allow_early_resets=False)
     else:
+      game_manager.use_heuristic_opponent = False
       self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents,
                                                  opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
+      game_manager.use_heuristic_opponent = False
       self.eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                                      hs_config.device, allow_early_resets=True)
     else:
+      game_manager.use_heuristic_opponent = False
       self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents,
                                                       opponent_obs_rmss=game_manager.opponent_normalization_factors)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
-      assert game_manager.use_heuristic_opponent
-
+      game_manager.use_heuristic_opponent = True
       self.validation_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
                                            hs_config.device, allow_early_resets=True)
     # else:
@@ -327,7 +327,7 @@ class PPOAgent(agents.base_agent.Agent):
         action[0] = act
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
-    explained_variance):
+                  explained_variance):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -496,6 +496,8 @@ class PPOAgent(agents.base_agent.Agent):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
         new_checkpoint_file, win_ratio, updates_so_far = self._train(
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
+        assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
+
 
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
         if win_ratio >= old_win_ratio:
@@ -504,8 +506,12 @@ class PPOAgent(agents.base_agent.Agent):
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
           old_win_ratio = win_ratio
+          assert not game_manager.use_heuristic_opponent or self_play_iter == 0
 
+        assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
         game_manager.add_learning_opponent(checkpoint_file)
+
+        self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
         # self.actor_critic.reset_actor()
         self.optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)
