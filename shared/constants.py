@@ -62,6 +62,15 @@ class HandPosition(IntEnum):
   HA = 9
 
 
-GameStatistics = collections.namedtuple('GameStatistics', ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
+BoardPosition.__call__ = lambda x: x
+HandPosition.__call__ = lambda x: x
+PlayerTaskType.__call__ = lambda x: x
+
+GameStatistics = collections.namedtuple('GameStatistics',
+                                        ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
 _ACTION_SPACE = 249
 _STATE_SPACE = 92  # state space includes card_index
+
+Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
+Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
+Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])

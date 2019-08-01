@@ -1,6 +1,5 @@
-import os
-import sys
 import argparse
+import os
 
 import torch
 
@@ -59,7 +58,6 @@ def train(args):
     hs_config.device = torch.device('cpu')
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*')
     # latest_checkpoint = sorted(checkpoints, key=lambda x: int(x.replace(":", "-").split("-")[-1][:-3]))[-1]
-
     # checkpoints = glob.glob(hs_config.PPOAgent.save_dir + '*Vanilla*{}-*'.format(hs_config.VanillaHS.level))
 
     player.enjoy(game_manager, checkpoint_file=args.p1)

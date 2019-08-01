@@ -27,7 +27,7 @@ def get_hp(card):
     return card.health
 
 
-class VanillaHS(base_env.BaseEnv):
+class VanillaHS(base_env.RenderableEnv):
   def __init__(
     self,
     max_cards_in_board=simulator.HSsimulation._MAX_CARDS_IN_BOARD,
@@ -54,7 +54,6 @@ class VanillaHS(base_env.BaseEnv):
     self.opponent_obs_rms = None
     self.opponent_obs_rmss = [None, ]
 
-    self.gui = None
     self.last_info = None
     self.id_to_action = [(-1, -1), ]
     self.action_history = collections.deque(maxlen=2)
@@ -215,53 +214,6 @@ class VanillaHS(base_env.BaseEnv):
   def cards_in_hand(self):
     return self.simulation._MAX_CARDS_IN_HAND
 
-  def render(self, mode='human', choice=None):
-    if self.gui is None:
-      import gui
-      self.gui = gui.GUI()
-
-    obs = self.last_info['observation']
-    offset, board, hand, mana = self.render_player(obs)
-    self.gui.draw_agent(board=board, hand=hand, mana=mana)
-
-    offset, board, hand, mana = self.render_player(obs, offset)
-    self.gui.draw_opponent(board=board, hand=hand, mana=mana)
-
-    info = self.last_info.copy()
-    info['possible_actions'] = np.argwhere(info['possible_actions']).flatten()
-    action_history = info['action_history']
-    del info['action_history']
-    del info['observation']
-    self.gui.log(action_history[0], row=1)
-    if len(action_history) > 1:
-      self.gui.log(action_history[1], row=2)
-    self.gui.log("choice:{}".format(choice), row=3, multiline=False)
-    self.gui.log(" ".join(("{}:{}".format(k, v) for k, v in info.items())), row=4, multiline=True)
-
-    if mode == 'human':
-      return self.gui.screen.getch()
-    else:
-      raise NotImplementedError
-
-  def render_player(self, obs, offset=0):
-    hand = []
-    for minion_number in range(self.simulation._MAX_CARDS_IN_HAND):
-      card = obs[offset: offset + 3]
-      if card[:2].max() > -1:
-        hand.append(list(int(c) for c in card))
-      offset += 3
-
-    board = []
-    for minion_number in range(self.max_cards_in_board + 1):
-      card = obs[offset: offset + 3]
-      if card.max() > -1:
-        board.append(list(int(c) for c in card))
-      offset += 3
-
-    mana = obs[offset]
-    offset += 1
-    return offset, [board[-1], ] + board[:-1], hand, mana
-
   @shared.env_utils.episodic_log
   def reset(self):
     self.reinit_game()
@@ -383,6 +335,7 @@ class VanillaHS(base_env.BaseEnv):
         info['possible_actions'] = new_info['possible_actions']
         info['observation'] = new_info['observation']
 
+    self.last_info = info
     self.last_info = info
     return game_observation, reward, terminal, info
 

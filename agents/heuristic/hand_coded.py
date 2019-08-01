@@ -10,6 +10,7 @@ import agents.base_agent
 import agents.heuristic.random_agent
 import hs_config
 import specs
+from shared.constants import Minion, Card, Hero
 # SPELLS = OrderedDict({
 #   77: 'Polymorph',  # transform in a sheep
 #   315: 'Fireball',  # 6 damage
@@ -147,11 +148,6 @@ def parse_game(info):
   return player_hero, opponent_hero, hand_zone, player_board, opponent_board
 
 
-Minion = collections.namedtuple('minion', ['atk', 'health', 'exausted'])
-Card = collections.namedtuple('card', ['id', 'atk', 'base_health', 'cost'])
-Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exausted'])
-
-
 class SabberAgent(HeuristicAgent):
   def __init__(self, level: int = hs_config.Environment.level):
     super(SabberAgent, self).__init__(level)
@@ -160,12 +156,12 @@ class SabberAgent(HeuristicAgent):
     if self.level == 0:
       return self.passing_agent.choose(observation, encoded_info)
 
-    if random.random() < self.randomness:
+    if self.randomness and random.random() < self.randomness:
       return self.random_agent.choose(observation, encoded_info)
 
     possible_actions = encoded_info['original_info']['possible_actions']
     player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
-    if hs_config.Environment.ENV_DEBUG:
+    if hs_config.Environment.ENV_DEBUG_HEURISTIC:
       desk = {}
 
     if len(possible_actions) == 1:
@@ -183,9 +179,8 @@ class SabberAgent(HeuristicAgent):
 
         if self.action_is_play_minion(action):
           minion = hand_zone[action.source_position]
-          # value = (minion.base_health + minion.atk) / 2
           value = minion.cost
-          if hs_config.Environment.ENV_DEBUG:
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
             desk[idx] = f"{action.print}[PLAY_MINION] has value of {value}"
 
         elif self.action_is_spell(action, hand_zone):
@@ -195,20 +190,20 @@ class SabberAgent(HeuristicAgent):
               action.target_position]
           except Exception:
             target_entity = None
-          if hs_config.Environment.ENV_DEBUG:
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
             desk[idx] = f"{action.print}[SPELL] on {target_entity} has value of {value}"
 
         elif self.action_is_trade(action, hand_zone):
           value = self.evaluate_trade(action, opponent_board, opponent_hero, player_board, player_hero)
-          if hs_config.Environment.ENV_DEBUG:
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
             desk[idx] = f"{action.print}[TRADE] has value of {value}"
 
         elif self.action_is_hero_power(action, hand_zone):
-          if hs_config.Environment.ENV_DEBUG:
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
             desk[idx] = f"{action.print}[TRADE] SKIPPED"
 
           value = self.evaluate_hero_power(action, hand_zone, opponent_board, opponent_hero)
-          if hs_config.Environment.ENV_DEBUG:
+          if hs_config.Environment.ENV_DEBUG_HEURISTIC:
             desk[idx] = f"{action.print}[TRADE] has value of {value}"
         else:
           raise NotImplementedError
@@ -216,7 +211,7 @@ class SabberAgent(HeuristicAgent):
         values[idx] = value
 
       actions = sorted(actions, key=lambda x: values[x], reverse=True)
-      if hs_config.Environment.ENV_DEBUG:
+      if hs_config.Environment.ENV_DEBUG_HEURISTIC:
         for idx in actions:
           print(desk[idx], values[idx])
 
@@ -226,7 +221,7 @@ class SabberAgent(HeuristicAgent):
         selected_action = end_turn
       else:
         selected_action = actions[0]
-        if hs_config.Environment.ENV_DEBUG:
+        if hs_config.Environment.ENV_DEBUG_HEURISTIC:
           print('Playing', desk[selected_action])
     return selected_action
 

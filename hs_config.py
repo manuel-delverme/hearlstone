@@ -29,7 +29,8 @@ class Environment:
   newest_opponent_prob = 0.5
   render_after_step = visualize_everything or 0
   ENV_DEBUG = DEBUG
-  no_subprocess = ENV_DEBUG or 0
+  ENV_DEBUG_HEURISTIC = False
+  no_subprocess = ENV_DEBUG
   old_opponent_prob = 0.2
   sort_decks = False
   normalize = True
@@ -64,8 +65,8 @@ class Environment:
     import agents.heuristic.random_agent
     # return agents.heuristic.hand_coded.PassingAgent
     # return agents.heuristic.hand_coded.TradingAgent
-    return agents.heuristic.random_agent.RandomAgent
-    # return agents.heuristic.hand_coded.SabberAgent
+    # return agents.heuristic.random_agent.RandomAgent
+    return agents.heuristic.hand_coded.SabberAgent
 
 
 class SelfPlay:

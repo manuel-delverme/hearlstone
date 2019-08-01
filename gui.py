@@ -1,6 +1,8 @@
 import curses
 import enum
 
+from shared.constants import Minion, Card, Hero, SPELLS
+
 
 class Players(enum.Enum):
   AGENT = 0
@@ -11,14 +13,15 @@ class Players(enum.Enum):
 CARD_WIDTH = 1  # width of box to draw card in
 CARD_HEIGHT = 3
 
-
 class GUI:
   def __init__(self):
     self.screen = curses.initscr()
     self.screen.immedok(True)
+    _height, _width = self.screen.getmaxyx()
+    self.screen.resize(max(50, _height), _width)
     (self.game_height, self.game_width) = self.screen.getmaxyx()
 
-    opponent_rows = (CARD_HEIGHT + 2) * 2 + 2
+    opponent_rows = (CARD_HEIGHT + 2) * 1 + 2
     player_rows = (CARD_HEIGHT + 2) * 2 + 2
     log_rows = int(self.game_height - (opponent_rows + player_rows))
     assert log_rows >= 3
@@ -70,34 +73,52 @@ class GUI:
   def opponent_addstr(self, y, x, message, options=0):
     self.windows[Players.OPPONENT].addstr(y, x, message, options)
 
-  def draw_opponent(self, board, hand, mana):
-    board = [(hp, atk, ready) for atk, hp, ready in board]
-    hand = [(hp, atk, ready) for atk, hp, ready in hand]  # opponent is mirrored
-    self.draw_player_side(Players.OPPONENT, top_row=hand, bottom_row=board)
+  def draw_opponent(self, hero, board, hand, mana):
+    top_row = [Minion(atk=hero.health, health=hero.power_exhausted, exhausted=hero.atk_exhausted)]
+    top_row.extend(Minion(minion.health, minion.atk, minion.exhausted) for minion in board)
+    self.draw_player_side(Players.OPPONENT, top_row=None, bottom_row=top_row)
     nametag = 'Opponent mana:{}'.format(mana)
     self.opponent_addstr(0, self.game_width - 1 - len(nametag), nametag)
 
-  def draw_agent(self, board, hand, mana):
-    self.draw_player_side(Players.AGENT, top_row=board, bottom_row=hand)
+  def draw_agent(self, hero, board, hand, mana):
+    top_row = [Minion(atk=hero.power_exhausted, health=hero.health, exhausted=hero.atk_exhausted)]
+    top_row.extend(Minion(minion.atk, minion.health, minion.exhausted) for minion in board)
+
+    self.draw_player_side(Players.AGENT, top_row=top_row, bottom_row=hand)
     nametag = 'Agent mana:{}'.format(mana)
     self.player_addstr(0, self.game_width - 1 - len(nametag), nametag)
 
   def draw_player_side(self, player, top_row, bottom_row):
     self.windows[player].clear()
     self.windows[player].box()
-    self.draw_zone(top_row, player, offset_row=1, offset_column=1)
-    self.draw_zone(bottom_row, player, offset_row=CARD_HEIGHT + 3, offset_column=1)
+    offset = 1
+    if top_row:
+      self.draw_zone(top_row, player, offset_row=offset, offset_column=1)
+      offset += CARD_HEIGHT + 2
+    self.draw_zone(bottom_row, player, offset_row=offset, offset_column=1)
 
   def draw_zone(self, cards_to_draw, player, offset_column, offset_row):
     for offset, card in enumerate(cards_to_draw):
+      assert isinstance(card, (Minion, Hero, Card))
       pixel_offset = offset * (CARD_WIDTH + 4)
-      atk, hp, ready = card
-      ready = '+' if ready else 'z'
+
+      ready = '+'
+      if isinstance(card, Minion):
+        if card.exhausted:
+          ready = 'z'
+      elif isinstance(card, Card) and not card.health:
+        card_id = ''.join(i for i in str(SPELLS(card.id))[7:] if i.isupper())
+        if len(card_id) == 1:
+          card_id = str(SPELLS(card.id))[7:9]
+        card = Card(atk=card_id, health=card.cost, id=None, cost=None)
+        ready = 's'
+
       self.draw_rectangle(player, offset_row, offset_column + pixel_offset, CARD_HEIGHT, CARD_WIDTH)
       self.windows[player].addstr(offset_row + 0, offset_column + 2 + pixel_offset, str(ready))
-      self.windows[player].addstr(offset_row + 1, offset_column + 1 + pixel_offset, str(atk))
+      self.windows[player].addstr(offset_row + 1, offset_column + 1 + pixel_offset, str(card.atk))
       self.windows[player].addstr(offset_row + CARD_HEIGHT,
-                                  offset_column + 1 + CARD_WIDTH - len(str(hp)) + pixel_offset, str(hp))
+                                  offset_column + 1 + CARD_WIDTH - len(str(card.health)) + pixel_offset,
+                                  str(card.health))
 
   def log(self, txt, row=1, multiline=False):
     self.windows[Players.LOG].addstr(row, 1, txt)

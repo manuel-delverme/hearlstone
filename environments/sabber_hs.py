@@ -1,4 +1,3 @@
-import random
 import warnings
 from typing import Tuple, Dict, Text, Any
 
@@ -57,19 +56,6 @@ def build_state(game):
     *hero_p2,
     *board_p2
   ))
-
-
-def full_random_game(stub, deck1, deck2):
-  game = stub.NewGame(python_pb2.DeckStrings(deck1=deck1, deck2=deck2))
-  options_list = []
-  while game.state != python_pb2.Game.State.COMPLETE:
-    options = stub.Options(game)
-    for option in options:
-      options_list.append(option)
-    option = options_list[random.randrange(len(options_list))]
-    # returns the updated game state
-    game = stub.Process(option)
-    options_list.clear()
 
 
 def enumerate_actions():
@@ -132,7 +118,7 @@ def random_subset(opponents: list, k: int) -> tuple:
   n = 0
   result = []
 
-  for idx,  opponent in enumerate(opponents):
+  for idx, opponent in enumerate(opponents):
     n += 1
     if len(result) < k:
       result.append((opponent, idx))
@@ -142,8 +128,9 @@ def random_subset(opponents: list, k: int) -> tuple:
         result[s] = (opponent, idx)
   return result[0]
 
+
 def bind_address(_address):
-  class Sabbertsone(environments.base_env.BaseEnv):
+  class Sabbertsone(environments.base_env.RenderableEnv):
     DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
     DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 
@@ -152,9 +139,14 @@ def bind_address(_address):
     address = _address
     channel = grpc.insecure_channel(address)
     stub = python_pb2_grpc.SabberStonePythonStub(channel)
+    hand_encoding_size = 4  # atk, health, exhaust
+    hero_encoding_size = 4  # atk, health, exhaust, hero_power
+    minion_encoding_size = 3  # atk, health, exhaust
+    board_to_board = {PlayerTaskType.MINION_ATTACK, PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER}
 
     def __init__(self, seed: int = None, extra_seed: int = None):
       super().__init__()
+      self.gui = None
       if seed is not None or extra_seed is not None:
         warnings.warn("Setting the seed is not implemented")
       self.game_ref = Sabbertsone.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2))
@@ -179,6 +171,7 @@ def bind_address(_address):
       return np.array(reward, dtype=np.float32)
 
     def original_info(self):
+      warnings.warn("minimize stub calls (superslow), options can be reused here")
       # possible_options = Sabbertsone.stub.GetOptions(self.game_ref).list
       return {
         "observation": self.game_ref,
@@ -186,46 +179,35 @@ def bind_address(_address):
       }
 
     @classmethod
-    def parse_options(cls, game):
+    def parse_options(cls, game, return_options=False):
       options = cls.stub.GetOptions(game.id).list
-      # where_the_fuck_am_i = {m.card_id: idx for idx, m in enumerate(game.CurrentPlayer.board_zone.minions)}
-      # where_the_fuck_are_you = {m.card_id: idx + 9 for idx, m in enumerate(game.CurrentOpponent.board_zone.minions)}
-
       possible_options = {}
-      board_to_board = {PlayerTaskType.MINION_ATTACK, PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER}
 
       for option in options:
-        option_type = PlayerTaskType(option.type)
-
-        if option_type == PlayerTaskType.CHOOSE:
-          raise NotImplementedError
-
-        action_type = PlayerTaskType(option.type)
+        option_type = option.type
+        assert option_type != PlayerTaskType.CHOOSE
 
         if option_type == PlayerTaskType.END_TURN:
           action_id = cls.GameActions.PASS_TURN
         else:
-          if option_type == PlayerTaskType.PLAY_CARD:
-            source = HandPosition(option.source_position)
-            target = BoardPosition(option.target_position)
-          elif option_type in board_to_board:
-            source = BoardPosition(option.source_position)
-            target = BoardPosition(option.target_position)
-          else:
-            raise NotImplementedError
+          source = option.source_position
+          target = option.target_position
 
-          assert (
-                  option_type not in (
-            PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER) or source == BoardPosition.Hero)
+          assert (option_type not in (PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER)
+                  or source == BoardPosition.Hero)
 
-          action_hash = (action_type, source, target)
+          action_hash = (option_type, source, target)
           action_id = cls.action_to_id[action_hash]
 
         assert action_id not in possible_options
         possible_options[action_id] = option
 
       assert len(possible_options) > 0  # pass should always be there
-      return possible_options
+
+      if return_options:
+        return possible_options, options
+      else:
+        return possible_options
 
     def update_stats(self):
       if self.game_ref.CurrentPlayer.id == 1:
@@ -267,7 +249,7 @@ def bind_address(_address):
       return self.gather_transition(auto_reset=False)
 
     @shared.env_utils.episodic_log
-    def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
+    def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
       assert shared.utils.can_autoreset(auto_reset,
                                         self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
 
@@ -280,7 +262,7 @@ def bind_address(_address):
 
       possible_actions = np.zeros(_ACTION_SPACE, dtype=np.float32)
       if not terminal:
-        actions = Sabbertsone.parse_options(self.game_ref)
+        actions = self.parse_options(self.game_ref)
         possible_actions[list(actions.keys())] = 1
 
       info = {
@@ -334,7 +316,7 @@ def bind_address(_address):
           counts = 1/np.array(counts)
           p[:len(counts)] = counts
 
-        p /= p.sum()
+        p /= p.sum()  # TODO: check division by 0
 
       k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
       self.opponent = self.opponents[k]

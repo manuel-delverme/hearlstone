@@ -248,6 +248,9 @@ class PPOAgent(agents.base_agent.Agent):
     shared.utils.get_vec_normalize(self.envs).ob_rms = None
     shared.utils.get_vec_normalize(self.eval_envs).ob_rms = None
     shared.utils.get_vec_normalize(self.validation_envs).ob_rms = None
+    # assert shared.utils.get_vec_normalize(self.envs).ob_rms is not None
+    # assert shared.utils.get_vec_normalize(self.eval_envs).ob_rms is not None
+    # assert shared.utils.get_vec_normalize(self.validation_envs).ob_rms is not None
     return self.envs, self.eval_envs, self.validation_envs
 
   def get_last_env(self, env):
@@ -363,6 +366,9 @@ class PPOAgent(agents.base_agent.Agent):
 
     # save_model = (self.actor_critic.state_dict(), self.optimizer, get_vec_normalize(envs).ob_rms)
     save_model = (model, shared.utils.get_vec_normalize(envs).ob_rms)
+    assert shared.utils.get_vec_normalize(self.envs).ob_rms is None
+    assert shared.utils.get_vec_normalize(self.eval_envs).ob_rms is None
+    assert shared.utils.get_vec_normalize(self.validation_envs).ob_rms is None
 
     checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}:inputs={self.num_inputs}.pt"
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
@@ -406,12 +412,16 @@ class PPOAgent(agents.base_agent.Agent):
     while True:
       with torch.no_grad():
         value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
+        action_distribution, value = self.actor_critic.actor_critic(obs, infos['possible_actions'])
 
-      self.enjoy_env.render(choice=action)
+      self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value)
       obs, reward, done, infos = self.enjoy_env.step(action)
 
       if done:
-        break
+        self.enjoy_env.reset()
+        # print('DONE')
+        # self.enjoy_env.close()
+        # break
 
   def update(self, rollouts: RolloutStorage):
     advantages = rollouts.get_advantages()

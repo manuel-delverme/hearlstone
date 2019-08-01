@@ -45,8 +45,7 @@ class ActorCritic(nn.Module):
     self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions))
 
   def forward(self, observations: torch.FloatTensor, possible_actions: torch.FloatTensor,
-    deterministic: bool = False) -> (
-    torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
+    deterministic: bool = False) -> (torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
 
     assert specs.check_observation(self.num_inputs, observations)
     assert specs.check_possible_actions(self.num_possible_actions, possible_actions)

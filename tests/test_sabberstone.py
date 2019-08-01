@@ -1,14 +1,15 @@
+import itertools
 import random
 
 import numpy as np
+from tqdm import tqdm
 
-from agents.heuristic.hand_coded import HeuristicAgent, PassingAgent, SabberAgent
-from agents.heuristic.random_agent import RandomAgent
-# from environments.vanilla_hs import VanillaHS
-
+from agents.heuristic.hand_coded import SabberAgent
 from environments.sabber_hs import bind_address
+
+# from environments.vanilla_hs import VanillaHS
 # env = VanillaHS(skip_mulligan=True)
-env = bind_address("0.0.0.0:50052")()
+env = bind_address('localhost:50052')()
 env.set_opponents([SabberAgent(level=6)])
 
 import time
@@ -31,6 +32,16 @@ def HSenv_test():
     print(np.mean(avg_time))
 
 
+def test_wrapperFPS():
+  s0, reward, terminal, info = env.reset()
+  for _ in tqdm(itertools.count()):
+    pa = info['possible_actions']
+    rows = np.argwhere(pa)  # row is always 0
+    random_act = random.choice(rows)
+    s, r, done, info = env.step(int(random_act))
+    if done:
+      env.reset()
+
 def test_loss():
   env.reset()
   for _ in range(3):
@@ -42,5 +53,6 @@ def test_loss():
     assert r == -1
 
 
+test_wrapperFPS()
 # test_loss()
-HSenv_test()
+# HSenv_test()
