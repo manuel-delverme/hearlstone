@@ -34,7 +34,7 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
     experts: Tuple[agents.base_agent.Agent] = tuple()) -> None:
-    assert isinstance(__class__.__name__,str)
+    assert isinstance(__class__.__name__, str)
     self.timer = Timer(__class__.__name__, verbosity=hs_config.verbosity)
 
     self.experiment_id = hs_config.comment
@@ -186,8 +186,9 @@ class PPOAgent(agents.base_agent.Agent):
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
 
-      good_training_performance = len(episode_rewards) == episode_rewards.maxlen and np.mean(episode_rewards) > 1 - (
-        1 - hs_config.PPOAgent.winratio_cutoff) * 2
+      good_training_performance = len(episode_rewards) == episode_rewards.maxlen and (
+        np.mean(episode_rewards) > (1 - (1 - hs_config.PPOAgent.winratio_cutoff) * 2)
+      )
       if ppo_update_num % self.eval_every == 0 and ppo_update_num > 1 or good_training_performance:
 
         performance = np.mean(self.eval_agent(envs, eval_envs))
@@ -303,7 +304,7 @@ class PPOAgent(agents.base_agent.Agent):
       obs, possible_actions = rollouts.get_observation(0)
 
     for step in itertools.count():
-      if step == 1000:
+      if step == 10000:
         raise TimeoutError
 
       if exit_condition(rewards, step):
@@ -326,7 +327,7 @@ class PPOAgent(agents.base_agent.Agent):
       with self.timer("agent_step"):
         obs, reward, done, infos = envs.step(action)
       assert not all(done) or all(r in (-1., -.1) for r in infos['reward'])
-      #assert not done and infos['reward'][0] == 0
+      # assert not done and infos['reward'][0] == 0
 
       possible_actions = self.update_possible_actions_for_expert(infos)
 
@@ -539,7 +540,7 @@ class PPOAgent(agents.base_agent.Agent):
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
         game_manager.add_learning_opponent(checkpoint_file)
 
-        #self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
+        # self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
         # self.actor_critic.reset_actor()
         self.optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

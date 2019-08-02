@@ -403,7 +403,8 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
-    self.opponent = self.opponents[k]
+    # self.opponent = self.opponents[k]
+    self.opponent = self.opponents[-1]
 
     if self.opponent_obs_rmss is not None:
       self.opponent_obs_rmss = self.opponent_obs_rmss[k]
