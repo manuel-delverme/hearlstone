@@ -10,4 +10,5 @@ class RandomAgent(agents.base_agent.Bot):
   def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     pa = info['possible_actions']
     rows, columns = np.argwhere(pa)  # row is always 0
+    assert all(rows == 0)
     return random.choice(columns)

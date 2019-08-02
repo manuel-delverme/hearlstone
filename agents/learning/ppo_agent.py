@@ -161,7 +161,7 @@ class PPOAgent(agents.base_agent.Agent):
     total_num_steps = None
     ppo_update_num = None
 
-    for ppo_update_num in range(updates_offset, updates_offset + num_updates):
+    for ppo_update_num in tqdm.tqdm(range(updates_offset, updates_offset + num_updates), position=1):
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
@@ -288,6 +288,7 @@ class PPOAgent(agents.base_agent.Agent):
     rewards = []
 
     def stop_eval(rews, step):
+      # print(float(len(rews)) / hs_config.PPOAgent.num_eval_games)
       return len(rews) >= hs_config.PPOAgent.num_eval_games
 
     self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval)
@@ -302,7 +303,7 @@ class PPOAgent(agents.base_agent.Agent):
       obs, possible_actions = rollouts.get_observation(0)
 
     for step in itertools.count():
-      if step == 10000:
+      if step == 1000:
         raise TimeoutError
 
       if exit_condition(rewards, step):

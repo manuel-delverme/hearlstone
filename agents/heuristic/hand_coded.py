@@ -139,14 +139,14 @@ class HeuristicAgent(agents.base_agent.Bot):
 
 
 def parse_game(info):
-  observation = info['observation']
+  game_ref = info['game_ref']
 
-  player_hero = Hero(*parse_hero(observation.CurrentPlayer.hero))
-  opponent_hero = Hero(*parse_hero(observation.CurrentOpponent.hero))
+  player_hero = Hero(*parse_hero(game_ref.CurrentPlayer.hero))
+  opponent_hero = Hero(*parse_hero(game_ref.CurrentOpponent.hero))
 
-  hand_zone = list(map(lambda x: Card(*parse_card(x)), observation.CurrentPlayer.hand_zone.entities))
-  player_board = list(map(lambda x: Minion(*parse_minion(x)), observation.CurrentPlayer.board_zone.minions))
-  opponent_board = list(map(lambda x: Minion(*parse_minion(x)), observation.CurrentOpponent.board_zone.minions))
+  hand_zone = list(map(lambda x: Card(*parse_card(x)), game_ref.CurrentPlayer.hand_zone.entities))
+  player_board = list(map(lambda x: Minion(*parse_minion(x)), game_ref.CurrentPlayer.board_zone.minions))
+  opponent_board = list(map(lambda x: Minion(*parse_minion(x)), game_ref.CurrentOpponent.board_zone.minions))
   return player_hero, opponent_hero, hand_zone, player_board, opponent_board
 
 
@@ -161,7 +161,7 @@ class SabberAgent(HeuristicAgent):
     if self.randomness and random.random() < self.randomness:
       return self.random_agent.choose(observation, encoded_info)
 
-    possible_actions = encoded_info['original_info']['possible_actions']
+    possible_actions = encoded_info['original_info']['game_options']
     player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
     if hs_config.Environment.ENV_DEBUG_HEURISTIC:
       desk = {}

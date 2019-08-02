@@ -8,13 +8,14 @@ import agents.base_agent
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
 import agents.learning.models.randomized_policy
-import agents.learning.ppo_agent
 import hs_config
 from baselines_repo.baselines.common.running_mean_std import RunningMeanStd
 
 
 class GameManager(object):
   def __init__(self, seed=None, env_id=None, log_dir=None, address=None):
+    assert log_dir is None
+    assert env_id is None
     self.seed = seed
     self._use_heuristic_opponent = True
 
@@ -33,7 +34,7 @@ class GameManager(object):
     self._use_heuristic_opponent = value
 
   def __call__(self, extra_seed):
-    hs_game = self.game_class(seed=self.seed, extra_seed=extra_seed)
+    hs_game = self.game_class(seed=self.seed, env_number=extra_seed)
     if self.use_heuristic_opponent:
       hs_game.set_opponents(opponents=[hs_config.Environment.get_opponent()()], opponent_obs_rmss=[None, ])
     else:
@@ -42,6 +43,8 @@ class GameManager(object):
     return hs_game
 
   def add_learning_opponent(self, checkpoint_file):
+    import agents.learning.ppo_agent
+
     if self.use_heuristic_opponent:
       assert isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent)
       self.opponents = []
@@ -55,7 +58,6 @@ class GameManager(object):
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions,
                                                   log_dir=tempfile.mktemp())
 
-    del opponent.logger
     del opponent.optimizer
     opponent_network.eval()
     for network in (opponent_network.actor, opponent_network.critic, opponent_network.actor_logits):
@@ -63,7 +65,10 @@ class GameManager(object):
         param.requires_gradient = False
 
     opponent.actor_critic = opponent_network
+    if hasattr(opponent, 'logger'):  # the logger has rlocks which cannot change process so RIP
+      del opponent.logger  # TODO: this is an HACK, refactor it away
+    if hasattr(opponent, 'timer'):  # the timer has rlocks which cannot change process so RIP
+      del opponent.timer  # TODO: this is an HACK, refactor it away
 
     self.opponents.append(opponent)
     self.opponent_normalization_factors.append(opponent_obs_rms)
-

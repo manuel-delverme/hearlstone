@@ -8,9 +8,8 @@ import torch
 import agents.base_agent
 
 enjoy = False
-# game_mode = "trading"
 use_gpu = False
-seed = 1337
+seed = None  # 1337
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
 
@@ -25,9 +24,11 @@ BIG_NUMBER = 9999999999999
 visualize_everything = 0
 verbosity = 1 if DEBUG else 0
 
+
 class Environment:
   ENV_DEBUG = DEBUG
-  ENV_DEBUG_HEURISTIC = True
+  ENV_DEBUG_HEURISTIC = False
+  ENV_DEBUG_METRICS = False
   no_subprocess = ENV_DEBUG or 0
 
   max_opponents = 5
@@ -48,6 +49,7 @@ class Environment:
   always_first_player = True
 
   level = -1
+
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
     # if game_mode == "trading":

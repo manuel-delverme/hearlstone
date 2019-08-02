@@ -200,13 +200,13 @@ class Sabbertsone(environments.base_env.RenderableEnv):
   minion_encoding_size = 3  # atk, health, exhaust
   board_to_board = {PlayerTaskType.MINION_ATTACK, PlayerTaskType.HERO_ATTACK, PlayerTaskType.HERO_POWER}
 
-  def __init__(self, address: str, seed: int = None, extra_seed: int = None):
+  def __init__(self, address: str, seed: int = None, env_number: int = None):
     super().__init__()
     self.gui = None
-    self.logger = Timer(__class__.__name__, id=extra_seed, verbosity=hs_config.verbosity)
-    self.extra_seed = extra_seed
-    if seed is not None or extra_seed is not None:
-      self.logger.warning("Setting the seed is not implemented")
+    self.logger = Timer(__class__.__name__, id=env_number, verbosity=hs_config.verbosity)
+    self.extra_seed = env_number
+    if seed is not None:
+      warnings.warn("Setting the seed is not implemented")
 
     with self.logger("call_init"):
       self.channel = grpc.insecure_channel(address)
@@ -217,7 +217,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
     self.turn_stats = []
     self._game_matrix = {}
-    self.logger.info(f"Env with id {extra_seed} started.")
+    self.logger.info(f"Env with id {env_number} started.")
 
   def cards_in_hand(self):
     raise len(self.game_ref.player1.hand_zone)
@@ -304,7 +304,9 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     except self.GameOver:
       assert self.game_ref.state == python_pb2.Game.COMPLETE
-      self.logger.error(f"GameOver called from player {self.game_ref.CurrentPlayer.id}")
+
+      if hs_config.Environment.ENV_DEBUG_METRICS:
+        self.logger.error(f"GameOver called from player {self.game_ref.CurrentPlayer.id}")
 
     return self.gather_transition(auto_reset=auto_reset)
 
