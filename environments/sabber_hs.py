@@ -229,12 +229,6 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       reward = reward if player.id == C.AGENT_ID else -reward
     return np.array(reward, dtype=np.float32)
 
-  def original_info(self):
-    return {
-      "observation": self.game_ref,
-      "possible_actions": self.parse_options(self.game_ref),
-    }
-
   def parse_options(self, game, return_options=False):
     if not hasattr(game, '_options'):
       options = self.stub.GetOptions(game.id)
@@ -277,6 +271,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
   def step(self, action_id: np.ndarray, auto_reset: bool = True):
     assert hasattr(action_id, '__int__')
     action_id = int(action_id)
+    stepping_player = self.game_ref.CurrentPlayer.id
 
     try:
       actions = self.parse_options(self.game_ref)
@@ -293,7 +288,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
         reward = 0.
         return state, reward, done, info
 
-      if self.game_ref.CurrentPlayer.id == 2:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+      if self.game_ref.CurrentPlayer.id == C.OPPONENT_ID and stepping_player == C.AGENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
         self.play_opponent_turn()
 
     except self.GameOver:
@@ -398,12 +393,13 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
 
     observation = torch.FloatTensor(observation)
-    observation = observation.unsqueeze(0)
+    observation = observation.unsqueeze(0)  # 0.2%
 
-    pa = info['possible_actions']
-    pa = torch.FloatTensor(pa)
-    info['possible_actions'] = pa.unsqueeze(0)
-    info['original_info'] = self.original_info()
+    info['possible_actions'] = torch.FloatTensor(info['possible_actions']).unsqueeze(0)  # unsqueeze 0.2%
+    info['original_info'] = {
+      "game_ref": self.game_ref,
+      "game_options": self.parse_options(self.game_ref),
+    }
 
     action = self.opponent.choose(observation=observation, info=info)
     assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
@@ -413,7 +409,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     for _ in range(1000):
       if not self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
         break
-      assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
+
       self.play_opponent_action()
     else:
       raise TimeoutError
