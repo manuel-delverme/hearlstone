@@ -16,7 +16,7 @@ import shared.utils
 from shared.constants import PlayerTaskType, BoardPosition, HandPosition, GameStatistics, _ACTION_SPACE, _STATE_SPACE
 
 
-class GameRef:
+class _GameRef:
   def __init__(self, game_ref):
     self.game_ref = game_ref
 
@@ -39,6 +39,23 @@ class GameRef:
   @property
   def CurrentOpponent(self):
     return self.game_ref.CurrentOpponent
+
+
+class Stub:
+  def __init__(self, stub):
+    self.stub = stub
+
+  def NewGame(self, deck1, deck2):
+    return _GameRef(self.stub.NewGame(python_pb2.DeckStrings(deck1=deck1, deck2=deck2)))
+
+  def Reset(self, game_id):
+    return _GameRef(self.stub.Reset(game_id))
+
+  def Process(self, selected_action):
+    return _GameRef(self.stub.Process(selected_action))
+
+  def GetOptions(self, game_id):
+    return self.stub.GetOptions(game_id).list
 
 
 def parse_hero(hero):
@@ -189,8 +206,8 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       warnings.warn("Setting the seed is not implemented")
 
     self.channel = grpc.insecure_channel(address)
-    self.stub = python_pb2_grpc.SabberStonePythonStub(self.channel)
-    self.game_ref = GameRef(self.stub.NewGame(python_pb2.DeckStrings(deck1=Sabbertsone.DECK1, deck2=Sabbertsone.DECK2)))
+    self.stub = Stub(python_pb2_grpc.SabberStonePythonStub(self.channel))
+    self.game_ref = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
@@ -220,7 +237,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   def parse_options(self, game, return_options=False):
     if not hasattr(game, '_options'):
-      options = self.stub.GetOptions(game.id).list
+      options = self.stub.GetOptions(game.id)
       possible_options = {}
 
       for option in options:
@@ -268,7 +285,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       # self.update_stats()
 
       assert self.game_ref.state != python_pb2.Game.COMPLETE
-      self.game_ref = GameRef(self.stub.Process(selected_action))
+      self.game_ref = self.stub.Process(selected_action)
 
       if self.game_ref.turn > hs_config.Environment.max_turns:
         state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
@@ -286,7 +303,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   @shared.env_utils.episodic_log
   def reset(self):
-    self.game_ref = GameRef(self.stub.Reset(self.game_ref.id))
+    self.game_ref = self.stub.Reset(self.game_ref.id)
     self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0
