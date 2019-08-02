@@ -149,7 +149,7 @@ def game_stats(game):
 
   power = [(minion.atk, minion.base_health) for minion in player.board_zone.minions]
   if len(power):
-    power, value = sum(power)  # it was np.sum(.., axis=0), replaced.. maybe bugs?
+    power, value = np.sum(power, axis=0)
   else:
     power = 0
     value = 0
@@ -187,6 +187,7 @@ def random_subset(opponents: list, k: int) -> tuple:
         result[s] = (opponent, idx)
   return result[0]
 
+from shared.utils import Timer # TODO: check this import
 
 class Sabbertsone(environments.base_env.RenderableEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
@@ -202,17 +203,21 @@ class Sabbertsone(environments.base_env.RenderableEnv):
   def __init__(self, address: str, seed: int = None, extra_seed: int = None):
     super().__init__()
     self.gui = None
+    self.logger = Timer(__class__.__name__, id=extra_seed, verbosity=hs_config.verbosity)
+    self.extra_seed = extra_seed
     if seed is not None or extra_seed is not None:
-      warnings.warn("Setting the seed is not implemented")
+      self.logger.warning("Setting the seed is not implemented")
 
-    self.channel = grpc.insecure_channel(address)
-    self.stub = Stub(python_pb2_grpc.SabberStonePythonStub(self.channel))
-    self.game_ref = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
+    with self.logger("call_init"):
+      self.channel = grpc.insecure_channel(address)
+      self.stub = Stub(python_pb2_grpc.SabberStonePythonStub(self.channel))
+      self.game_ref = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
     self.turn_stats = []
     self._game_matrix = {}
+    self.logger.info(f"Env with id {extra_seed} started.")
 
   def cards_in_hand(self):
     raise len(self.game_ref.player1.hand_zone)
@@ -273,14 +278,20 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     action_id = int(action_id)
     stepping_player = self.game_ref.CurrentPlayer.id
 
+    self.logger.info(self)
+
     try:
-      actions = self.parse_options(self.game_ref)
+      with self.logger("parse_options"):
+        actions = self.parse_options(self.game_ref)
+
       selected_action = actions[action_id]
 
-      # self.update_stats()
+      with self.logger("update_stats"):
+        self.update_stats()
 
       assert self.game_ref.state != python_pb2.Game.COMPLETE
-      self.game_ref = self.stub.Process(selected_action)
+      with self.logger("call_process"):
+        self.game_ref = self.stub.Process(selected_action)
 
       if self.game_ref.turn > hs_config.Environment.max_turns:
         state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
@@ -293,12 +304,15 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     except self.GameOver:
       assert self.game_ref.state == python_pb2.Game.COMPLETE
+      self.logger.error(f"GameOver called from player {self.game_ref.CurrentPlayer.id}")
 
     return self.gather_transition(auto_reset=auto_reset)
 
   @shared.env_utils.episodic_log
   def reset(self):
-    self.game_ref = self.stub.Reset(self.game_ref.id)
+    self.logger.info(f"Reset called from player {self.game_ref.CurrentPlayer.id}")
+    with self.logger("call_reset"):
+      self.game_ref = self.stub.Reset(self.game_ref.id)
     self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0
@@ -315,8 +329,11 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     assert self.game_ref.state in (
       python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
 
-    reward = self.game_value()
-    state = build_state(self.game_ref)
+    with self.logger("get_value"):
+      reward = self.game_value()
+
+    with self.logger("build_state"):
+      state = build_state(self.game_ref)
 
     possible_actions = np.zeros(_ACTION_SPACE, dtype=np.float32)
     if not terminal:
@@ -331,18 +348,23 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       'game_statistics': {}
     }
     if terminal:
-      # # TODO Track it properly
-      # game_stats = GameStatistics(*zip(*self.turn_stats))
-      # game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
-      # game_stats['outcome'] = reward
-      # game_stats['life_adv'] = self.turn_stats[-1].life_adv
-      # counts = np.array([v[1] for v in self._game_matrix.values()])
-      # game_stats['opponent_var'] = counts.var()
-      # game_stats['opponent_mean'] = counts.mean()
-      # info['game_statistics'] = game_stats
+
       if auto_reset:
+        # TODO maybe make me better
         self.game_matrix(self.current_k, reward)
-        state, _, _, _info = self.reset()
+
+        game_stats = GameStatistics(*zip(*self.turn_stats))
+        game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
+        game_stats['outcome'] = reward
+        game_stats['life_adv'] = self.turn_stats[-1].life_adv
+        counts = np.array([v[1] for v in self._game_matrix.values()])
+        game_stats['opponent_var'] = counts.var()
+        game_stats['opponent_mean'] = counts.mean()
+
+        self.logger.log_stats(game_stats)
+
+        with self.logger("reset_env"):
+          state, _, _, _info = self.reset()
         info['observation'] = state
         info['possible_actions'] = _info['possible_actions']
       else:
@@ -375,9 +397,10 @@ class Sabbertsone(environments.base_env.RenderableEnv):
         counts = 1 / np.array(counts)
         p[idxs] = counts
       assert p.sum() > 0
-      p /= p.sum()  # TODO: check division by 0
+      p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
+    self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
     self.opponent = self.opponents[k]
 
     if self.opponent_obs_rmss is not None:
@@ -387,7 +410,8 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   def play_opponent_action(self):
     assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
-    observation, _, terminal, info = self.gather_transition(auto_reset=False)
+    with self.logger("opponent_step"):
+      observation, _, terminal, info = self.gather_transition(auto_reset=False)
 
     if self.opponent_obs_rms is not None:
       observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
@@ -414,7 +438,10 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     else:
       raise TimeoutError
 
+  def __str__(self):
+    return f"Player: {self.game_ref.CurrentPlayer.id} - status: {self.game_ref.state} - turns: {self.game_ref.turn}"
+
   def close(self):
     # Not sure about this.
     # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close(self.game_ref)
-    warnings.warn("not closing cleanly, restart the server")
+    self.logger.warning("Not closing cleanly, restart the server")

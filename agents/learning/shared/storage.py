@@ -77,6 +77,7 @@ class RolloutStorage(object):
     self.step = (self.step + 1) % self.num_steps
 
   def compute_returns(self, next_value: torch.FloatTensor):
+    # TODO review me @d3sm0
     assert next_value.dtype == torch.float32
     assert next_value.size(1) == 1
     self._value_predictions[-1] = next_value

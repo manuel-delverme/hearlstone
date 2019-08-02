@@ -2,6 +2,7 @@ import os
 import pickle
 import random
 import sys
+import csv
 import warnings
 from contextlib import contextmanager
 from functools import _lru_cache_wrapper
@@ -18,6 +19,69 @@ import shared.env_utils
 from agents.base_agent import Agent
 from environments import base_env
 from sb_env.SabberStone_python_client import python_pb2
+
+import time
+import logging
+import tempfile
+
+
+class Timer(logging.Logger):
+  def __init__(self, name:str, id:int=None, verbosity:bool=True):
+    assert isinstance(name, str)
+    super(Timer, self).__init__(logging.getLogger(name))
+    self.tasks = {}
+    self.current_task = None
+    fmt = '%(asctime)s -  %(processName)s - %(name)s - %(levelname)s - %(message)s'
+
+    if verbosity:
+      handler = logging.StreamHandler()
+      handler.setLevel(logging.INFO)
+      handler.setFormatter(logging.Formatter(fmt))
+      self.addHandler(handler)
+
+    save_path = f'/tmp/{name}.log'
+    handler = logging.FileHandler(save_path)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(fmt))
+    self.addHandler(handler)
+
+    self.stat_file = tempfile.mktemp()
+    self.info(f"Timer for {name} saves  in {save_path}")
+    self.info(f"Stats for {name} saves  in {self.stat_file}")
+    self.saved_stats = False
+
+  def __call__(self, task: str) -> object:
+    task = "#" + task.upper() + "#"
+    if not task in self.tasks.keys():
+      self.tasks[task] = (0, 0)  # cumulative, last
+    self.current_task = task
+    return self
+
+  def __enter__(self):
+    self.start = time.time()
+
+  def __exit__(self, type, value, traceback):
+    self.end = time.time()
+    delta = (self.end - self.start)
+    self.tasks[self.current_task] = (self.tasks[self.current_task][0] + delta, delta)
+    self.info(str(self))
+
+  def __str__(self):
+    cum, last = self.tasks[self.current_task]
+    return f"{self.current_task} - (total_time, delta) ({cum:.4f},{last:.4f})"
+
+  def log_stats(self,stats:dict):
+    with open(self.stat_file + '.csv', 'a+') as f:
+      writer = csv.DictWriter(f, fieldnames=stats.keys())
+      if self.saved_stats is False:
+        f.seek(0)
+        writer.writeheader()
+        self.saved_stats = True
+      writer.writerow(stats)
+
+
+
+
 
 
 def to_tuples(list_of_lists):
@@ -53,10 +117,10 @@ def disk_cache(f: Callable) -> _lru_cache_wrapper:
 
 
 def arena_fight(
-  environment: base_env.BaseEnv,
-  player_policy: Agent,
-  opponent_policy: Agent,
-  nr_games: int = 100,
+        environment: base_env.BaseEnv,
+        player_policy: Agent,
+        opponent_policy: Agent,
+        nr_games: int = 100,
 ):
   player_order = [player_policy, opponent_policy]
   random.shuffle(player_order)
@@ -113,7 +177,7 @@ def random_draft(card_class: CardClass, exclude: Tuple = tuple(), deck_length: i
     if card_obj.type == CardType.HERO:
       continue
     if card_obj.card_class and card_obj.card_class not in (
-      card_class, CardClass.NEUTRAL):
+            card_class, CardClass.NEUTRAL):
       continue
     if card_obj.cost > max_mana:
       continue
