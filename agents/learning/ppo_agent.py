@@ -25,6 +25,13 @@ from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 from shared.utils import Timer
 
+def get_grad_norm(model):
+  total_norm = 0
+  for p in model.parameters():
+    param_norm = p.grad.data.norm(2)
+    total_norm += param_norm.item() ** 2
+  total_norm = total_norm ** (1. / 2)
+  return total_norm
 
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
@@ -92,8 +99,12 @@ class PPOAgent(agents.base_agent.Agent):
     self.eval_every = hs_config.PPOAgent.eval_interval
     assert specs.check_positive_type(self.eval_every, int)
 
-    self.optimizer = torch.optim.Adam(
-      self.actor_critic.parameters(),
+    self.pi_optimizer = torch.optim.Adam(
+      self.actor_critic.actor.parameters(),
+      lr=hs_config.PPOAgent.adam_lr,
+    )
+    self.value_optimizer = torch.optim.Adam(
+      self.actor_critic.critic.parameters(),
       lr=hs_config.PPOAgent.adam_lr,
     )
 
@@ -175,13 +186,13 @@ class PPOAgent(agents.base_agent.Agent):
         rollouts.compute_returns(next_value)
 
       with self.timer("update"):
-        value_loss, action_loss, dist_entropy, policy_ratio, explained_variance = self.update(rollouts)
+        value_loss, action_loss, dist_entropy, policy_ratio, explained_variance,grad_pi, grad_value = self.update(rollouts)
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
       with self.timer("print_tb"):
         self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
-                         explained_variance)
+                         explained_variance, grad_pi=grad_pi, grad_value=grad_value)
 
       if self.model_dir and (ppo_update_num % self.save_every == 0):
         self.save_model(envs, total_num_steps)
@@ -225,10 +236,13 @@ class PPOAgent(agents.base_agent.Agent):
     self.actor_critic, ob_rms = torch.load(checkpoint_file)
     shared.utils.get_vec_normalize(envs).ob_rms = ob_rms
     self.actor_critic.to(hs_config.device)
-    self.optimizer = torch.optim.Adam(
+    self.pi_optimizer = torch.optim.Adam(
       self.actor_critic.parameters(),
       lr=hs_config.PPOAgent.adam_lr,
     )
+    self.value_optimizer = torch.optim.Adam(
+      self.actor_critic.parameters(),
+      lr=hs_config.PPOAgent.adam_lr,)
 
   def setup_envs(self, game_manager: game_utils.GameManager):
 
@@ -350,7 +364,7 @@ class PPOAgent(agents.base_agent.Agent):
         action[0] = act
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio,
-    explained_variance):
+    explained_variance, grad_value, grad_pi):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -360,6 +374,8 @@ class PPOAgent(agents.base_agent.Agent):
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
       self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards), time_step)
 
+    self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
+    self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
     self.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
     self.tensorboard.add_scalar('train/value_loss', value_loss, time_step)
     self.tensorboard.add_scalar('train/action_loss', action_loss, time_step)
@@ -451,6 +467,8 @@ class PPOAgent(agents.base_agent.Agent):
     value_loss_epoch = 0
     action_loss_epoch = 0
     dist_entropy_epoch = 0
+    grad_norm_pi_epoch = 0
+    grad_norm_value_epoch = 0
     values_pred = []
     values_gt = []
     ratio_epoch = 0
@@ -480,11 +498,23 @@ class PPOAgent(agents.base_agent.Agent):
         else:
           value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-        self.optimizer.zero_grad()
-        (value_loss * self.value_loss_coeff + action_loss - dist_entropy * self.entropy_coeff).backward()
-        torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-        self.optimizer.step()
+        self.pi_optimizer.zero_grad()
+        (action_loss - dist_entropy * self.entropy_coeff).backward()
+        grad_norm_pi = get_grad_norm(self.actor_critic.actor)
+        self.pi_optimizer.step()
 
+        # TODO check me
+        torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+
+        self.value_optimizer.zero_grad()
+        (value_loss * self.value_loss_coeff).backward()
+
+        grad_norm_critic = get_grad_norm(self.actor_critic.critic)
+        torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
+
+        self.value_optimizer.step()
+        grad_norm_pi_epoch += grad_norm_pi
+        grad_norm_value_epoch += grad_norm_critic
         value_loss_epoch += value_loss.item()
         action_loss_epoch += action_loss.item()
         dist_entropy_epoch += dist_entropy.item()
@@ -507,7 +537,7 @@ class PPOAgent(agents.base_agent.Agent):
     ratio_epoch /= num_updates
     explained_variance_epoch /= num_updates
 
-    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch
+    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch, grad_norm_pi_epoch, grad_norm_value_epoch
 
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
     self.update_experiment_logging()
@@ -542,7 +572,8 @@ class PPOAgent(agents.base_agent.Agent):
 
         # self.envs.vectorized_env.vectorized_env.envs[0].print_nash()
         # self.actor_critic.reset_actor()
-        self.optimizer.state = collections.defaultdict(dict)  # Reset state
+        self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
+        self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)
 
     except KeyboardInterrupt:

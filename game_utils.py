@@ -58,7 +58,8 @@ class GameManager(object):
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions,
                                                   log_dir=tempfile.mktemp())
 
-    del opponent.optimizer
+    del opponent.pi_optimizer
+    del opponent.value_optimizer
     opponent_network.eval()
     for network in (opponent_network.actor, opponent_network.critic, opponent_network.actor_logits):
       for param in network.parameters():

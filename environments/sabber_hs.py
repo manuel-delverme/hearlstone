@@ -220,7 +220,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.logger.info(f"Env with id {env_number} started.")
 
   def cards_in_hand(self):
-    raise len(self.game_ref.player1.hand_zone)
+    raise len(self.game_ref.CurrentPlayer.hand_zone)
 
   def game_value(self):
     player = self.game_ref.CurrentPlayer
@@ -230,8 +230,6 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       reward = -1
     else:
       reward = 0
-    if self.game_ref.state == python_pb2.Game.COMPLETE:
-      reward = reward if player.id == C.AGENT_ID else -reward
     return np.array(reward, dtype=np.float32)
 
   def parse_options(self, game, return_options=False):
@@ -315,7 +313,9 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.logger.info(f"Reset called from player {self.game_ref.CurrentPlayer.id}")
     with self.logger("call_reset"):
       self.game_ref = self.stub.Reset(self.game_ref.id)
-    self._sample_opponent()
+    # TODO make me formal
+    if np.random.uniform() < 0.2 or self.opponent is None:
+      self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0
     # self.info = None
@@ -352,6 +352,9 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     if terminal:
 
       if auto_reset:
+        if self.game_ref.state == python_pb2.Game.COMPLETE:
+          if self.game_ref.CurrentPlayer.id != C.AGENT_ID:
+            reward = - reward
         # TODO maybe make me better
         self.game_matrix(self.current_k, reward)
 
@@ -403,8 +406,8 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
-    # self.opponent = self.opponents[k]
-    self.opponent = self.opponents[-1]
+    self.opponent = self.opponents[k]
+    # self.opponent = self.opponents[-1]
 
     if self.opponent_obs_rmss is not None:
       self.opponent_obs_rmss = self.opponent_obs_rmss[k]
