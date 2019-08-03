@@ -25,6 +25,7 @@ from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 from shared.utils import Timer
 
+
 def get_grad_norm(model):
   total_norm = 0
   for p in model.parameters():
@@ -153,7 +154,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     with self.timer("load_ckpt"):
       if checkpoint_file:
-        self.timer.info(f"[TRAIN] Loading ckpt {checkpoint_file}")
+        print(f"[Train] Loading ckpt {checkpoint_file}")
         self.load_checkpoint(checkpoint_file, envs)
 
         assert game_manager.use_heuristic_opponent is False
@@ -540,12 +541,9 @@ class PPOAgent(agents.base_agent.Agent):
     return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch, grad_norm_pi_epoch, grad_norm_value_epoch
 
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
-    self.update_experiment_logging()
-
-    # if checkpoint_file is None:
-    #   checkpoint_file = self.get_latest_checkpoint_file()
-
     # https://openai.com/blog/openai-five/
+
+    self.update_experiment_logging()
     updates_so_far = 0
     updates_schedule = [1, ]
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)

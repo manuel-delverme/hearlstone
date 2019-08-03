@@ -1,5 +1,7 @@
 import argparse
+import glob
 import os
+import re
 
 import torch
 
@@ -70,8 +72,14 @@ def train(args):
     game_manager.add_learning_opponent(args.p1)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
-    # pass
-    player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
+    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'*{hs_config.comment}*')
+    # m = re.search('(?<=abc)def', 'abcdef')
+    # m.group(0)
+    latest_checkpoint = sorted(checkpoints, key=lambda x: int(
+      # x.replace(":", "-").split("-")[-1][:-3]
+      re.search(r"(?<=steps=)\w*(?=:)", x).group(0)
+    ))[-1]
+    player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 
 if __name__ == "__main__":

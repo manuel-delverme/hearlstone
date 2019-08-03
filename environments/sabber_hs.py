@@ -187,7 +187,9 @@ def random_subset(opponents: list, k: int) -> tuple:
         result[s] = (opponent, idx)
   return result[0]
 
-from shared.utils import Timer # TODO: check this import
+
+from shared.utils import Timer  # TODO: check this import
+
 
 class Sabbertsone(environments.base_env.RenderableEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
@@ -359,7 +361,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
         self.game_matrix(self.current_k, reward)
 
         game_stats = GameStatistics(*zip(*self.turn_stats))
-        game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
+        game_stats = {'avg_' + k: v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
         game_stats['outcome'] = reward
         game_stats['life_adv'] = self.turn_stats[-1].life_adv
         counts = np.array([v[1] for v in self._game_matrix.values()])
