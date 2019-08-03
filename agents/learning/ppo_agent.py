@@ -372,7 +372,7 @@ class PPOAgent(agents.base_agent.Agent):
         fps = float('nan')
 
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
-      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards), time_step)
+      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards)/2 + 0.5, time_step)
 
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
     self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
@@ -558,12 +558,12 @@ class PPOAgent(agents.base_agent.Agent):
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
-        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
+        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio/2 + 0.5, self_play_iter)
         if win_ratio >= old_win_ratio:
           print('updating checkpoint')
           checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
+          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio/2 + 0.5, self_play_iter)
           old_win_ratio = win_ratio
           assert not game_manager.use_heuristic_opponent or self_play_iter == 0
 
