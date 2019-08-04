@@ -46,17 +46,13 @@ class DummyVecEnv(VecEnv):
         actions, self.num_envs)
       self.actions = [actions]
 
-    for e in range(self.num_envs):
-      action = self.actions[e]
-      self.envs[e].step_async(action)
-
   def step_wait(self):
     for e in range(self.num_envs):
       action = self.actions[e]
       # if isinstance(self.envs[e].action_space, spaces.Discrete):
       #    action = int(action)
 
-      obs, self.buf_rews[e], self.buf_dones[e], self.buf_infos[e] = self.envs[e].step_wait()
+      obs, self.buf_rews[e], self.buf_dones[e], self.buf_infos[e] = self.envs[e].step(action)
       if self.buf_dones[e]:
         obs, _, _, new_infos = self.envs[e].reset()
         self.buf_infos[e]['possible_actions'] = new_infos['possible_actions']

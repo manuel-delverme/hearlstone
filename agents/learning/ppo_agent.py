@@ -34,7 +34,6 @@ def get_grad_norm(model):
   total_norm = total_norm ** (1. / 2)
   return total_norm
 
-
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     with torch.no_grad():
@@ -157,7 +156,8 @@ class PPOAgent(agents.base_agent.Agent):
       if checkpoint_file:
         print(f"[Train] Loading ckpt {checkpoint_file}")
         self.load_checkpoint(checkpoint_file, envs)
-        assert game_manager.use_heuristic_opponent is False or num_updates == 1
+
+        assert game_manager.use_heuristic_opponent is False
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n + self.num_experts == self.num_actions
@@ -330,9 +330,20 @@ class PPOAgent(agents.base_agent.Agent):
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
       self.maybe_render(action, envs)
+      # could be parallelized
+      # for idx, a in enumerate(action):
+      #   if a >= envs.action_space.n:
+      #     expert_number = action[idx] - envs.action_space.n
+      #     with torch.no_grad():
+      #       _, expert_action, _ = self.experts[expert_number].act(
+      #         obs[idx:idx + 1, :],
+      #         possible_actions[idx: idx + 1, :envs.action_space.n], deterministic=deterministic)
+      #       action[idx, 0] = expert_action
+
       with self.timer("agent_step"):
-        envs.step_async(action)
-        obs, reward, done, infos = envs.step_wait()
+        obs, reward, done, infos = envs.step(action)
+      assert not all(done) or all(r in (-1., -.1) for r in infos['reward'])
+      # assert not done and infos['reward'][0] == 0
 
       possible_actions = self.update_possible_actions_for_expert(infos)
 
@@ -535,9 +546,8 @@ class PPOAgent(agents.base_agent.Agent):
 
     self.update_experiment_logging()
     updates_so_far = 0
-    updates_schedule = [1, ]  # TODO: 1 step random is an hack to create a checkpoint, maybe remove?
+    updates_schedule = [1, ]
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
-
     old_win_ratio = -1
     pbar = tqdm.tqdm(total=sum(updates_schedule))
     try:
