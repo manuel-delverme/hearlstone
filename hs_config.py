@@ -1,6 +1,7 @@
 import functools
 import sys
 from typing import Callable, Type
+import os
 
 import torch
 
@@ -30,9 +31,10 @@ class Environment:
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
   no_subprocess = ENV_DEBUG or 0
+  address = "0.0.0.0:50052"
 
   max_opponents = 5
-  newest_opponent_prob = 0.5
+  newest_opponent_prob = 0.2 # probability of sampling a new opponent at each game
   render_after_step = visualize_everything or 0
 
   old_opponent_prob = 0.2
@@ -62,7 +64,7 @@ class Environment:
     # return sb_env.SabberStone_python_client.simulator.Sabbertsone
     import environments.sabber_hs
     out = functools.partial(
-      environments.sabber_hs.Sabbertsone,
+      environments.sabber_hs.Sabberstone,
       address
     )
     return out
@@ -89,7 +91,9 @@ class PPOAgent:
   hidden_size = 256  # 64
   eval_interval = 40
   save_interval = 100
-  save_dir = "ppo_save_dir/"
+  save_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone","logs/model")
+  log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
+  debug_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone",  "logs/debug")
   adam_lr = 7e-4
 
   # Algorithm use_linear_clip_decay = False

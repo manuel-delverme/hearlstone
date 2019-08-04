@@ -6,6 +6,7 @@ import random
 import sys
 import tempfile
 import time
+import datetime
 import warnings
 from contextlib import contextmanager
 from functools import _lru_cache_wrapper
@@ -26,27 +27,28 @@ from sb_env.SabberStone_python_client import python_pb2
 
 
 class Timer(logging.Logger):
-  def __init__(self, name: str, id: int = None, verbosity: bool = True):
+  def __init__(self, name: str, id: int = None, verbosity: bool = True, log_dir: str = hs_config.PPOAgent.debug_dir):
     assert isinstance(name, str)
     super(Timer, self).__init__(logging.getLogger(name))
     self.tasks = {}
     self.current_task = None
+    self.log_dir = log_dir
     fmt = '%(asctime)s -  %(processName)s - %(name)s - %(levelname)s - %(message)s'
+    fname = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
 
     if verbosity:
       handler = logging.StreamHandler()
       handler.setLevel(logging.INFO)
       handler.setFormatter(logging.Formatter(fmt))
       self.addHandler(handler)
-
-    save_path = f'/tmp/{name}.log'
-    handler = logging.FileHandler(save_path)
+    log_file = os.path.join(log_dir, fname + '.log')
+    handler = logging.FileHandler(log_file)
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter(fmt))
     self.addHandler(handler)
 
-    self.stat_file = tempfile.mktemp()
-    self.info(f"Timer for {name} saves  in {save_path}")
+    self.stat_file = os.path.join(log_dir, fname + '.csv')
+    self.info(f"Timer for {name} saves  in {log_file}")
     self.info(f"Stats for {name} saves  in {self.stat_file}")
     self.saved_stats = False
 
@@ -124,10 +126,10 @@ def disk_cache(f: Callable) -> _lru_cache_wrapper:
 
 
 def arena_fight(
-  environment: base_env.BaseEnv,
-  player_policy: Agent,
-  opponent_policy: Agent,
-  nr_games: int = 100,
+        environment: base_env.BaseEnv,
+        player_policy: Agent,
+        opponent_policy: Agent,
+        nr_games: int = 100,
 ):
   player_order = [player_policy, opponent_policy]
   random.shuffle(player_order)
@@ -184,7 +186,7 @@ def random_draft(card_class: CardClass, exclude: Tuple = tuple(), deck_length: i
     if card_obj.type == CardType.HERO:
       continue
     if card_obj.card_class and card_obj.card_class not in (
-      card_class, CardClass.NEUTRAL):
+            card_class, CardClass.NEUTRAL):
       continue
     if card_obj.cost > max_mana:
       continue
