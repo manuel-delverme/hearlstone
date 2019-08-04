@@ -28,7 +28,7 @@ verbosity = 1 if DEBUG else 0
 class Environment:
   ENV_DEBUG = DEBUG
   ENV_DEBUG_HEURISTIC = False
-  ENV_DEBUG_METRICS = False
+  ENV_DEBUG_METRICS = True
   no_subprocess = ENV_DEBUG or 0
 
   max_opponents = 5

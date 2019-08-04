@@ -43,8 +43,11 @@ def minion_value(m):
   return m.atk / 2 + m.health / 2.
 
 
-from environments.sabber_hs import parse_hero, parse_card, parse_minion
+from environments.sabber_hs import parse_card, parse_minion
 
+
+def parse_hero(hero):
+  return hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted
 
 class PassingAgent(agents.base_agent.Agent):
   def __init__(self):
@@ -55,6 +58,8 @@ class PassingAgent(agents.base_agent.Agent):
 
 
 from shared.utils import Timer
+
+
 class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self, level: int = hs_config.Environment.level):
     self.logger = Timer(__name__, verbosity=hs_config.verbosity)
@@ -215,7 +220,7 @@ class SabberAgent(HeuristicAgent):
       actions = sorted(actions, key=lambda x: values[x], reverse=True)
       if hs_config.Environment.ENV_DEBUG_HEURISTIC:
         for idx in actions:
-          self.logger.debug(desk[idx]) # value[idx]
+          self.logger.debug(desk[idx])  # value[idx]
 
       if values[actions[0]] < 0:
         if hs_config.Environment.ENV_DEBUG:
