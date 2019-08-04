@@ -16,29 +16,36 @@ import shared.utils
 from shared.constants import PlayerTaskType, BoardPosition, HandPosition, GameStatistics, _ACTION_SPACE, _STATE_SPACE
 
 
-class _GameRef:
-  def __init__(self, game_ref):
-    self.game_ref = game_ref
+class _GameSnapshot:
+  def __init__(self, game_ref, owner=None):
+    self.game_snapshot = game_ref
+    self._possible_options = None
+    if owner is None:
+      owner = self.game_snapshot.CurrentPlayer.id
+    self.snapshot_owner = owner
 
   @property
   def id(self):
-    return self.game_ref.id
+    return self.game_snapshot.id
 
   @property
   def turn(self):
-    return self.game_ref.turn
+    return self.game_snapshot.turn
 
   @property
   def state(self):
-    return self.game_ref.state
+    return self.game_snapshot.state
 
   @property
   def CurrentPlayer(self):
-    return self.game_ref.CurrentPlayer
+    return self.game_snapshot.CurrentPlayer
 
   @property
   def CurrentOpponent(self):
-    return self.game_ref.CurrentOpponent
+    return self.game_snapshot.CurrentOpponent
+
+  def id_to_action(self, action_id):
+    return self._possible_options[action_id]
 
 
 class Stub:
@@ -46,13 +53,13 @@ class Stub:
     self.stub = stub
 
   def NewGame(self, deck1, deck2):
-    return _GameRef(self.stub.NewGame(python_pb2.DeckStrings(deck1=deck1, deck2=deck2)))
+    return _GameSnapshot(self.stub.NewGame(python_pb2.DeckStrings(deck1=deck1, deck2=deck2)))
 
   def Reset(self, game_id):
-    return _GameRef(self.stub.Reset(game_id))
+    return _GameSnapshot(self.stub.Reset(game_id))
 
-  def Process(self, selected_action):
-    return _GameRef(self.stub.Process(selected_action))
+  def Process(self, selected_action, caller):
+    return _GameSnapshot(self.stub.Process(selected_action), caller)
 
   def GetOptions(self, game_id):
     return self.stub.GetOptions(game_id).list
@@ -195,7 +202,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 
-  action_to_id = enumerate_actions()
+  action_id_to_option = enumerate_actions()
 
   hand_encoding_size = 4  # atk, health, exhaust
   hero_encoding_size = 4  # atk, health, exhaust, hero_power
@@ -204,6 +211,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   def __init__(self, address: str, seed: int = None, env_number: int = None):
     super().__init__()
+    self.pending_step = False
     self.gui = None
     self.logger = Timer(__class__.__name__, id=env_number, verbosity=hs_config.verbosity)
     self.extra_seed = env_number
@@ -213,7 +221,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     with self.logger("call_init"):
       self.channel = grpc.insecure_channel(address)
       self.stub = Stub(python_pb2_grpc.SabberStonePythonStub(self.channel))
-      self.game_ref = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
+      self.game_snapshot = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
 
     self.action_space = gym.spaces.Discrete(n=_ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(_STATE_SPACE,), dtype=np.int)
@@ -222,16 +230,16 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.logger.info(f"Env with id {env_number} started.")
 
   def cards_in_hand(self):
-    raise len(self.game_ref.CurrentPlayer.hand_zone)
+    raise len(self.game_snapshot.CurrentPlayer.hand_zone)
 
   def game_value(self):
-    player = self.game_ref.CurrentPlayer
+    player = self.game_snapshot.CurrentPlayer
     if player.play_state == python_pb2.Controller.WON:  # maybe PlayState
-      reward = 1
+      reward = hs_config.Environment.VICTORY_REWARD
     elif player.play_state in (python_pb2.Controller.LOST, python_pb2.Controller.TIED):
-      reward = -1
+      reward = hs_config.Environment.DEFEAT_REWARD
     else:
-      reward = 0
+      reward = 0.
     return np.array(reward, dtype=np.float32)
 
   def parse_options(self, game, return_options=False):
@@ -253,7 +261,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
                   or source == BoardPosition.Hero)
 
           action_hash = (option_type, source, target)
-          action_id = self.action_to_id[action_hash]
+          action_id = self.action_id_to_option[action_hash]
 
         assert action_id not in possible_options
         possible_options[action_id] = option
@@ -268,94 +276,98 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       return game._possible_options
 
   def update_stats(self):
-    if self.game_ref.CurrentPlayer.id == 1:
-      new_stats = game_stats(self.game_ref)
+    if self.game_snapshot.CurrentPlayer.id == 1:
+      new_stats = game_stats(self.game_snapshot)
       self.turn_stats.append(new_stats)
 
-  @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray, auto_reset: bool = True):
+    raise DeprecationWarning
+
+    self.step_async(action_id)
+    return self.step_wait(auto_reset=auto_reset)
+
+  @shared.env_utils.episodic_log
+  def step_async(self, action_id: np.ndarray):
+    self.pending_step = True
     assert hasattr(action_id, '__int__')
-    action_id = int(action_id)
-    stepping_player = self.game_ref.CurrentPlayer.id
 
     self.logger.info(self)
+    selected_action = self.game_snapshot.id_to_action(int(action_id))
+
+    with self.logger("update_stats"):
+      self.update_stats()
+
+    assert self.game_snapshot.state != python_pb2.Game.COMPLETE
+    with self.logger("call_process"):
+      caller = self.game_snapshot.CurrentPlayer
+      self.game_snapshot = self.stub.Process(selected_action, caller)
+      assert (selected_action.type != selected_action.END_TURN) or caller != self.game_snapshot.CurrentPlayer
+
+    if self.should_tie():
+      return
 
     try:
-      with self.logger("parse_options"):
-        actions = self.parse_options(self.game_ref)
-
-      selected_action = actions[action_id]
-
-      with self.logger("update_stats"):
-        self.update_stats()
-
-      assert self.game_ref.state != python_pb2.Game.COMPLETE
-      with self.logger("call_process"):
-        self.game_ref = self.stub.Process(selected_action)
-
-      if self.game_ref.turn > hs_config.Environment.max_turns:
-        state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
-        done = True
-        reward = 0.
-        return state, reward, done, info
-
-      if self.game_ref.CurrentPlayer.id == C.OPPONENT_ID and stepping_player == C.AGENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+      if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID and self.game_snapshot.snapshot_owner == C.AGENT_ID:
         self.play_opponent_turn()
-
     except self.GameOver:
-      assert self.game_ref.state == python_pb2.Game.COMPLETE
-
+      assert self.game_snapshot.state == python_pb2.Game.COMPLETE
       if hs_config.Environment.ENV_DEBUG_METRICS:
-        self.logger.error(f"GameOver called from player {self.game_ref.CurrentPlayer.id}")
+        self.logger.error(f"GameOver called from player {self.game_snapshot.CurrentPlayer.id}")
 
-    return self.gather_transition(auto_reset=auto_reset)
+  @shared.env_utils.episodic_log
+  def step_wait(self, auto_reset: bool = True):
+    state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
+    if self.should_tie():
+      done = True
+      reward = hs_config.Environment.DEFEAT_REWARD
+
+    self.pending_step = False
+    return state, reward, done, info
 
   @shared.env_utils.episodic_log
   def reset(self):
-    self.logger.info(f"Reset called from player {self.game_ref.CurrentPlayer.id}")
+    self.logger.info(f"Reset called from player {self.game_snapshot.CurrentPlayer.id}")
     with self.logger("call_reset"):
-      self.game_ref = self.stub.Reset(self.game_ref.id)
+      self.game_snapshot = self.stub.Reset(self.game_snapshot.id)
     # TODO make me formal
     if np.random.uniform() < 0.2 or self.opponent is None:
       self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0
     # self.info = None
-    if self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:
+    if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
       self.play_opponent_turn()
     return self.gather_transition(auto_reset=False)
 
   @shared.env_utils.episodic_log
-  def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    assert shared.utils.can_autoreset(auto_reset, self.game_ref) or self.game_ref.turn > hs_config.Environment.max_turns
+  def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
 
-    terminal = self.game_ref.state == python_pb2.Game.COMPLETE
-    assert self.game_ref.state in (
+    terminal = self.game_snapshot.state == python_pb2.Game.COMPLETE
+    assert self.game_snapshot.state in (
       python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
 
     with self.logger("get_value"):
       reward = self.game_value()
 
     with self.logger("build_state"):
-      state = build_state(self.game_ref)
+      state = build_state(self.game_snapshot)
 
     possible_actions = np.zeros(_ACTION_SPACE, dtype=np.float32)
     if not terminal:
-      actions = self.parse_options(self.game_ref)
+      actions = self.parse_options(self.game_snapshot)
       possible_actions[list(actions.keys())] = 1
 
     info = {
       'observation': state,
-      'reward': reward,
+      # 'reward': reward,
       'possible_actions': possible_actions,
       'action_history': [],
       'game_statistics': {}
     }
     if terminal:
-
       if auto_reset:
-        if self.game_ref.state == python_pb2.Game.COMPLETE:
-          if self.game_ref.CurrentPlayer.id != C.AGENT_ID:
+        if self.game_snapshot.state == python_pb2.Game.COMPLETE:
+          if self.game_snapshot.CurrentPlayer.id != C.AGENT_ID:
             reward = - reward
         # TODO maybe make me better
         self.game_matrix(self.current_k, reward)
@@ -378,6 +390,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
         raise self.GameOver
 
     assert info['possible_actions'].max() == 1 or terminal
+    self.last_info = info  # this is for renderable env, should be there, ma fuck you
     return state, reward, terminal, info
 
   def game_matrix(self, idx, reward):
@@ -417,7 +430,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.current_k = k
 
   def play_opponent_action(self):
-    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
+    assert self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID
     with self.logger("opponent_step"):
       observation, _, terminal, info = self.gather_transition(auto_reset=False)
 
@@ -429,17 +442,18 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     info['possible_actions'] = torch.FloatTensor(info['possible_actions']).unsqueeze(0)  # unsqueeze 0.2%
     info['original_info'] = {
-      "game_ref": self.game_ref,
-      "game_options": self.parse_options(self.game_ref),
+      "game_ref": self.game_snapshot,
+      "game_options": self.parse_options(self.game_snapshot),
     }
 
     action = self.opponent.choose(observation=observation, info=info)
-    assert self.game_ref.CurrentPlayer.id == C.OPPONENT_ID
-    return self.step(action, auto_reset=False)
+    assert self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID
+    self.step_async(action)
+    return self.step_wait(auto_reset=False)
 
   def play_opponent_turn(self):
     for _ in range(1000):
-      if not self.game_ref.CurrentPlayer.id == C.OPPONENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+      if not self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
         break
 
       self.play_opponent_action()
@@ -447,9 +461,12 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       raise TimeoutError
 
   def __str__(self):
-    return f"Player: {self.game_ref.CurrentPlayer.id} - status: {self.game_ref.state} - turns: {self.game_ref.turn}"
+    return f"Player: {self.game_snapshot.CurrentPlayer.id} - status: {self.game_snapshot.state} - turns: {self.game_snapshot.turn}"
 
   def close(self):
     # Not sure about this.
     # python_pb2_grpc.ServerHandleStub(channel=Sabbertsone.channel).Close(self.game_ref)
     self.logger.warning("Not closing cleanly, restart the server")
+
+  def should_tie(self):
+    return self.game_snapshot.turn > hs_config.Environment.max_turns

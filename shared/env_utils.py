@@ -16,7 +16,6 @@ from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
 from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
-from shared import env_utils
 
 
 class DummyVecEnv(_DummyVecEnv):
@@ -52,6 +51,10 @@ class VecNormalize(_VecNormalize):
   def eval(self):
     self.training = False
 
+  def step(self, actions):
+    s, r, t, i = super(VecNormalize, self).step(actions)
+    assert not all(t) or all(r in (-1., -.1) for r in r)
+
   def reset(self):
     """
     Reset all environments
@@ -62,6 +65,9 @@ class VecNormalize(_VecNormalize):
       info['game_statistics'] = (oi, ri)
     filtered_obs = self._obfilt(obs)
     return filtered_obs, rewards, dones, infos
+
+  # def step_async(self, actions):
+  # def step_wait(self):
 
 
 class PyTorchCompatibilityWrapper(VecEnvWrapper):

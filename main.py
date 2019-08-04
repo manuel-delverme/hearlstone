@@ -73,12 +73,13 @@ def train(args):
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
     checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'*{hs_config.comment}*')
-    # m = re.search('(?<=abc)def', 'abcdef')
-    # m.group(0)
-    latest_checkpoint = sorted(checkpoints, key=lambda x: int(
-      # x.replace(":", "-").split("-")[-1][:-3]
-      re.search(r"(?<=steps=)\w*(?=:)", x).group(0)
-    ))[-1]
+    if checkpoints:
+      latest_checkpoint = sorted(checkpoints, key=lambda x: int(
+        # x.replace(":", "-").split("-")[-1][:-3]
+        re.search(r"(?<=steps=)\w*(?=:)", x).group(0)
+      ))[-1]
+    else:
+      latest_checkpoint = None
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 

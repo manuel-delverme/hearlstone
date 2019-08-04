@@ -6,7 +6,7 @@ import torch
 
 Info = NewType('Info', Dict[Text, Union[np.ndarray, Text]])
 
-INFO_KEYS = {'action_history', 'observation', 'possible_actions', 'reward'}
+INFO_KEYS = {'action_history', 'observation', 'possible_actions'}  # , 'reward'}
 # OPTIONAL_INFO_KEYS = {'episode', 'game_statistics', 'end_episode_info'}
 OPTIONAL_INFO_KEYS = {'game_statistics'}  # , 'episode'}
 
@@ -18,11 +18,11 @@ def check_info_spec(info: Info):
   assert isinstance(info['action_history'], list)
   assert isinstance(info['observation'], np.ndarray)
   assert isinstance(info['possible_actions'], np.ndarray)
-  assert isinstance(info['reward'], np.ndarray)
+  # assert isinstance(info['reward'], np.ndarray)
 
   assert info['observation'].dtype in (np.float, np.int64, np.int32)
   assert info['possible_actions'].dtype in (np.float32,)
-  assert info['reward'].dtype in (np.float32,)
+  # assert info['reward'].dtype in (np.float32,)
 
   assert 'end_episode_info' not in info or tuple(info['end_episode_info'].keys()) == ('reward',)
   return True

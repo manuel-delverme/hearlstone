@@ -91,7 +91,7 @@ class BaseEnv(gym.Env, ABC):
     self.opponent_obs_rmss = opponent_obs_rmss
 
   @abstractmethod
-  def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
+  def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
     raise NotImplementedError
 
 
@@ -106,11 +106,6 @@ class RenderableEnv(BaseEnv):
     self.last_info = None
     self.values = collections.deque(maxlen=100)
     self.health = collections.deque(maxlen=100)
-
-  def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    s, r, t, i = self._gather_transition(auto_reset)
-    self.last_info = i
-    return s, r, t, i
 
   def render(self, mode='human', choice=None, action_distribution=None, value=None):
     if self.gui is None:

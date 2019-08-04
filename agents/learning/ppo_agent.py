@@ -34,6 +34,7 @@ def get_grad_norm(model):
   total_norm = total_norm ** (1. / 2)
   return total_norm
 
+
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     with torch.no_grad():
@@ -156,8 +157,7 @@ class PPOAgent(agents.base_agent.Agent):
       if checkpoint_file:
         print(f"[Train] Loading ckpt {checkpoint_file}")
         self.load_checkpoint(checkpoint_file, envs)
-
-        assert game_manager.use_heuristic_opponent is False
+        assert game_manager.use_heuristic_opponent is False or num_updates == 1
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n + self.num_experts == self.num_actions
@@ -187,7 +187,8 @@ class PPOAgent(agents.base_agent.Agent):
         rollouts.compute_returns(next_value)
 
       with self.timer("update"):
-        value_loss, action_loss, dist_entropy, policy_ratio, explained_variance,grad_pi, grad_value = self.update(rollouts)
+        value_loss, action_loss, dist_entropy, policy_ratio, explained_variance, grad_pi, grad_value = self.update(
+          rollouts)
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
@@ -243,7 +244,7 @@ class PPOAgent(agents.base_agent.Agent):
     )
     self.value_optimizer = torch.optim.Adam(
       self.actor_critic.parameters(),
-      lr=hs_config.PPOAgent.adam_lr,)
+      lr=hs_config.PPOAgent.adam_lr, )
 
   def setup_envs(self, game_manager: game_utils.GameManager):
 
@@ -329,20 +330,9 @@ class PPOAgent(agents.base_agent.Agent):
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
       self.maybe_render(action, envs)
-      # could be parallelized
-      # for idx, a in enumerate(action):
-      #   if a >= envs.action_space.n:
-      #     expert_number = action[idx] - envs.action_space.n
-      #     with torch.no_grad():
-      #       _, expert_action, _ = self.experts[expert_number].act(
-      #         obs[idx:idx + 1, :],
-      #         possible_actions[idx: idx + 1, :envs.action_space.n], deterministic=deterministic)
-      #       action[idx, 0] = expert_action
-
       with self.timer("agent_step"):
-        obs, reward, done, infos = envs.step(action)
-      assert not all(done) or all(r in (-1., -.1) for r in infos['reward'])
-      # assert not done and infos['reward'][0] == 0
+        envs.step_async(action)
+        obs, reward, done, infos = envs.step_wait()
 
       possible_actions = self.update_possible_actions_for_expert(infos)
 
@@ -373,7 +363,7 @@ class PPOAgent(agents.base_agent.Agent):
         fps = float('nan')
 
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
-      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards)/2 + 0.5, time_step)
+      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
 
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
     self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
@@ -545,8 +535,9 @@ class PPOAgent(agents.base_agent.Agent):
 
     self.update_experiment_logging()
     updates_so_far = 0
-    updates_schedule = [1, ]
+    updates_schedule = [1, ]  # TODO: 1 step random is an hack to create a checkpoint, maybe remove?
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
+
     old_win_ratio = -1
     pbar = tqdm.tqdm(total=sum(updates_schedule))
     try:
@@ -556,12 +547,12 @@ class PPOAgent(agents.base_agent.Agent):
           game_manager, checkpoint_file=checkpoint_file, num_updates=num_updates, updates_offset=updates_so_far)
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
-        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio/2 + 0.5, self_play_iter)
+        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
         if win_ratio >= old_win_ratio:
           print('updating checkpoint')
           checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio/2 + 0.5, self_play_iter)
+          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
           old_win_ratio = win_ratio
           assert not game_manager.use_heuristic_opponent or self_play_iter == 0
 

@@ -26,10 +26,10 @@ verbosity = 1 if DEBUG else 0
 
 
 class Environment:
-  ENV_DEBUG = DEBUG
+  ENV_DEBUG = DEBUG and False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  no_subprocess = ENV_DEBUG or 0
+  no_subprocess = ENV_DEBUG or False
 
   max_opponents = 5
   newest_opponent_prob = 0.5
@@ -49,6 +49,8 @@ class Environment:
   always_first_player = True
 
   level = -1
+  VICTORY_REWARD = 1.
+  DEFEAT_REWARD = -1.
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
@@ -92,15 +94,14 @@ class PPOAgent:
   save_dir = "ppo_save_dir/"
   adam_lr = 7e-4
 
-  # Algorithm use_linear_clip_decay = False
   use_linear_lr_decay = False
 
-  num_processes = 2 if DEBUG else 6  # number of CPU processes
+  num_processes = 1 if DEBUG else 12  # number of CPU processes
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
   num_env_steps = int(3e4)
-  gamma = 0.99  # discount for rewards
+  gamma = 0.95  # discount for rewards
   tau = 0.95  # gae parameter
 
   entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
