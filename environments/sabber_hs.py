@@ -292,16 +292,19 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     assert hasattr(action_id, '__int__')
 
     self.logger.info(self)
-    selected_action = self.game_snapshot.id_to_action(int(action_id))
 
-    with self.logger("update_stats"):
-      self.update_stats()
+    try:
+      with self.logger("parse_options"):
+        actions = self.parse_options(self.game_ref)
 
-    assert self.game_snapshot.state != python_pb2.Game.COMPLETE
-    with self.logger("call_process"):
-      caller = self.game_snapshot.CurrentPlayer
-      self.game_snapshot = self.stub.Process(selected_action, caller)
-      assert (selected_action.type != selected_action.END_TURN) or caller != self.game_snapshot.CurrentPlayer
+      selected_action = actions[action_id]
+
+      with self.logger("update_stats"):
+        self.update_stats()
+
+      assert self.game_ref.state != python_pb2.Game.COMPLETE
+      with self.logger("call_process"):
+        self.game_ref = self.stub.Process(selected_action)
 
     if self.should_tie():
       return
