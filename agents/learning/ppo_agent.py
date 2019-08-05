@@ -105,7 +105,7 @@ class PPOAgent(agents.base_agent.Agent):
     )
 
   def update_experiment_logging(self):
-    tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
+    tensorboard_dir = os.path.join(f"logs/tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
 
     if "DELETEME" in tensorboard_dir:
       tensorboard_dir = tempfile.mktemp()
@@ -178,7 +178,9 @@ class PPOAgent(agents.base_agent.Agent):
         self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
         if performance > hs_config.PPOAgent.winratio_cutoff:
           with self.timer("eval_agents_self_play"):
+            # get performance from here and update helo against your distribution
             p = self.eval_agent(envs, eval_envs)
+            # {idx:[rewards]}
           performance = np.mean(p)
           self.timer.info("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
           break

@@ -16,7 +16,7 @@ print_every = 20
 log_to_stdout = DEBUG
 
 
-class Environmentm:
+class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
