@@ -1,10 +1,20 @@
 import multiprocessing as mp
 
 import numpy as np
-from baselines.common.vec_env.subproc_vec_env import _flatten_obs
 
 import specs
 from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
+
+
+def _flatten_obs(obs):
+  assert isinstance(obs, (list, tuple))
+  assert len(obs) > 0
+
+  if isinstance(obs[0], dict):
+    keys = obs[0].keys()
+    return {k: np.stack([o[k] for o in obs]) for k in keys}
+  else:
+    return np.stack(obs)
 
 
 def worker(remote, parent_remote, env_fn_wrapper):
