@@ -1,7 +1,7 @@
 import curses
 import enum
 
-from shared.constants import Minion, Card, Hero, SPELLS
+import shared.constants as C
 
 
 class Players(enum.Enum):
@@ -12,6 +12,7 @@ class Players(enum.Enum):
 
 CARD_WIDTH = 1  # width of box to draw card in
 CARD_HEIGHT = 3
+
 
 class GUI:
   def __init__(self):
@@ -74,8 +75,8 @@ class GUI:
     self.windows[Players.OPPONENT].addstr(y, x, message, options)
 
   def draw_opponent(self, hero, board, hand, mana):
-    top_row = [Minion(atk=hero.health, health=hero.power_exhausted, exhausted=hero.atk_exhausted)]
-    top_row.extend(Minion(minion.health, minion.atk, minion.exhausted) for minion in board)
+    top_row = [C.Minion(atk=hero.health, health=hero.power_exhausted, exhausted=hero.atk_exhausted)]
+    top_row.extend(C.Minion(minion.health, minion.atk, minion.exhausted) for minion in board)
     self.draw_player_side(Players.OPPONENT, top_row=None, bottom_row=top_row)
     nametag = 'Opponent mana:{}'.format(mana)
     self.opponent_addstr(0, self.game_width - 1 - len(nametag), nametag)

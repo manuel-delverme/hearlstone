@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 import hs_config
-from shared.constants import Minion, Card, Hero
+import shared.constants as C
 
 
 # source: https://github.com/kroitor/asciichart/blob/master/asciichartpy/__init__.py
@@ -64,8 +64,8 @@ class BaseEnv(gym.Env, ABC):
 
   class GameOver(Exception):
     pass
-  def __init__(self):
 
+  def __init__(self):
     self.opponent = None
     self.opponents = [None, ]
 
@@ -140,7 +140,7 @@ class RenderableEnv(BaseEnv):
     for possible_idx in pi:
       action_log_prob = action_distribution.log_prob(torch.tensor(possible_idx))
       pretty_actions.append(
-        (possible_idx, options[possible_idx].print, float(action_log_prob), float(probs[possible_idx])))
+          (possible_idx, options[possible_idx].print, float(action_log_prob), float(probs[possible_idx])))
 
     action_history = info['action_history']
     del info['action_history']
@@ -156,11 +156,6 @@ class RenderableEnv(BaseEnv):
     row_number += 1
     self.gui.log(f"value: {float(value)}, choice: {int(choice)}", row=row_number, multiline=False)
     row_number += 1
-
-    # curses.start_color()
-    # curses.use_default_colors()
-    # for i in range(0, curses.COLORS // 2):
-    #   curses.init_pair(i + 1, i, -1)
 
     row_number = self.log_plot(row_number, self.values)
     row_number = self.log_plot(row_number, self.health)
@@ -198,7 +193,7 @@ class RenderableEnv(BaseEnv):
     offset += 1
 
     hero = obs[offset: offset + self.hero_encoding_size]
-    hero = Hero(*hero)
+    hero = C.Hero(*hero)
     offset += self.hero_encoding_size
 
     # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
@@ -206,7 +201,7 @@ class RenderableEnv(BaseEnv):
     for minion_number in range(hs_config.Environment.max_cards_in_board):
       card = obs[offset: offset + self.minion_encoding_size]
       if card.max() > -1:
-        minion = Minion(*card)
+        minion = C.Minion(*card)
         board.append(minion)
       offset += self.minion_encoding_size
 
@@ -216,7 +211,7 @@ class RenderableEnv(BaseEnv):
         card = obs[offset: offset + self.hand_encoding_size]
         if card.max() > -1:
           assert card.min() > -1
-          card = Card(*card)
+          card = C.Card(*card)
           hand.append(card)
         offset += self.hand_encoding_size
     return offset, board, hand, mana, hero
