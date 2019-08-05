@@ -6,22 +6,13 @@ import torch
 
 import agents.base_agent
 
-enjoy = False
 use_gpu = False
-seed = None
-benchmark = False
-make_deterministic = False  # Supposedly slows by a lot
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
-DEBUG = False
-
 comment = "DELETEME" if DEBUG else "d10c4n3"
 device = torch.device("cuda:0" if use_gpu else "cpu")
-# device = 'gpu' if use_gpu else 'cpu'
 
 print_every = 20
-BIG_NUMBER = 9999999999999
-visualize_everything = 0
 log_to_stdout = DEBUG
 
 
@@ -29,37 +20,19 @@ class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  # no_subprocess = ENV_DEBUG or False
-  no_subprocess = False
+  no_subprocess = True
 
-  max_opponents = 5
   newest_opponent_prob = 0.5
-  render_after_step = visualize_everything or 0
-
-  old_opponent_prob = 0.2
-  sort_decks = False
-  normalize = True
-  starting_hp = 30
 
   max_cards_in_board = 7
   max_entities_in_board = max_cards_in_board + 1
+
   max_cards_in_hand = 10
+
   max_turns = 50
-
-  always_first_player = True
-
-  level = -1
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
-    # if game_mode == "trading":
-    # import environments.tutorial_environments
-    # return environments.tutorial_environments.TradingHS
-    # else:
-    # import environments.vanilla_hs
-    # return environments.vanilla_hs.VanillaHS
-    # import sb_env.SabberStone_python_client.simulator
-    # return sb_env.SabberStone_python_client.simulator.Sabbertsone
     import environments.sabber_hs
     out = functools.partial(
         environments.sabber_hs.Sabbertsone,
@@ -71,10 +44,11 @@ class Environment:
   def get_opponent() -> Type[agents.base_agent.Agent]:
     import agents.heuristic.hand_coded
     return agents.heuristic.hand_coded.SabberAgent
-    # import agents.heuristic.random_agent
-    # return agents.heuristic.random_agent.RandomAgent
-    # return agents.heuristic.hand_coded.PassingAgent
-    # return agents.heuristic.hand_coded.TradingAgent
+
+
+class GameManager:
+  max_opponents = 5
+  old_opponent_prob = 0.2
 
 
 class SelfPlay:
@@ -82,7 +56,7 @@ class SelfPlay:
 
 
 class PPOAgent:
-  # Monitoring
+  BIG_NUMBER = 9999999999999
   winratio_cutoff = 0.8
   num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
@@ -110,7 +84,6 @@ class PPOAgent:
   clip_epsilon = 0.2  # PPO paper
 
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
-  load_experts = False
 
 
 if Environment.ENV_DEBUG:

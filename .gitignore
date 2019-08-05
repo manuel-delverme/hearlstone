@@ -122,3 +122,5 @@ hearlstone/
 ppo_save_dir/
 runs/
 strings/
+/tensorboard/
+/logs/

@@ -124,10 +124,10 @@ def disk_cache(f: Callable) -> _lru_cache_wrapper:
 
 
 def arena_fight(
-  environment: base_env.BaseEnv,
-  player_policy: Agent,
-  opponent_policy: Agent,
-  nr_games: int = 100,
+    environment: base_env.BaseEnv,
+    player_policy: Agent,
+    opponent_policy: Agent,
+    nr_games: int = 100,
 ):
   player_order = [player_policy, opponent_policy]
   random.shuffle(player_order)
@@ -184,7 +184,7 @@ def random_draft(card_class: CardClass, exclude: Tuple = tuple(), deck_length: i
     if card_obj.type == CardType.HERO:
       continue
     if card_obj.card_class and card_obj.card_class not in (
-      card_class, CardClass.NEUTRAL):
+        card_class, CardClass.NEUTRAL):
       continue
     if card_obj.cost > max_mana:
       continue

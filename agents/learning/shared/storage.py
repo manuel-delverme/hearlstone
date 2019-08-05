@@ -77,7 +77,6 @@ class RolloutStorage(object):
     self.step = (self.step + 1) % self.num_steps
 
   def compute_returns(self, next_value: torch.FloatTensor):
-    # TODO review me @d3sm0
     assert next_value.dtype == torch.float32
     assert next_value.size(1) == 1
     self._value_predictions[-1] = next_value
@@ -89,11 +88,11 @@ class RolloutStorage(object):
       self._returns[step] = gae + self._value_predictions[step]
 
   def feed_forward_generator(self, advantages: torch.FloatTensor, num_mini_batch: int) -> (
-    torch.FloatTensor, torch.LongTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor,
-    torch.FloatTensor, torch.FloatTensor):
-    assert advantages.size() == self._rewards.size()
+      torch.FloatTensor, torch.LongTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor,
+      torch.FloatTensor, torch.FloatTensor):
+    assert advantages.shape == self._rewards.shape
     assert num_mini_batch > 0
-    num_steps, num_processes = self._rewards.size()[:2]
+    num_steps, num_processes = self._rewards.shape[:2]
     batch_size = num_processes * num_steps
     assert batch_size >= num_mini_batch, (
       "PPO requires the number of processes ({}) "
@@ -104,14 +103,14 @@ class RolloutStorage(object):
     mini_batch_size = batch_size // num_mini_batch
     sampler = BatchSampler(SubsetRandomSampler(range(batch_size)), mini_batch_size, drop_last=False)
     for indices in sampler:
-      obs_batch = self._observations[:-1].view(-1, *self._observations.size()[2:])[indices]
+      obs_batch = self._observations[:-1].view(-1, *self._observations.shape[2:])[indices]
       actions_batch = self._actions.view(-1, self._actions.size(-1))[indices]
       value_preds_batch = self._value_predictions[:-1].view(-1, 1)[indices]
       return_batch = self._returns[:-1].view(-1, 1)[indices]
       old_action_log_probs_batch = self._action_log_probabilities.view(-1, 1)[indices]
       adv_targ = advantages.view(-1, 1)[indices]
 
-      possible_actions = self._possible_actionss[:-1].view(-1, *self._possible_actionss.size()[2:])[indices]
+      possible_actions = self._possible_actionss[:-1].view(-1, *self._possible_actionss.shape[2:])[indices]
 
       yield (obs_batch, actions_batch, value_preds_batch, return_batch, old_action_log_probs_batch, adv_targ,
              possible_actions)

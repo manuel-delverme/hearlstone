@@ -19,19 +19,19 @@ class ActorCritic(nn.Module):
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
     self.actor = nn.Sequential(
         init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
-        nn.SELU(),
+        nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-        nn.SELU(),
+        nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-        nn.SELU(),
+        nn.ReLU(),
     )
     self.critic = nn.Sequential(
         init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
-        nn.SELU(),
+        nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-        nn.SELU(),
+        nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-        nn.SELU(),
+        nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, 1)),
     )
 
@@ -115,5 +115,5 @@ class ActorCritic(nn.Module):
 
   @staticmethod
   def _get_action_distribution(possible_actions, logits):
-    logits -= ((1 - possible_actions) * hs_config.BIG_NUMBER).float()
+    logits -= ((1 - possible_actions) * hs_config.PPOAgent.BIG_NUMBER).float()
     return torch.distributions.Categorical(logits=logits)

@@ -1,7 +1,7 @@
 import collections
 import pprint
 from collections import defaultdict
-from typing import Callable, Text, Optional
+from typing import Callable
 
 import numpy as np
 import torch
@@ -9,7 +9,6 @@ import torch
 import environments.base_env
 import hs_config
 import specs
-# from baselines.common import vec_env
 from baselines_repo.baselines.common import vec_env
 from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
@@ -103,19 +102,16 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     return obs, rewards, dones, dict(new_infos)
 
 
-def _make_env(
-  load_env: Callable[[int], environments.base_env.BaseEnv], rank: int, log_dir: Text,
-  allow_early_resets: bool) -> Callable[[], environments.base_env.BaseEnv]:
+def _make_env(load_env: Callable[[], environments.base_env.BaseEnv]) -> Callable[[], environments.base_env.BaseEnv]:
   def _thunk():
-    return load_env(extra_seed=rank)
+    return load_env()
 
   return _thunk
 
 
-def make_vec_envs(
-    load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, log_dir: Optional[Text],
-  device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
-  envs = [_make_env(load_env, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
+def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, device: torch.device = hs_config.device
+) -> PyTorchCompatibilityWrapper:
+  envs = [_make_env(load_env) for _ in range(num_processes)]
 
   if len(envs) == 1 or hs_config.Environment.no_subprocess:
     vectorized_envs = DummyVecEnv(envs)
@@ -169,8 +165,6 @@ def episodic_log(func):
     except environments.base_env.BaseEnv.GameOver as e:
       raise e
     except Exception as e:
-      # env_utils.dump_log(self)
-      # print('ENV logs dumped!')
       raise e
 
     self.__episodic_log_log_call_depth -= 1

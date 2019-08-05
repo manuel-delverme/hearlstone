@@ -74,3 +74,4 @@ _STATE_SPACE = 92  # state space includes card_index
 Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
 Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
+SPELL_IDS = set(SPELLS)
