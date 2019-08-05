@@ -18,21 +18,21 @@ class ActorCritic(nn.Module):
 
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
     self.actor = nn.Sequential(
-      init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
-      nn.SELU(),
-      init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-      nn.SELU(),
-      init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-      nn.SELU(),
+        init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
+        nn.SELU(),
+        init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
+        nn.SELU(),
+        init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
+        nn.SELU(),
     )
     self.critic = nn.Sequential(
-      init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
-      nn.SELU(),
-      init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-      nn.SELU(),
-      init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-      nn.SELU(),
-      init_(nn.Linear(hs_config.PPOAgent.hidden_size, 1)),
+        init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
+        nn.SELU(),
+        init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
+        nn.SELU(),
+        init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
+        nn.SELU(),
+        init_(nn.Linear(hs_config.PPOAgent.hidden_size, 1)),
     )
 
     self.actor_logits = None
@@ -45,12 +45,21 @@ class ActorCritic(nn.Module):
     self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions))
 
   def forward(self, observations: torch.FloatTensor, possible_actions: torch.FloatTensor,
-    deterministic: bool = False) -> (torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
+      deterministic: bool = False) -> (torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
+    if isinstance(observations, np.ndarray):
+      observations = torch.from_numpy(observations).float()
+      observations = observations.unsqueeze(0)
+    if len(possible_actions.shape) == 1:
+      possible_actions = torch.from_numpy(possible_actions)
+      possible_actions = possible_actions.unsqueeze(0)
 
     assert specs.check_observation(self.num_inputs, observations)
     assert specs.check_possible_actions(self.num_possible_actions, possible_actions)
-    assert observations.size(0) == possible_actions.size(0)
+    assert observations.shape[0] == possible_actions.shape[0]
     assert isinstance(deterministic, bool)
+
+    if not isinstance(observations, torch.Tensor):
+      observations = torch.tensor(observations)
 
     action_distribution, value = self.actor_critic(observations, possible_actions)
 
@@ -85,8 +94,8 @@ class ActorCritic(nn.Module):
     return action_distribution, value
 
   def evaluate_actions(self, observations: torch.FloatTensor, action: torch.LongTensor,
-    possible_actions: torch.FloatTensor) -> (
-    torch.FloatTensor, torch.FloatTensor, torch.FloatTensor):
+      possible_actions: torch.FloatTensor) -> (
+      torch.FloatTensor, torch.FloatTensor, torch.FloatTensor):
 
     assert specs.check_observation(self.num_inputs, observations)
     assert specs.check_possible_actions(self.num_possible_actions, possible_actions)

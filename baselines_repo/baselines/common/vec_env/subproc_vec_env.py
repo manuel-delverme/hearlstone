@@ -16,9 +16,7 @@ def worker(remote, parent_remote, env_fn_wrapper):
         ob, reward, done, info = env.step(data)
         if done:
           ob, _, _, _info = env.reset()
-          info['possible_actions'] = _info['possible_actions']
-          info['observation'] = _info['observation']
-        specs.check_info_spec(info)
+        assert specs.check_info_spec(info)
         remote.send((ob, reward, done, info))
       elif cmd == 'reset':
         ob, reward, done, info = env.reset()

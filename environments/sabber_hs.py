@@ -1,15 +1,15 @@
 import warnings
 from typing import Tuple, Dict, Text, Any
 
+import frozendict
 import grpc
 import gym
 import numpy as np
-import torch
 
 import environments.base_env
 import hs_config
-import sb_env.SabberStone_python_client.python_pb2 as python_pb2
-import sb_env.SabberStone_python_client.python_pb2_grpc as python_pb2_grpc
+import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
+import sb_env.SabberStone_python_client.python_pb2_grpc as sabberstone_grpc
 import shared.constants as C
 import shared.env_utils
 import shared.utils
@@ -45,7 +45,7 @@ class Stub:
     self.stub = stub
 
   def NewGame(self, deck1, deck2):
-    return _GameRef(self.stub.NewGame(python_pb2.DeckStrings(deck1=deck1, deck2=deck2)))
+    return _GameRef(self.stub.NewGame(sabberstone_protobuf.DeckStrings(deck1=deck1, deck2=deck2)))
 
   def Reset(self, game_id):
     return _GameRef(self.stub.Reset(game_id))
@@ -106,7 +106,7 @@ def parse_game(game):
     o.hero.power.exhausted,
     # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
     *pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
-  ))
+  ), dtype=np.int32)
 
 
 def enumerate_actions():
@@ -195,14 +195,18 @@ class Sabbertsone(environments.base_env.RenderableEnv):
   def __init__(self, address: str, seed: int = None, env_number: int = None):
     super().__init__()
     self.gui = None
-    self.logger = shared.utils.Timer(__class__.__name__, id=env_number, verbosity=hs_config.verbosity)
-    self.extra_seed = env_number
+    self.logger = shared.utils.HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
+
     if seed is not None:
       warnings.warn("Setting the seed is not implemented")
 
+    if env_number is not None:
+      warnings.warn("Setting the seed is not implemented")
+      self.extra_seed = env_number
+
     with self.logger("call_init"):
       self.channel = grpc.insecure_channel(address)
-      self.stub = Stub(python_pb2_grpc.SabberStonePythonStub(self.channel))
+      self.stub = Stub(sabberstone_grpc.SabberStonePythonStub(self.channel))
       self.game_snapshot = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
 
     self.action_space = gym.spaces.Discrete(n=C._ACTION_SPACE)
@@ -216,9 +220,9 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
   def game_value(self):
     player = self.game_snapshot.CurrentPlayer
-    if player.play_state == python_pb2.Controller.WON:  # maybe PlayState
+    if player.play_state == sabberstone_protobuf.Controller.WON:  # maybe PlayState
       reward = 1
-    elif player.play_state in (python_pb2.Controller.LOST, python_pb2.Controller.TIED):
+    elif player.play_state in (sabberstone_protobuf.Controller.LOST, sabberstone_protobuf.Controller.TIED):
       reward = -1
     else:
       reward = 0
@@ -279,7 +283,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       with self.logger("update_stats"):
         self.update_stats()
 
-      assert self.game_snapshot.state != python_pb2.Game.COMPLETE
+      assert self.game_snapshot.state != sabberstone_protobuf.Game.COMPLETE
       with self.logger("call_process"):
         self.game_snapshot = self.stub.Process(selected_action)
 
@@ -293,7 +297,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
         self.play_opponent_turn()
 
     except self.GameOver:
-      assert self.game_snapshot.state == python_pb2.Game.COMPLETE
+      assert self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if hs_config.Environment.ENV_DEBUG_METRICS:
         self.logger.error(f"GameOver called from player {self.game_snapshot.CurrentPlayer.id}")
@@ -316,13 +320,14 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     return self.gather_transition(auto_reset=False)
 
   @shared.env_utils.episodic_log
-  def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
+  def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
     assert shared.utils.can_autoreset(auto_reset,
                                       self.game_snapshot) or self.game_snapshot.turn > hs_config.Environment.max_turns
 
-    terminal = self.game_snapshot.state == python_pb2.Game.COMPLETE
+    terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
     assert self.game_snapshot.state in (
-      python_pb2.Game.INVALID, python_pb2.Game.LOADING, python_pb2.Game.RUNNING, python_pb2.Game.COMPLETE,)
+      sabberstone_protobuf.Game.INVALID, sabberstone_protobuf.Game.LOADING, sabberstone_protobuf.Game.RUNNING,
+      sabberstone_protobuf.Game.COMPLETE,)
 
     with self.logger("get_value"):
       reward = self.game_value()
@@ -335,40 +340,39 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       actions = self.parse_options(self.game_snapshot)
       possible_actions[list(actions.keys())] = 1
 
-    info = {
-      'observation': state,
-      'reward': reward,
-      'possible_actions': possible_actions,
-      'action_history': [],
-      'game_statistics': {}
-    }
     if terminal:
-
       if auto_reset:
-        if self.game_snapshot.state == python_pb2.Game.COMPLETE:
+        if self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE:
           if self.game_snapshot.CurrentPlayer.id != C.AGENT_ID:
             reward = - reward
-        # TODO maybe make me better
-        self.game_matrix(self.current_k, reward)
 
-        game_stats = C.GameStatistics(*zip(*self.turn_stats))
-        game_stats = {'avg_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=1))}
-        game_stats['outcome'] = reward
-        game_stats['life_adv'] = self.turn_stats[-1].life_adv
-        counts = np.array([v[1] for v in self._game_matrix.values()])
-        game_stats['opponent_var'] = counts.var()
-        game_stats['opponent_mean'] = counts.mean()
-
-        self.logger.log_stats(game_stats)
-
+        # self.logger.log_stats(game_stats)
         with self.logger("reset_env"):
           state, _, _, _info = self.reset()
-        info['observation'] = state
-        info['possible_actions'] = _info['possible_actions']
+        possible_actions = _info['possible_actions']
       else:
         raise self.GameOver
 
+    info = {
+      'possible_actions': possible_actions,
+    }
+    if terminal:
+      # TODO maybe make me better
+      self.game_matrix(self.current_k, reward)
+
+      counts = np.array([v[1] for v in self._game_matrix.values()])
+
+      _stats = C.GameStatistics(*zip(*self.turn_stats))
+      info['game_statistics'] = {
+        **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
+        'outcome': reward,
+        'life_adv': self.turn_stats[-1].life_adv,
+        'mean_opponent': counts.mean(),
+      }
+
+    info = frozendict.frozendict(info)
     assert info['possible_actions'].max() == 1 or terminal
+    self.last_info = info  # for rendering render
     return state, reward, terminal, info
 
   def game_matrix(self, idx, reward):
@@ -413,18 +417,15 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       observation, _, terminal, info = self.gather_transition(auto_reset=False)
 
     if self.opponent_obs_rms is not None:
+      raise NotImplementedError
       observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
 
-    observation = torch.FloatTensor(observation)
-    observation = observation.unsqueeze(0)  # 0.2%
-
-    info['possible_actions'] = torch.FloatTensor(info['possible_actions']).unsqueeze(0)  # unsqueeze 0.2%
-    info['original_info'] = {
-      "game_ref": self.game_snapshot,
+    bot_info = dict(info)
+    bot_info['original_info'] = {
+      "game_snapshot": self.game_snapshot,
       "game_options": self.parse_options(self.game_snapshot),
     }
-
-    action = self.opponent.choose(observation=observation, info=info)
+    action = self.opponent.choose(observation=observation, info=bot_info)
     assert self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID
     return self.step(action, auto_reset=False)
 

@@ -4,16 +4,16 @@ from typing import Callable, Type
 
 import torch
 
-# DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
 import agents.base_agent
 
 enjoy = False
 use_gpu = False
-seed = None  # 1337
+seed = None
 benchmark = False
 make_deterministic = False  # Supposedly slows by a lot
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
+DEBUG = False
 
 comment = "DELETEME" if DEBUG else "d10c4n3"
 device = torch.device("cuda:0" if use_gpu else "cpu")
@@ -22,14 +22,15 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 print_every = 20
 BIG_NUMBER = 9999999999999
 visualize_everything = 0
-verbosity = 1 if DEBUG else 0
+log_to_stdout = DEBUG
 
 
 class Environment:
-  ENV_DEBUG = DEBUG
+  ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
-  ENV_DEBUG_METRICS = True
-  no_subprocess = ENV_DEBUG or 0
+  ENV_DEBUG_METRICS = False
+  # no_subprocess = ENV_DEBUG or False
+  no_subprocess = False
 
   max_opponents = 5
   newest_opponent_prob = 0.5
@@ -40,7 +41,6 @@ class Environment:
   normalize = True
   starting_hp = 30
 
-  # this is now level
   max_cards_in_board = 7
   max_entities_in_board = max_cards_in_board + 1
   max_cards_in_hand = 10
@@ -62,8 +62,8 @@ class Environment:
     # return sb_env.SabberStone_python_client.simulator.Sabbertsone
     import environments.sabber_hs
     out = functools.partial(
-      environments.sabber_hs.Sabbertsone,
-      address
+        environments.sabber_hs.Sabbertsone,
+        address
     )
     return out
 

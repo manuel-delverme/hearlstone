@@ -3,7 +3,6 @@ import math
 import time
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Tuple, Dict, Text, Any
 
 import gym
 import numpy as np
@@ -90,10 +89,6 @@ class BaseEnv(gym.Env, ABC):
     self.opponents = opponents
     self.opponent_obs_rmss = opponent_obs_rmss
 
-  @abstractmethod
-  def _gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    raise NotImplementedError
-
 
 class RenderableEnv(BaseEnv):
   hand_encoding_size = None  # atk, health, exhaust
@@ -107,18 +102,15 @@ class RenderableEnv(BaseEnv):
     self.values = collections.deque(maxlen=100)
     self.health = collections.deque(maxlen=100)
 
-  def gather_transition(self, auto_reset: bool) -> Tuple[np.ndarray, np.ndarray, bool, Dict[Text, Any]]:
-    s, r, t, i = self._gather_transition(auto_reset)
-    self.last_info = i
-    return s, r, t, i
-
   def render(self, mode='human', choice=None, action_distribution=None, value=None):
     if self.gui is None:
       import gui
       self.gui = gui.GUI()
 
-    self.values.append(float(value))
-    obs = self.last_info['game_statistics'][0]
+    if value is not None:
+      self.values.append(float(value))
+
+    obs = self.last_info['observation']
     offset, board, hand, mana, hero = self.render_player(obs)
     self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
     hero_health = hero.health
@@ -130,8 +122,7 @@ class RenderableEnv(BaseEnv):
     info = self.last_info.copy()
     pi = np.argwhere(info['possible_actions']).flatten()
     pretty_actions = []
-    game_ref = self.original_info()['observation']
-    options, _ = self.parse_options(game_ref, return_options=True)
+    options, _ = self.parse_options(self.game_snapshot, return_options=True)
 
     logit = {}
     for possible_idx in pi:

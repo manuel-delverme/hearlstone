@@ -1,4 +1,4 @@
-import csv
+import collections
 import logging
 import os
 import pickle
@@ -25,70 +25,70 @@ from environments import base_env
 from sb_env.SabberStone_python_client import python_pb2
 
 
-class Timer(logging.Logger):
-  def __init__(self, name: str, id: int = None, verbosity: bool = True):
+class HSLogger(logging.Logger):
+  formatter = logging.Formatter('%(asctime)s -  %(processName)s - %(name)s - %(levelname)s - %(message)s')
+  save_path = f'/tmp/heaRLstone-{hs_config.comment}.log'
+
+  def __init__(self, name: str, log_to_stdout: bool = True):
     assert isinstance(name, str)
-    super(Timer, self).__init__(logging.getLogger(name))
-    self.tasks = {}
-    self.current_task = None
-    fmt = '%(asctime)s -  %(processName)s - %(name)s - %(levelname)s - %(message)s'
+    super(HSLogger, self).__init__(logging.getLogger(name))
+    self.timers = collections.defaultdict(lambda: [0, 0])
+    self.current_timer = None
 
-    if verbosity:
-      handler = logging.StreamHandler()
-      handler.setLevel(logging.INFO)
-      handler.setFormatter(logging.Formatter(fmt))
-      self.addHandler(handler)
-
-    save_path = f'/tmp/{name}.log'
-    handler = logging.FileHandler(save_path)
+    handler = logging.FileHandler(self.save_path)
     handler.setLevel(logging.DEBUG)
-    handler.setFormatter(logging.Formatter(fmt))
+    handler.setFormatter(self.formatter)
     self.addHandler(handler)
 
-    self.stat_file = tempfile.mktemp()
-    self.info(f"Timer for {name} saves  in {save_path}")
+    if log_to_stdout:
+      handler = logging.StreamHandler()
+      handler.setLevel(logging.INFO)
+      handler.setFormatter(self.formatter)
+      self.addHandler(handler)
+    self.info(f"Timer for {name} saves  in {self.save_path}")
+
+    self.stat_file = tempfile.mktemp(prefix='heaRLogs/')
     self.info(f"Stats for {name} saves  in {self.stat_file}")
     self.saved_stats = False
 
-  def __call__(self, task: str) -> object:
-    if hs_config.Environment.ENV_DEBUG:
-      task = "#" + task.upper() + "#"
-      if not task in self.tasks.keys():
-        self.tasks[task] = (0, 0)  # cumulative, last
-      self.current_task = task
+  def __call__(self, timer_name: str) -> object:
+    timer_name = "#" + timer_name.upper() + "#"
+    self.current_timer = timer_name
     return self
 
   def __enter__(self):
-    if hs_config.Environment.ENV_DEBUG_METRICS:
-      self.start = time.time()
+    self.start = time.time()
 
   def __exit__(self, type, value, traceback):
-    if hs_config.Environment.ENV_DEBUG_METRICS:
-      self.end = time.time()
-      delta = (self.end - self.start)
-      self.tasks[self.current_task] = (self.tasks[self.current_task][0] + delta, delta)
-      self.info(str(self))
+    delta = time.time() - self.start
+    self.timers[self.current_timer][0] += delta
+    self.timers[self.current_timer][1] = delta
+    self.info(self.__str__())
 
   def __str__(self):
-    cum, last = self.tasks[self.current_task]
-    return f"{self.current_task} - (total_time, delta) ({cum:.4f},{last:.4f})"
+    cum, last = self.timers[self.current_timer]
+    return f"{self.current_timer} - (total_time, delta) ({cum:.4f},{last:.4f})"
 
-  def log_stats(self, stats: dict):
-    if not hs_config.Environment.ENV_DEBUG_METRICS:
-      return
+  def __del__(self):
+    for h in self.handlers:
+      if isinstance(h, logging.FileHandler):
+        h.close()
 
-    with open(self.stat_file + '.csv', 'a+') as f:
-      writer = csv.DictWriter(f, fieldnames=stats.keys())
-      if self.saved_stats is False:
-        f.seek(0)
-        writer.writeheader()
-        self.saved_stats = True
-      writer.writerow(stats)
+  if not hs_config.Environment.ENV_DEBUG_METRICS:
+    def __call__(self, timer_name: str) -> object:
+      return self
 
-  def info(self, *args, **kwargs):
-    if not hs_config.Environment.ENV_DEBUG_METRICS:
-      return
-    super(Timer, self).info(*args, **kwargs)
+    def __enter__(self):
+      pass
+
+    def __exit__(self, type, value, traceback):
+      pass
+
+    def log_stats(self, stats: dict):
+      pass
+
+    def info(self, *args, **kwargs):
+      pass
 
 
 def to_tuples(list_of_lists):

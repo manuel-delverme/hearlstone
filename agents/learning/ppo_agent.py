@@ -23,7 +23,7 @@ import specs
 from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
-from shared.utils import Timer
+from shared.utils import HSLogger
 
 
 def get_grad_norm(model):
@@ -34,6 +34,7 @@ def get_grad_norm(model):
   total_norm = total_norm ** (1. / 2)
   return total_norm
 
+
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     with torch.no_grad():
@@ -43,7 +44,7 @@ class PPOAgent(agents.base_agent.Agent):
   def __init__(self, num_inputs: int, num_possible_actions: int, log_dir: str,
     experts: Tuple[agents.base_agent.Agent] = tuple()) -> None:
     assert isinstance(__class__.__name__, str)
-    self.timer = Timer(__class__.__name__, verbosity=hs_config.verbosity)
+    self.timer = HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
 
     self.experiment_id = hs_config.comment
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
@@ -157,7 +158,7 @@ class PPOAgent(agents.base_agent.Agent):
         print(f"[Train] Loading ckpt {checkpoint_file}")
         self.load_checkpoint(checkpoint_file, envs)
 
-        assert game_manager.use_heuristic_opponent is False
+        assert game_manager.use_heuristic_opponent is False or num_updates == 1
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n + self.num_experts == self.num_actions
@@ -173,7 +174,7 @@ class PPOAgent(agents.base_agent.Agent):
     total_num_steps = None
     ppo_update_num = None
 
-    for ppo_update_num in tqdm.tqdm(range(updates_offset, updates_offset + num_updates), position=1):
+    for ppo_update_num in tqdm.tqdm(range(updates_offset, updates_offset + num_updates), position=1, desc='train'):
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
@@ -251,7 +252,7 @@ class PPOAgent(agents.base_agent.Agent):
     if self.envs is None:
       print("[Train] Loading training environments")
       game_manager.use_heuristic_opponent = False
-      self.envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+      self.envs = make_vec_envs(game_manager, self.num_processes, self.log_dir,
                                 hs_config.device, allow_early_resets=False)
     else:
       game_manager.use_heuristic_opponent = False
@@ -261,7 +262,7 @@ class PPOAgent(agents.base_agent.Agent):
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
       game_manager.use_heuristic_opponent = False
-      self.eval_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
+      self.eval_envs = make_vec_envs(game_manager, self.num_processes, self.log_dir,
                                      hs_config.device, allow_early_resets=True)
     else:
       game_manager.use_heuristic_opponent = False
@@ -271,8 +272,8 @@ class PPOAgent(agents.base_agent.Agent):
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
       game_manager.use_heuristic_opponent = True
-      self.validation_envs = make_vec_envs(game_manager, self.num_processes, hs_config.PPOAgent.gamma, self.log_dir,
-                                           hs_config.device, allow_early_resets=True)
+      self.validation_envs = make_vec_envs(
+          game_manager, self.num_processes, self.log_dir, hs_config.device, allow_early_resets=True)
     # else:
     #   self.get_last_env(self.validation_envs).set_opponents(opponents=game_manager.opponents,
     #                                                         opponent_obs_rmss=game_manager.opponent_normalization_factors)
@@ -342,18 +343,20 @@ class PPOAgent(agents.base_agent.Agent):
 
       with self.timer("agent_step"):
         obs, reward, done, infos = envs.step(action)
-      assert not all(done) or all(r in (-1., -.1) for r in infos['reward'])
-      # assert not done and infos['reward'][0] == 0
+      assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, rewards))
 
       possible_actions = self.update_possible_actions_for_expert(infos)
 
       if rollouts is not None:
         rollouts.insert(observations=obs, actions=action, action_log_probs=action_log_prob, value_preds=value,
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
-      assert 'game_statistics' in specs.OPTIONAL_INFO_KEYS
+      assert 'game_statistics' in specs.TERMINAL_GAME_INFO_KEYS
       if 'game_statistics' in infos:
         warnings.warn('breaks if reward shaping')
-        rewards.extend(i[1] for i in infos['game_statistics'] if i[1] != 0)
+        for info in infos['game_statistics']:
+          outcome = info['outcome']
+          if outcome != 0:
+            rewards.append(outcome)
 
   def maybe_render(self, action, envs):
     if hs_config.Environment.render_after_step:
@@ -549,7 +552,7 @@ class PPOAgent(agents.base_agent.Agent):
     updates_schedule = [1, ]
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
     old_win_ratio = -1
-    pbar = tqdm.tqdm(total=sum(updates_schedule))
+    pbar = tqdm.tqdm(total=sum(updates_schedule), desc='self-play')
     try:
       for self_play_iter, num_updates in enumerate(updates_schedule):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
