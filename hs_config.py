@@ -2,7 +2,6 @@ import functools
 import sys
 from typing import Callable, Type
 import os
-
 import torch
 
 # DO NOT ADD PROJECT LEVEL IMPORTS OR CYCLES!
@@ -23,14 +22,15 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 print_every = 20
 BIG_NUMBER = 9999999999999
 visualize_everything = 0
-verbosity = 1 if DEBUG else 0
+log_to_stdout = DEBUG
 
 
 class Environment:
-  ENV_DEBUG = DEBUG
+  ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  no_subprocess = ENV_DEBUG or 0
+  # no_subprocess = ENV_DEBUG or False
+  no_subprocess = False
   address = "0.0.0.0:50052"
 
   max_opponents = 5
@@ -42,7 +42,6 @@ class Environment:
   normalize = True
   starting_hp = 30
 
-  # this is now level
   max_cards_in_board = 7
   max_entities_in_board = max_cards_in_board + 1
   max_cards_in_hand = 10

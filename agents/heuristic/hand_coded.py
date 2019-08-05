@@ -43,7 +43,11 @@ def minion_value(m):
   return m.atk / 2 + m.health / 2.
 
 
-from environments.sabber_hs import parse_hero, parse_card, parse_minion
+from environments.sabber_hs import parse_card, parse_minion
+
+
+def parse_hero(hero):
+  return hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted
 
 
 class PassingAgent(agents.base_agent.Agent):
@@ -54,10 +58,12 @@ class PassingAgent(agents.base_agent.Agent):
     return 0
 
 
-from shared.utils import Timer
+from shared.utils import HSLogger
+
+
 class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self, level: int = hs_config.Environment.level):
-    self.logger = Timer(__name__, verbosity=hs_config.verbosity)
+    self.logger = HSLogger(__name__, log_to_stdout=hs_config.log_to_stdout)
     assert -2 < level < 7
     super().__init__()
     if level == -1:
@@ -81,6 +87,10 @@ class HeuristicAgent(agents.base_agent.Bot):
 
     if random.random() < self.randomness:
       return self.random_agent.choose(observation, encoded_info)
+
+    observation = torch.FloatTensor(observation)
+    observation = observation.unsqueeze(0)  # 0.2%
+    encoded_info['possible_actions'] = torch.FloatTensor(encoded_info['possible_actions']).unsqueeze(0)  # unsqueeze 0.2%
 
     possible_actions = encoded_info['original_info']['possible_actions']
     assert encoded_info['possible_actions'].size(0) == 1
@@ -139,7 +149,7 @@ class HeuristicAgent(agents.base_agent.Bot):
 
 
 def parse_game(info):
-  game_ref = info['game_ref']
+  game_ref = info['game_snapshot']
 
   player_hero = Hero(*parse_hero(game_ref.CurrentPlayer.hero))
   opponent_hero = Hero(*parse_hero(game_ref.CurrentOpponent.hero))
@@ -215,7 +225,7 @@ class SabberAgent(HeuristicAgent):
       actions = sorted(actions, key=lambda x: values[x], reverse=True)
       if hs_config.Environment.ENV_DEBUG_HEURISTIC:
         for idx in actions:
-          self.logger.debug(desk[idx]) # value[idx]
+          self.logger.debug(desk[idx])  # value[idx]
 
       if values[actions[0]] < 0:
         if hs_config.Environment.ENV_DEBUG:
