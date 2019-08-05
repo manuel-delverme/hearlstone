@@ -206,6 +206,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     if self.envs is None:
       print("[Train] Loading training environments")
+      # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs(game_manager, self.num_processes)
     else:

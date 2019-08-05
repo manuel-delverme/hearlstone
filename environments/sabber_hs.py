@@ -165,23 +165,9 @@ def game_stats(game):
   #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
 
 
-def random_subset(opponents: list, k: int) -> tuple:
-  assert len(opponents) > k
-  n = 0
-  result = []
-
-  for idx, opponent in enumerate(opponents):
-    n += 1
-    if len(result) < k:
-      result.append((opponent, idx))
-    else:
-      s = int(np.random.uniform() * n)
-      if s < k:
-        result[s] = (opponent, idx)
-  return result[0]
 
 
-class Sabbertsone(environments.base_env.RenderableEnv):
+class Sabberstone(environments.base_env.RenderableEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 
@@ -308,7 +294,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     with self.logger("call_reset"):
       self.game_snapshot = self.stub.Reset(self.game_snapshot.id)
     # TODO make me formal
-    if np.random.uniform() < 0.2 or self.opponent is None:
+    if np.random.uniform() < hs_config.Environment.newest_opponent_prob or self.opponent is None:
       self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0

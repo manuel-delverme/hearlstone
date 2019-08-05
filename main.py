@@ -45,7 +45,6 @@ def train(args):
     # m = re.search('(?<=abc)def', 'abcdef')
     # m.group(0)
     checkpoint_files = sorted(checkpoints, key=lambda x: int(
-        # x.replace(":", "-").split("-")[-1][:-3]
         re.search(r"(?<=steps=)\w*(?=:)", x).group(0)
     ))
     if checkpoint_files:

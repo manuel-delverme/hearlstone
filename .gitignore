@@ -119,7 +119,10 @@ data/
 CardDefs.xml
 checkpoints/
 hearlstone/
+ppo_log_eval/
 ppo_save_dir/
+ppo_log/
+logs/
 runs/
 strings/
 /tensorboard/

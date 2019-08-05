@@ -1,7 +1,7 @@
 import functools
 import sys
 from typing import Callable, Type
-
+import os
 import torch
 
 import agents.base_agent
@@ -16,11 +16,12 @@ print_every = 20
 log_to_stdout = DEBUG
 
 
-class Environment:
+class Environmentm:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
   no_subprocess = True
+  address = "0.0.0.0:50052"
 
   newest_opponent_prob = 0.5
 
@@ -35,8 +36,8 @@ class Environment:
   def get_game_mode(address: str) -> Callable[[], Callable]:
     import environments.sabber_hs
     out = functools.partial(
-        environments.sabber_hs.Sabbertsone,
-        address
+      environments.sabber_hs.Sabberstone,
+      address
     )
     return out
 
@@ -63,7 +64,9 @@ class PPOAgent:
   hidden_size = 256  # 64
   eval_interval = 40
   save_interval = 100
-  save_dir = "ppo_save_dir/"
+  save_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone","logs/model")
+  log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
+  debug_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone",  "logs/debug")
   adam_lr = 7e-4
 
   # Algorithm use_linear_clip_decay = False

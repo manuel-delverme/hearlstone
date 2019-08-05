@@ -11,7 +11,7 @@ import hs_config
 
 
 class GameManager(object):
-  def __init__(self, seed=None, env_id=None, log_dir=None, address=None):
+  def __init__(self, seed=None, env_id=None, log_dir=None, address=hs_config.Environment.address):
     assert log_dir is None
     assert env_id is None
     self.seed = seed
