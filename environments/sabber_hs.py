@@ -274,30 +274,28 @@ class Sabbertsone(environments.base_env.RenderableEnv):
 
     self.logger.info(self)
 
-    try:
-      with self.logger("parse_options"):
-        actions = self.parse_options(self.game_snapshot)
+    with self.logger("parse_options"):
+      actions = self.parse_options(self.game_snapshot)
 
-      selected_action = actions[action_id]
+    selected_action = actions[action_id]
 
-      with self.logger("update_stats"):
-        self.update_stats()
+    with self.logger("update_stats"):
+      self.update_stats()
 
-      assert self.game_snapshot.state != sabberstone_protobuf.Game.COMPLETE
-      with self.logger("call_process"):
-        self.game_snapshot = self.stub.Process(selected_action)
+    assert self.game_snapshot.state != sabberstone_protobuf.Game.COMPLETE
+    with self.logger("call_process"):
+      self.game_snapshot = self.stub.Process(selected_action)
 
-      if self.game_snapshot.turn > hs_config.Environment.max_turns:
-        state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
-        done = True
-        reward = 0.
-        return state, reward, done, info
+    if self.game_snapshot.turn > hs_config.Environment.max_turns:
+      state, reward, done, info = self.gather_transition(auto_reset=auto_reset)
+      _state, _, _done, _info = self.reset()
+      return state, -1, True, info
 
-      if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID and stepping_player == C.AGENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+    if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID and stepping_player == C.AGENT_ID:  # and self.game_ref.state != python_pb2.Game.COMPLETE:
+      try:
         self.play_opponent_turn()
-
-    except self.GameOver:
-      assert self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
+      except self.GameOver:
+        assert self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if hs_config.Environment.ENV_DEBUG_METRICS:
         self.logger.error(f"GameOver called from player {self.game_snapshot.CurrentPlayer.id}")

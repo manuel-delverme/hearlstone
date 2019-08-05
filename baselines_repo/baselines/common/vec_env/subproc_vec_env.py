@@ -1,6 +1,7 @@
 import multiprocessing as mp
 
 import numpy as np
+from baselines.common.vec_env.subproc_vec_env import _flatten_obs
 
 import specs
 from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
@@ -14,8 +15,6 @@ def worker(remote, parent_remote, env_fn_wrapper):
       cmd, data = remote.recv()
       if cmd == 'step':
         ob, reward, done, info = env.step(data)
-        if done:
-          ob, _, _, _info = env.reset()
         assert specs.check_info_spec(info)
         remote.send((ob, reward, done, info))
       elif cmd == 'reset':
@@ -122,14 +121,3 @@ class SubprocVecEnv(VecEnv):
   def __del__(self):
     if not self.closed:
       self.close()
-
-
-def _flatten_obs(obs):
-  assert isinstance(obs, (list, tuple))
-  assert len(obs) > 0
-
-  if isinstance(obs[0], dict):
-    keys = obs[0].keys()
-    return {k: np.stack([o[k] for o in obs]) for k in keys}
-  else:
-    return np.stack(obs)
