@@ -50,7 +50,7 @@ def train(args):
   player = agents.learning.ppo_agent.PPOAgent(
     num_inputs=dummy_hs_env.observation_space.shape[0],
     num_possible_actions=num_actions,
-    log_dir=os.path.join(os.getcwd(), 'ppo_log'),
+    log_dir= hs_config.PPOAgent.log_dir,
     experts=experts,
   )
   del dummy_hs_env

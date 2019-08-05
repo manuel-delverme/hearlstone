@@ -172,24 +172,10 @@ def game_stats(game):
   #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
 
 
-def random_subset(opponents: list, k: int) -> tuple:
-  assert len(opponents) > k
-  n = 0
-  result = []
+from shared.utils import Timer  # TODO: check this import
 
-  for idx, opponent in enumerate(opponents):
-    n += 1
-    if len(result) < k:
-      result.append((opponent, idx))
-    else:
-      s = int(np.random.uniform() * n)
-      if s < k:
-        result[s] = (opponent, idx)
-  return result[0]
 
-from shared.utils import Timer # TODO: check this import
-
-class Sabbertsone(environments.base_env.RenderableEnv):
+class Sabberstone(environments.base_env.RenderableEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 
@@ -313,8 +299,8 @@ class Sabbertsone(environments.base_env.RenderableEnv):
     self.logger.info(f"Reset called from player {self.game_ref.CurrentPlayer.id}")
     with self.logger("call_reset"):
       self.game_ref = self.stub.Reset(self.game_ref.id)
-    # TODO make me formal
-    if np.random.uniform() < 0.2 or self.opponent is None:
+
+    if np.random.uniform() < hs_config.Environment.newest_opponent_prob or self.opponent is None:
       self._sample_opponent()
     # self.turn_stats = []
     # self.episode_steps = 0
@@ -347,8 +333,13 @@ class Sabbertsone(environments.base_env.RenderableEnv):
       'reward': reward,
       'possible_actions': possible_actions,
       'action_history': [],
-      'game_statistics': {}
+      'game_statistics': {},
+      'original_info': {
+        'game_ref': self.game_ref,
+        'game_options': self.parse_options(self.game_ref),
+      }
     }
+
     if terminal:
 
       if auto_reset:
@@ -359,7 +350,7 @@ class Sabbertsone(environments.base_env.RenderableEnv):
         self.game_matrix(self.current_k, reward)
 
         game_stats = GameStatistics(*zip(*self.turn_stats))
-        game_stats = {'avg_' + k:v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
+        game_stats = {'avg_' + k: v for k, v in zip(GameStatistics._fields, np.mean(game_stats, axis=1))}
         game_stats['outcome'] = reward
         game_stats['life_adv'] = self.turn_stats[-1].life_adv
         counts = np.array([v[1] for v in self._game_matrix.values()])
