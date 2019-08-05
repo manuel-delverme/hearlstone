@@ -1,9 +1,10 @@
 import argparse
+import glob
 import os
+import re
 
 import torch
 
-# import agents.base_agent
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
 import agents.learning.ppo_agent
@@ -12,12 +13,9 @@ import game_utils
 import hs_config
 
 
-# torch.cuda.current_device()  # this is required for M$win driver to work
-
 def train(args):
   if not hs_config.comment and args.comment is None:
     import tkinter.simpledialog
-    # comment = "256h32bs"
     try:
       root = tkinter.Tk()
       hs_config.comment = tkinter.simpledialog.askstring("comment", "comment")
@@ -70,8 +68,19 @@ def train(args):
     game_manager.add_learning_opponent(args.p1)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
-    # pass
-    player.self_play(game_manager, checkpoint_file=None)  # , checkpoint_file=latest_checkpoint)
+    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'*{hs_config.comment}*')
+    # m = re.search('(?<=abc)def', 'abcdef')
+    # m.group(0)
+    checkpoint_files = sorted(checkpoints, key=lambda x: int(
+      # x.replace(":", "-").split("-")[-1][:-3]
+      re.search(r"(?<=steps=)\w*(?=:)", x).group(0)
+    ))
+    if checkpoint_files:
+      latest_checkpoint = checkpoint_files[-1]
+    else:
+      latest_checkpoint = None
+
+    player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 
 if __name__ == "__main__":

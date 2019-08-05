@@ -1,6 +1,5 @@
 import collections
 import pprint
-import warnings
 from collections import defaultdict
 from typing import Callable, Text, Optional
 
@@ -16,7 +15,6 @@ from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
 from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
-from shared import env_utils
 
 
 class DummyVecEnv(_DummyVecEnv):
@@ -57,9 +55,6 @@ class VecNormalize(_VecNormalize):
     Reset all environments
     """
     obs, rewards, dones, infos = self.vectorized_env.reset()
-    warnings.warn('fixme')
-    for oi, ri, info in zip(obs, rewards, infos):
-      info['game_statistics'] = (oi, ri)
     filtered_obs = self._obfilt(obs)
     return filtered_obs, rewards, dones, infos
 
@@ -118,7 +113,7 @@ def _make_env(
 
 
 def make_vec_envs(
-  load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, gamma: float, log_dir: Optional[Text],
+    load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, log_dir: Optional[Text],
   device: torch.device, allow_early_resets: bool) -> PyTorchCompatibilityWrapper:
   envs = [_make_env(load_env, process_num, log_dir, allow_early_resets) for process_num in range(num_processes)]
 
@@ -127,7 +122,7 @@ def make_vec_envs(
   else:
     vectorized_envs = SubprocVecEnv(envs)
 
-  normalized_envs = VecNormalize(vectorized_envs, gamma=gamma)
+  normalized_envs = VecNormalize(vectorized_envs, ret=False)
   pytorch_envs = PyTorchCompatibilityWrapper(normalized_envs, device)
   return pytorch_envs
 

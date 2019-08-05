@@ -6,32 +6,60 @@ import torch
 
 Info = NewType('Info', Dict[Text, Union[np.ndarray, Text]])
 
-INFO_KEYS = {'action_history', 'observation', 'possible_actions', 'reward'}
-# OPTIONAL_INFO_KEYS = {'episode', 'game_statistics', 'end_episode_info'}
-OPTIONAL_INFO_KEYS = {'game_statistics'}  # , 'episode'}
+INFO_KEYS = {
+  'possible_actions',
+}
+TERMINAL_GAME_INFO_KEYS = {
+  'game_statistics',
+}
+BOT_INFO_KEYS = {
+  'original_info',
+}
 
 
 def check_info_spec(info: Info):
   if INFO_KEYS != set(info.keys()):
-    assert set(info.keys()).difference(INFO_KEYS) == OPTIONAL_INFO_KEYS, set(info.keys())
+    keys = set(info.keys())
+    if keys.difference(INFO_KEYS) == TERMINAL_GAME_INFO_KEYS:
+      assert isinstance(info['game_statistics'], dict)
+      [float(s) for s in info['game_statistics'].values()]
 
-  assert isinstance(info['action_history'], list)
-  assert isinstance(info['observation'], np.ndarray)
+    elif keys.difference(INFO_KEYS) == BOT_INFO_KEYS:
+
+      assert isinstance(info['original_info'], dict)
+      assert set(info['original_info'].keys()) == {'game_options', 'game_snapshot'}
+
+      assert isinstance(info['original_info']['game_options'], dict)
+      import environments.sabber_hs
+      assert isinstance(info['original_info']['game_snapshot'], environments.sabber_hs._GameRef)
+
+    else:
+      raise AssertionError('invalid info format')
+
+  # assert isinstance(info['action_history'], list)
+  # assert isinstance(info['observation'], np.ndarray)
   assert isinstance(info['possible_actions'], np.ndarray)
-  assert isinstance(info['reward'], np.ndarray)
+  # assert isinstance(info['reward'], np.ndarray)
 
-  assert info['observation'].dtype in (np.float, np.int64, np.int32)
+  # assert info['observation'].dtype in (np.float, np.int64, np.int32)
   assert info['possible_actions'].dtype in (np.float32,)
-  assert info['reward'].dtype in (np.float32,)
+  # assert info['reward'].dtype in (np.float32,)
 
   assert 'end_episode_info' not in info or tuple(info['end_episode_info'].keys()) == ('reward',)
   return True
 
 
 def check_observation(num_inputs, observation):
-  assert observation.dtype == torch.float32, "{} is not float32".format(observation.dtype)
-  assert len(observation.size()) == 2  # batch_size, num_inputs
-  assert observation.size(1) == num_inputs
+  if isinstance(observation, torch.Tensor):
+    if observation.dtype not in (torch.float32,):
+      raise TypeError("{} is not correct".format(observation.dtype))
+  else:
+    raise TypeError
+
+  if len(observation.shape) != 2:  # batch_size, num_inputs
+    raise TypeError
+  if observation.shape[1] != num_inputs:
+    raise TypeError
   return True
 
 
@@ -43,8 +71,15 @@ def check_action(action):
 
 
 def check_possible_actions(num_possible_actions, possible_actions):
-  assert possible_actions.dtype == torch.float32
-  assert possible_actions.shape[1:] == (num_possible_actions,)
+  # if isinstance(possible_actions, np.ndarray):
+  #   if possible_actions.dtype != np.float32:
+  #     raise TypeError("{} is not correct".format(possible_actions.dtype))
+  if isinstance(possible_actions, torch.Tensor):
+    if possible_actions.dtype not in (torch.float32,):
+      raise TypeError("{} is not correct".format(possible_actions.dtype))
+
+  if num_possible_actions is not None:
+    assert possible_actions.shape[1:] == (num_possible_actions,)
   return True
 
 

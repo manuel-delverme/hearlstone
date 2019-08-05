@@ -12,7 +12,8 @@ class Agent(ABC):
     raise NotImplemented
 
   def choose(self, observation: np.ndarray, info: specs.Info):
-    # assert specs.check_info_spec(info)
+    assert specs.check_info_spec(info)
+    # assert specs.check_observation(C._STATE_SPACE, observation)
     return self._choose(observation, info['possible_actions'])
 
   def load_model(self, model_path=None):
@@ -31,16 +32,8 @@ class Bot(ABC):
     raise NotImplemented
 
   def choose(self, observation: np.ndarray, info: specs.Info):
-    assert set(info.keys()) == {*specs.INFO_KEYS, 'original_info'} or set(info.keys()) == {*specs.INFO_KEYS,
-                                                                                           *specs.OPTIONAL_INFO_KEYS,
-                                                                                           'original_info'}
-    assert isinstance(info['original_info'], dict)
-    assert isinstance(info['original_info']['game_options'], dict)
-    # assert info['original_info']['possible_actions'][0].card is None
-    # import environments.simulator
-    # assert isinstance(info['original_info']['possible_actions'][0], environments.simulator.HSsimulation.Action)
-
-    # assert specs.check_possible_actions(67, info['possible_actions'])
+    assert specs.check_info_spec(info)
+    assert len(info['possible_actions'].shape) == 1
     return self._choose(observation, info)
 
 
