@@ -132,7 +132,7 @@ def enumerate_actions():
     id_to_action.append((C.PlayerTaskType.HERO_ATTACK, C.BoardPosition(0), C.BoardPosition(target_id)))
 
   action_to_id_dict = {v: k for k, v in enumerate(id_to_action)}
-  assert len(id_to_action) == C._ACTION_SPACE
+  assert len(id_to_action) == C.ACTION_SPACE
   return action_to_id_dict
 
 
@@ -165,8 +165,6 @@ def game_stats(game):
   #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
 
 
-
-
 class Sabberstone(environments.base_env.RenderableEnv):
   DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
   DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
@@ -195,8 +193,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
       self.stub = Stub(sabberstone_grpc.SabberStonePythonStub(self.channel))
       self.game_snapshot = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
 
-    self.action_space = gym.spaces.Discrete(n=C._ACTION_SPACE)
-    self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C._STATE_SPACE,), dtype=np.int)
+    self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
+    self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
     self.turn_stats = []
     self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
@@ -319,7 +317,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     with self.logger("build_state"):
       state = parse_game(self.game_snapshot)
 
-    possible_actions = np.zeros(C._ACTION_SPACE, dtype=np.float32)
+    possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
     if not terminal:
       actions = self.parse_options(self.game_snapshot)
       possible_actions[list(actions.keys())] = 1

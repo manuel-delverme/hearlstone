@@ -94,7 +94,7 @@ def test_add_opponent():
   game_manager = game_utils.GameManager(seed=None, address='0.0.0.0:50052')
   game_manager.use_heuristic_opponent = False
   for _ in range(10000):
-    game_manager.add_learning_opponent("/home/esac/projects/hearlstone/ppo_save_dir/id=d10c4n3:steps=192:inputs=92.pt")
+    game_manager.add_learned_opponent("/home/esac/projects/hearlstone/ppo_save_dir/id=d10c4n3:steps=192:inputs=92.pt")
 
 
 if __name__ == '__main__':

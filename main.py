@@ -9,6 +9,17 @@ import agents.heuristic.random_agent
 import agents.learning.ppo_agent
 import game_utils
 import hs_config
+import shared.constants as C
+
+
+def load_latest_checkpoint():
+  checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'*{hs_config.comment}*')
+  checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
+  if checkpoint_files:
+    checkpoint = checkpoint_files[-1]
+  else:
+    checkpoint = None
+  return checkpoint
 
 
 def train(args):
@@ -21,15 +32,7 @@ def train(args):
     except tkinter.TclError as _:
       print("no-comment")
 
-  game_class = hs_config.Environment.get_game_mode(args.address)
-  dummy_hs_env = game_class()
-  num_actions = dummy_hs_env.action_space.n
-
-  player = agents.learning.ppo_agent.PPOAgent(
-      num_inputs=dummy_hs_env.observation_space.shape[0],
-      num_possible_actions=num_actions,
-  )
-  del dummy_hs_env
+  player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
   game_manager = game_utils.GameManager(address=args.address)
 
   if args.p1 is not None and args.p2 is None:
@@ -38,20 +41,10 @@ def train(args):
 
   elif args.p1 is not None and args.p2 is not None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
-    game_manager.add_learning_opponent(args.p1)
+    game_manager.add_learned_opponent(args.p1)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
-    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'*{hs_config.comment}*')
-    # m = re.search('(?<=abc)def', 'abcdef')
-    # m.group(0)
-    checkpoint_files = sorted(checkpoints, key=lambda x: int(
-        re.search(r"(?<=steps=)\w*(?=:)", x).group(0)
-    ))
-    if checkpoint_files:
-      latest_checkpoint = checkpoint_files[-1]
-    else:
-      latest_checkpoint = None
-
+    latest_checkpoint = load_latest_checkpoint()
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 

@@ -11,35 +11,21 @@ import hs_config
 
 
 class GameManager(object):
-  def __init__(self, seed=None, env_id=None, log_dir=None, address=hs_config.Environment.address):
-    assert log_dir is None
-    assert env_id is None
-    self.seed = seed
-    self._use_heuristic_opponent = True
-
+  def __init__(self, address=hs_config.Environment.address):
     self.game_class = hs_config.Environment.get_game_mode(address)
     self.opponents = collections.deque([agents.heuristic.random_agent.RandomAgent()], maxlen=hs_config.GameManager.max_opponents)
-    self.opponent_normalization_factors = [None]
     self.game_matrix = []
-
-  @property
-  def use_heuristic_opponent(self):
-    return self._use_heuristic_opponent
-
-  @use_heuristic_opponent.setter
-  def use_heuristic_opponent(self, value):
-    self._use_heuristic_opponent = value
 
   def __call__(self):
     hs_game = self.game_class()
     if self.use_heuristic_opponent:
-      hs_game.set_opponents(opponents=[hs_config.Environment.get_opponent()()], opponent_obs_rmss=[None, ])
+      hs_game.set_opponents(opponents=[hs_config.Environment.get_opponent()()])
     else:
       hs_game.set_opponents(opponents=self.opponents, opponent_obs_rmss=self.opponent_normalization_factors)
 
     return hs_game
 
-  def add_learning_opponent(self, checkpoint_file):
+  def add_learned_opponent(self, checkpoint_file):
     import agents.learning.ppo_agent
 
     if self.use_heuristic_opponent:

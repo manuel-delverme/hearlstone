@@ -69,9 +69,6 @@ class BaseEnv(gym.Env, ABC):
     self.opponent = None
     self.opponents = [None, ]
 
-    self.opponent_obs_rms = None
-    self.opponent_obs_rmss = [None, ]
-
   @property
   @abstractmethod
   def cards_in_hand(self):
@@ -85,9 +82,8 @@ class BaseEnv(gym.Env, ABC):
   def game_value(self):
     raise NotImplemented
 
-  def set_opponents(self, opponents, opponent_obs_rmss=None):
+  def set_opponents(self, opponents):
     self.opponents = opponents
-    self.opponent_obs_rmss = opponent_obs_rmss
 
 
 class RenderableEnv(BaseEnv):
