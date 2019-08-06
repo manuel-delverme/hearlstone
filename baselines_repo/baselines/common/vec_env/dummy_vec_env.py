@@ -49,6 +49,9 @@ class DummyVecEnv(VecEnv):
   def step_wait(self):
     for e in range(self.num_envs):
       obs, self.buf_rews[e], self.buf_dones[e], self.buf_infos[e] = self.envs[e].step(self.actions[e])
+      if self.buf_dones[e]:
+        obs, _, _, new_infos = self.envs[e].reset()
+        self.buf_infos[e]['possible_actions'] = new_infos['possible_actions']
       self._save_obs(e, obs)
     return self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones), self.buf_infos.copy()
 

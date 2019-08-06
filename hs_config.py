@@ -1,11 +1,8 @@
-import datetime
 import functools
 import os
 import sys
-import tempfile
 from typing import Callable, Type
 
-import tensorboardX
 import torch
 
 import agents.base_agent
@@ -13,9 +10,8 @@ import agents.base_agent
 use_gpu = False
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
-DEBUG = False
 # comment = "DELETEME" if DEBUG else "d10c4n3"
-comment = "checkpointisalie"
+comment = "DELETEME" if DEBUG else False
 device = torch.device("cuda:0" if use_gpu else "cpu")
 
 print_every = 20
@@ -58,8 +54,7 @@ class GameManager:
   old_opponent_prob = 0.2
   elo_lr = 16
   base_rating = 1000
-  elo_scale = torch.log(torch.Tensor([10.]))/400
-
+  elo_scale = torch.log(torch.Tensor([10.])) / 400
 
 
 class SelfPlay:
@@ -67,6 +62,7 @@ class SelfPlay:
 
 
 log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
+
 
 class PPOAgent:
   BIG_NUMBER = 9999999999999
@@ -94,18 +90,13 @@ class PPOAgent:
   tau = 0.95  # gae parameter
 
   entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
-  value_loss_coeff = 0.5
+  value_loss_coeff = 0.0005
   max_grad_norm = 0.5  # any bigger gradient is clipped
   num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
 
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
 
-
-tensorboard_dir = os.path.join(log_dir, f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
-if "DELETEME" in tensorboard_dir:
-  tensorboard_dir = tempfile.mktemp()
-tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
 
 if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
         Environment.no_subprocess)):

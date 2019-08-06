@@ -8,7 +8,6 @@ Info = NewType('Info', Dict[Text, Union[np.ndarray, Text]])
 
 INFO_KEYS = {
   'possible_actions',
-  'last_observation' # needed for viz
 }
 TERMINAL_GAME_INFO_KEYS = {
   'game_statistics',

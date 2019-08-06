@@ -18,10 +18,8 @@ from hearthstone.enums import CardClass, CardType
 from numpy import ndarray
 
 import hs_config
-import shared.constants as C
 from agents.base_agent import Agent
 from environments import base_env
-from sb_env.SabberStone_python_client import python_pb2
 
 
 class HSLogger(logging.Logger):
@@ -228,13 +226,3 @@ def init(module, weight_init, bias_init, gain=1):
   bias_init(module.bias.data)
   return module
 
-
-def can_autoreset(auto_reset, game_ref):
-  # the opponent cannot auto_reset
-  if not auto_reset:
-    return True
-  if game_ref.CurrentPlayer.id == C.AGENT_ID:
-    return True
-  if game_ref.state == python_pb2.Game.COMPLETE:
-    return True
-  return False

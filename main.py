@@ -1,6 +1,9 @@
 import argparse
+import datetime
 import glob
+import os
 import re
+import tempfile
 
 import torch
 
@@ -14,8 +17,9 @@ import shared.constants as C
 
 def load_latest_checkpoint():
   checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
-  checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
-  if checkpoint_files:
+  if checkpoints:
+    # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
+    checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
     checkpoint = checkpoint_files[-1]
   else:
     checkpoint = None
@@ -31,6 +35,11 @@ def train(args):
       root.destroy()
     except tkinter.TclError as _:
       print("no-comment")
+
+  hs_config.tensorboard_dir = os.path.join(hs_config.log_dir,
+                                           f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
+  if "DELETEME" in hs_config.tensorboard_dir:
+    hs_config.tensorboard_dir = tempfile.mktemp()
 
   player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
   game_manager = game_utils.GameManager(address=args.address)

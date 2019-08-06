@@ -7,6 +7,7 @@ import time
 from typing import Text, Optional, Tuple, List, Callable
 
 import numpy as np
+import tensorboardX
 import torch
 import tqdm
 
@@ -37,6 +38,8 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs: int, num_possible_actions: int) -> None:
     assert isinstance(__class__.__name__, str)
+
+    self.tensorboard = tensorboardX.SummaryWriter(hs_config.tensorboard_dir, flush_secs=2)
     self.timer = HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
 
     self.experiment_id = hs_config.comment
@@ -148,20 +151,20 @@ class PPOAgent(agents.base_agent.Agent):
 
       if ppo_update_num > 1:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
-          self.save_model(envs, total_num_steps)
+          self.save_model(total_num_steps)
 
         if ppo_update_num % self.eval_every == 0:
           with self.timer("eval_agents_self_play"):
             _rewards, _scores = self.eval_agent(eval_envs)
           performance = np.mean(_rewards)
-          hs_config.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
             self.timer.info("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
 
-    checkpoint_file = self.save_model(envs, total_num_steps)
+    checkpoint_file = self.save_model(total_num_steps)
 
     with self.timer("eval_agents_hs"):
       rewards, outcomes = self.eval_agent(valid_envs)
@@ -273,23 +276,23 @@ class PPOAgent(agents.base_agent.Agent):
       if fps > 1000:
         fps = float('nan')
 
-      hs_config.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
-      hs_config.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
+      self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
+      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
 
-    hs_config.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
-    hs_config.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
-    hs_config.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
-    hs_config.tensorboard.add_scalar('train/value_loss', value_loss, time_step)
-    hs_config.tensorboard.add_scalar('train/action_loss', action_loss, time_step)
+    self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
+    self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
+    self.tensorboard.add_scalar('train/entropy', dist_entropy, time_step)
+    self.tensorboard.add_scalar('train/value_loss', value_loss, time_step)
+    self.tensorboard.add_scalar('train/action_loss', action_loss, time_step)
     # too low, no learning, fix batch size
-    hs_config.tensorboard.add_scalar('train/policy_ratio', policy_ratio, time_step)
-    hs_config.tensorboard.add_scalar('train/mean_value', mean_value, time_step)
+    self.tensorboard.add_scalar('train/policy_ratio', policy_ratio, time_step)
+    self.tensorboard.add_scalar('train/mean_value', mean_value, time_step)
 
-    hs_config.tensorboard.add_scalar('zlosses/entropy', dist_entropy * self.entropy_coeff, time_step)
-    hs_config.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
-    hs_config.tensorboard.add_scalar('zlosses/action_loss', action_loss, time_step)
+    self.tensorboard.add_scalar('zlosses/entropy', dist_entropy * self.entropy_coeff, time_step)
+    self.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
+    self.tensorboard.add_scalar('zlosses/action_loss', action_loss, time_step)
 
-  def save_model(self, envs, total_num_steps):
+  def save_model(self, total_num_steps):
     try:
       os.makedirs(hs_config.PPOAgent.save_dir)
     except OSError:
@@ -301,7 +304,7 @@ class PPOAgent(agents.base_agent.Agent):
       model = self.actor_critic
 
     save_model = (model,)
-    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}:inputs={self.num_inputs}.pt"
+    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt"
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
@@ -399,7 +402,7 @@ class PPOAgent(agents.base_agent.Agent):
         (value_loss * self.value_loss_coeff).backward()
 
         grad_norm_critic = get_grad_norm(self.actor_critic.critic)
-        #torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
 
         self.value_optimizer.step()
         grad_norm_pi_epoch += grad_norm_pi
@@ -437,15 +440,15 @@ class PPOAgent(agents.base_agent.Agent):
 
         new_checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
 
-        hs_config.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
-        hs_config.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter, updates_so_far)
+        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
+        self.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter, updates_so_far)
 
         checkpoint_file = new_checkpoint_file
         # if win_ratio >= old_win_ratio:
         #   print('updating checkpoint')
         #   checkpoint_file = new_checkpoint_file
         #   shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-        #   hs_config.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
+        #   self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
         #   old_win_ratio = win_ratio
         #   assert not game_manager._use_heuristic_opponent
 
@@ -463,7 +466,7 @@ class PPOAgent(agents.base_agent.Agent):
         self.envs.close()
       if self.validation_envs:
         self.validation_envs.close()
-      hs_config.tensorboard.close()
+      self.tensorboard.close()
 
   def __exit__(self, exc_type, exc_val, exc_tb):
-    hs_config.tensorboard.close()
+    self.tensorboard.close()
