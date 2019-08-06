@@ -50,6 +50,10 @@ class Environment:
 class GameManager:
   max_opponents = 5
   old_opponent_prob = 0.2
+  elo_lr = 16
+  base_rating = 1000
+  elo_scale = torch.log(torch.Tensor([10.]))/400
+
 
 
 class SelfPlay:
