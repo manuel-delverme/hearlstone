@@ -13,7 +13,7 @@ import shared.constants as C
 
 
 def load_latest_checkpoint():
-  checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'*{hs_config.comment}*')
+  checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
   checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
   if checkpoint_files:
     checkpoint = checkpoint_files[-1]

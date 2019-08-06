@@ -92,8 +92,8 @@ class Elo:
                 [- delta * self.c[opponent_idx, 0], delta * self.c[self._player_idx, 0]]
                 ]
 
-    self.scores[[self._player_idx, opponent_idx]] += torch.Tensor(r_update)
-    self.c[[self._player_idx, opponent_idx]] += torch.Tensor(c_update)
+    self.scores[[self._player_idx, opponent_idx]] = self.scores[[self._player_idx, opponent_idx]] + torch.Tensor(r_update)
+    self.c[[self._player_idx, opponent_idx]] = self.c[[self._player_idx, opponent_idx]] + torch.Tensor(c_update)
 
   @property
   def player_score(self) -> float:
