@@ -18,7 +18,7 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 print_every = 20
 log_to_stdout = DEBUG
 
-tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
+tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
 if "DELETEME" in tensorboard_dir:
   tensorboard_dir = tempfile.mktemp()
 
