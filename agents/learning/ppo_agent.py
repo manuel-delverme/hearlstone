@@ -3,7 +3,6 @@ import copy
 import glob
 import itertools
 import os
-import shutil
 import time
 from typing import Text, Optional, Tuple, List, Callable
 
@@ -119,7 +118,7 @@ class PPOAgent(agents.base_agent.Agent):
     possible_actions = info['possible_actions']
     rollouts.store_first_transition(obs, possible_actions)
 
-    episode_rewards = collections.deque(maxlen=10)
+    episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
 
     start = time.time()  # TODO: bugged
     total_num_steps = None
@@ -139,30 +138,27 @@ class PPOAgent(agents.base_agent.Agent):
         rollouts.compute_returns(next_value)
 
       with self.timer("update"):
-        value_loss, action_loss, dist_entropy, policy_ratio, explained_variance, grad_pi, grad_value = self.update(rollouts)
+        value_loss, action_loss, dist_entropy, policy_ratio, mean_value, grad_pi, grad_value = self.update(rollouts)
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
       with self.timer("print_tb"):
         self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
-                         explained_variance, grad_pi=grad_pi, grad_value=grad_value)
+                         mean_value, grad_pi=grad_pi, grad_value=grad_value)
 
       if ppo_update_num > 1:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(envs, total_num_steps)
 
-        good_training_performance = len(episode_rewards) == episode_rewards.maxlen and (
-            np.mean(episode_rewards) > hs_config.PPOAgent.good_training_performance)
-
-        # TODO replace with should_eval(episode_rewards)
-        if ppo_update_num % self.eval_every == 0 or good_training_performance:
+        if ppo_update_num % self.eval_every == 0:
           with self.timer("eval_agents_self_play"):
             _rewards, _scores = self.eval_agent(eval_envs)
           performance = np.mean(_rewards)
           hs_config.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
-          if performance > hs_config.PPOAgent.winratio_cutoff:
+          if performance > hs_config.PPOAgent.performance_to_early_exit:
             self.timer.info("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
+            print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
 
     checkpoint_file = self.save_model(envs, total_num_steps)
@@ -174,6 +170,7 @@ class PPOAgent(agents.base_agent.Agent):
     return checkpoint_file, test_performance, ppo_update_num + 1
 
   def load_checkpoint(self, checkpoint_file):
+    print("loading checkpoint", checkpoint_file)
     self.actor_critic, = torch.load(checkpoint_file)
     self.actor_critic.to(hs_config.device)
     self.pi_optimizer = torch.optim.Adam(
@@ -268,7 +265,7 @@ class PPOAgent(agents.base_agent.Agent):
             if opponents is not None:
               opponents.append(info['opponent_nr'])
 
-  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, explained_variance,
+  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, mean_value,
       grad_value, grad_pi):
     end = time.time()
     if episode_rewards:
@@ -286,9 +283,7 @@ class PPOAgent(agents.base_agent.Agent):
     hs_config.tensorboard.add_scalar('train/action_loss', action_loss, time_step)
     # too low, no learning, fix batch size
     hs_config.tensorboard.add_scalar('train/policy_ratio', policy_ratio, time_step)
-
-    #  >= 1 good ev; =< 0 null predictor
-    hs_config.tensorboard.add_scalar('train/explained_variance', explained_variance, time_step)
+    hs_config.tensorboard.add_scalar('train/mean_value', mean_value, time_step)
 
     hs_config.tensorboard.add_scalar('zlosses/entropy', dist_entropy * self.entropy_coeff, time_step)
     hs_config.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
@@ -335,8 +330,7 @@ class PPOAgent(agents.base_agent.Agent):
       print("[Train] Loading training environments")
       self.enjoy_env = make_vec_envs(game_manager, num_processes=1, device=hs_config.device)
     else:
-      self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents,
-                                                     opponent_obs_rmss=game_manager.opponent_normalization_factors)
+      self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents)
 
     # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
@@ -378,8 +372,7 @@ class PPOAgent(agents.base_agent.Agent):
          possible_actions) = sample
 
         # Reshape to do in a single forward pass for all steps
-        values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(obs_batch, actions_batch,
-                                                                                    possible_actions)
+        values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(obs_batch, actions_batch, possible_actions)
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
         surr1 = ratio * adv_targ
@@ -423,17 +416,14 @@ class PPOAgent(agents.base_agent.Agent):
     num_updates = self.num_ppo_epochs * self.num_mini_batch
 
     values_pred = torch.tensor(values_pred)
-    values_gt = torch.tensor(values_gt)
-
-    explained_variance_epoch = ((1 - (values_pred - values_gt).var()) / values_pred.var()).item()
 
     value_loss_epoch /= num_updates
     action_loss_epoch /= num_updates
     dist_entropy_epoch /= num_updates
     ratio_epoch /= num_updates
-    explained_variance_epoch /= num_updates
+    value_mean = torch.mean(values_pred)
 
-    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, explained_variance_epoch, grad_norm_pi_epoch, grad_norm_value_epoch
+    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, value_mean, grad_norm_pi_epoch, grad_norm_value_epoch
 
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
     updates_so_far = 0
@@ -449,17 +439,20 @@ class PPOAgent(agents.base_agent.Agent):
 
         hs_config.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
         hs_config.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter, updates_so_far)
-        if win_ratio >= old_win_ratio:
-          print('updating checkpoint')
-          checkpoint_file = new_checkpoint_file
-          shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-          hs_config.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
-          old_win_ratio = win_ratio
-          assert not game_manager._use_heuristic_opponent
+
+        checkpoint_file = new_checkpoint_file
+        # if win_ratio >= old_win_ratio:
+        #   print('updating checkpoint')
+        #   checkpoint_file = new_checkpoint_file
+        #   shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
+        #   hs_config.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
+        #   old_win_ratio = win_ratio
+        #   assert not game_manager._use_heuristic_opponent
 
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
-        self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
-        self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
+        # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
+        # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
+
         pbar.update(num_updates)
 
     except KeyboardInterrupt:

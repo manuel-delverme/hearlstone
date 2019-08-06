@@ -106,7 +106,7 @@ class RenderableEnv(BaseEnv):
     if value is not None:
       self.values.append(float(value))
 
-    if reward is not None:
+    if reward is None:
       obs = self.last_info['last_observation']
       offset, board, hand, mana, hero = self.render_player(obs)
       self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
@@ -165,7 +165,7 @@ class RenderableEnv(BaseEnv):
             f.write(str(e))
           time.sleep(1)
     else:
-      winner_player = C.AGENT_ID if reward > 0 else  C.OPPONENT_ID
+      winner_player = C.AGENT_ID if reward > 0 else C.OPPONENT_ID
       self.gui.windows[C.Players.LOG].clear()
       self.gui.log(f"Game Over. P {winner_player}, and get reward {reward.item()}", row=1)
       time.sleep(5)

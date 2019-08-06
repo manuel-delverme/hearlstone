@@ -13,7 +13,9 @@ import agents.base_agent
 use_gpu = False
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
-comment = "DELETEME" if DEBUG else "d10c4n3"
+DEBUG = False
+# comment = "DELETEME" if DEBUG else "d10c4n3"
+comment = "checkpointisalie"
 device = torch.device("cuda:0" if use_gpu else "cpu")
 
 print_every = 20
@@ -68,8 +70,10 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 class PPOAgent:
   BIG_NUMBER = 9999999999999
-  winratio_cutoff = 0.8
-  good_training_performance = 0.6
+  performance_to_early_exit = 0.55
+
+  performance_for_early_eval = 0.50
+  num_episodes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
