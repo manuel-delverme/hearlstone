@@ -52,3 +52,51 @@ class GameManager(object):
       del opponent.timer  # TODO: this is an HACK, refactor it away
 
     self.opponents.append(opponent)
+
+class Elo:
+  def __init__(self):
+    # https://arxiv.org/pdf/1806.02643.pdf
+
+    max_opponents = hs_config.GameManager.max_opponents
+
+    self.scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
+    self.c = torch.rand(size=(max_opponents + 1, 2))
+    self.alpha = hs_config.GameManager.elo_scale
+    self.k = hs_config.GameManager.elo_lr
+    self._player_idx = -1  # last on the list
+
+  def __getitem__(self, item: int) -> float:
+    return self.scores[item]
+
+  def update(self, scores: dict):
+    for idx, score in scores.items():
+      idx += 1  # off by one from game manager distribution
+      p = torch.Tensor(score).clamp(0, 1).mean()
+      p_hat = self.__call__(idx)
+      delta = p - p_hat
+      self._grad(delta, opponent_idx=idx)
+
+  def _grad(self, delta: float, opponent_idx: int):
+    r_update = (self.k * delta, - self.k * delta)
+    c_update = [[delta * self.c[opponent_idx, 1], - delta * self.c[self._player_idx, 1]],
+                [- delta * self.c[opponent_idx, 0], delta * self.c[self._player_idx, 0]]
+                ]
+
+    self.scores[[self._player_idx, opponent_idx]] += torch.Tensor(r_update)
+    self.c[[self._player_idx, opponent_idx]] += torch.Tensor(c_update)
+
+  @property
+  def player_score(self) -> float:
+    return self.__getitem__(self._player_idx)
+
+  def _apply_rotation(self, opponent_idx: int) -> float:
+    z = (self.c[self._player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self._player_idx, 1])
+    return z
+
+  def __call__(self, opponent_idx: int, beta: float = 1.) -> float:
+    z = self._apply_rotation(opponent_idx)
+    x = self.player_score - self.__getitem__(opponent_idx) + beta * z
+    x = self.alpha * x
+    p_hat = torch.nn.Sigmoid()(x)
+    assert 0. < p_hat < 1.
+    return p_hat

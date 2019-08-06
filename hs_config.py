@@ -53,11 +53,17 @@ class Environment:
 class GameManager:
   max_opponents = 5
   old_opponent_prob = 0.2
+  elo_lr = 16
+  base_rating = 1000
+  elo_scale = torch.log(torch.Tensor([10.]))/400
+
 
 
 class SelfPlay:
   num_opponent_updates = 99
 
+
+log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 class PPOAgent:
   BIG_NUMBER = 9999999999999
@@ -69,9 +75,8 @@ class PPOAgent:
   hidden_size = 256  # 64
   eval_interval = 40
   save_interval = 100
-  _log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
-  save_dir = os.path.join(_log_dir, "model")
-  debug_dir = os.path.join(_log_dir, "debug")
+  save_dir = os.path.join(log_dir, "model")
+  debug_dir = os.path.join(log_dir, "debug")
 
   adam_lr = 7e-4
 
@@ -92,7 +97,7 @@ class PPOAgent:
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
 
 
-tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
+tensorboard_dir = os.path.join((log_dir, f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt"))
 if "DELETEME" in tensorboard_dir:
   tensorboard_dir = tempfile.mktemp()
 
