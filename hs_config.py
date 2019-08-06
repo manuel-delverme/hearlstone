@@ -5,6 +5,7 @@ import sys
 import tempfile
 from typing import Callable, Type
 
+import tensorboardX
 import torch
 
 import agents.base_agent
@@ -100,6 +101,7 @@ class PPOAgent:
 tensorboard_dir = os.path.join(log_dir, f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
 if "DELETEME" in tensorboard_dir:
   tensorboard_dir = tempfile.mktemp()
+tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
 
 if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
         Environment.no_subprocess)):
