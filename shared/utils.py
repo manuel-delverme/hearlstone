@@ -226,3 +226,13 @@ def init(module, weight_init, bias_init, gain=1):
   bias_init(module.bias.data)
   return module
 
+
+def can_autoreset(auto_reset, game_ref):
+  # the opponent cannot auto_reset
+  if not auto_reset:
+    return True
+  if game_ref.CurrentPlayer.id == C.AGENT_ID:
+    return True
+  if game_ref.state == python_pb2.Game.COMPLETE:
+    return True
+  return False

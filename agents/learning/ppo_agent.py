@@ -1,8 +1,10 @@
 import collections
 import copy
+import datetime
 import glob
 import itertools
 import os
+import tempfile
 import time
 from typing import Text, Optional, Tuple, List, Callable
 
@@ -38,13 +40,12 @@ class PPOAgent(agents.base_agent.Agent):
 
   def __init__(self, num_inputs: int, num_possible_actions: int) -> None:
     assert isinstance(__class__.__name__, str)
-
-    self.tensorboard = tensorboardX.SummaryWriter(hs_config.tensorboard_dir, flush_secs=2)
     self.timer = HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
 
     self.experiment_id = hs_config.comment
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
+    self.tensorboard = None
     self.envs = None
     self.eval_envs = None
     self.validation_envs = None
@@ -100,6 +101,17 @@ class PPOAgent(agents.base_agent.Agent):
         lr=hs_config.PPOAgent.adam_lr,
     )
 
+  def update_experiment_logging(self):
+    tensorboard_dir = os.path.join(f"logs/tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
+
+    if "DELETEME" in tensorboard_dir:
+      tensorboard_dir = tempfile.mktemp()
+
+    if self.tensorboard is not None:
+      self.tensorboard.close()
+
+    self.tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
+
   def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
       num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     assert updates_offset >= 0
@@ -110,17 +122,18 @@ class PPOAgent(agents.base_agent.Agent):
     with self.timer("load_ckpt"):
       if checkpoint_file:
         print(f"[Train] Loading ckpt {checkpoint_file}")
-        self.load_checkpoint(checkpoint_file)
+        self.load_checkpoint(checkpoint_file, envs)
+
+        assert game_manager.use_heuristic_opponent is False or num_updates == 1
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
 
     rollouts = RolloutStorage(self.num_inputs, self.num_actions)
-
     obs, _, _, info = envs.reset()
     possible_actions = info['possible_actions']
-    rollouts.store_first_transition(obs, possible_actions)
 
+    rollouts.store_first_transition(obs, possible_actions)
     episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
 
     start = time.time()  # TODO: bugged
@@ -172,8 +185,7 @@ class PPOAgent(agents.base_agent.Agent):
     test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
 
-  def load_checkpoint(self, checkpoint_file):
-    print("loading checkpoint", checkpoint_file)
+  def load_checkpoint(self, checkpoint_file, envs):
     self.actor_critic, = torch.load(checkpoint_file)
     self.actor_critic.to(hs_config.device)
     self.pi_optimizer = torch.optim.Adam(
@@ -187,21 +199,25 @@ class PPOAgent(agents.base_agent.Agent):
   def setup_envs(self, game_manager: game_utils.GameManager):
     if self.envs is None:
       print("[Train] Loading training environments")
+      # TODO @d3sm0 clean this up
+      game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs(game_manager, self.num_processes)
     else:
+      game_manager.use_heuristic_opponent = False
       self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
+      game_manager.use_heuristic_opponent = False
       self.eval_envs = make_vec_envs(game_manager, self.num_processes)
     else:
+      game_manager.use_heuristic_opponent = False
       self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
-      game_manager.set_heuristic_opponent()
+      game_manager.use_heuristic_opponent = True
       self.validation_envs = make_vec_envs(game_manager, self.num_processes)
-      game_manager.unset_heuristic_opponent()
 
     return self.envs, self.eval_envs, self.validation_envs
 
@@ -231,7 +247,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards, dict(scores)
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,
-      opponents: List = None):
+      opponents: list = None):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -337,7 +353,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
-      self.load_checkpoint(checkpoint_file)
+      self.load_checkpoint(checkpoint_file, self.enjoy_env)
 
     obs, _, _, infos = self.enjoy_env.reset()
 
@@ -429,6 +445,7 @@ class PPOAgent(agents.base_agent.Agent):
     return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, value_mean, grad_norm_pi_epoch, grad_norm_value_epoch
 
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
+    self.update_experiment_logging()
     updates_so_far = 0
     updates_schedule = [1, ]
     updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
@@ -439,6 +456,7 @@ class PPOAgent(agents.base_agent.Agent):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
 
         new_checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
+        assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
         self.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter, updates_so_far)

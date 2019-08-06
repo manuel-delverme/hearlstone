@@ -22,7 +22,7 @@ class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  no_subprocess = False
+  no_subprocess = True
   address = "0.0.0.0:50052"
 
   newest_opponent_prob = 0.5

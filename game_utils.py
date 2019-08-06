@@ -12,34 +12,38 @@ import hs_config
 
 
 class GameManager(object):
-  def __init__(self, address=hs_config.Environment.address):
+  def __init__(self, seed=None, address=hs_config.Environment.address):
+    self.seed = seed
+    self._use_heuristic_opponent = True
+
     self.game_class = hs_config.Environment.get_game_mode(address)
     self.opponents = collections.deque([agents.heuristic.random_agent.RandomAgent()], maxlen=hs_config.GameManager.max_opponents)
     self.game_matrix = []
-    self._use_heuristic_opponent = False
 
-  def set_heuristic_opponent(self):
-    self._use_heuristic_opponent = True
+  @property
+  def use_heuristic_opponent(self):
+    return self._use_heuristic_opponent
 
-  def unset_heuristic_opponent(self):
-    self._use_heuristic_opponent = False
+  @use_heuristic_opponent.setter
+  def use_heuristic_opponent(self, value):
+    self._use_heuristic_opponent = value
 
   def __call__(self):
     hs_game = self.game_class()
-    if self._use_heuristic_opponent:
+    if self.use_heuristic_opponent:
       hs_game.set_opponents(opponents=[hs_config.Environment.get_opponent()()])
     else:
       hs_game.set_opponents(opponents=self.opponents)
+
     return hs_game
 
   def add_learned_opponent(self, checkpoint_file):
-    assert not self._use_heuristic_opponent
-
     import agents.learning.ppo_agent
 
-    if isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent):
-      del self.opponents[0]
-
+    if self.use_heuristic_opponent:
+      assert isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent)
+      self.opponents = []
+      self.use_heuristic_opponent = False
     opponent_network, = torch.load(checkpoint_file)
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions)
@@ -56,8 +60,8 @@ class GameManager(object):
       del opponent.logger  # TODO: this is an HACK, refactor it away
     if hasattr(opponent, 'timer'):  # the timer has rlocks which cannot change process so RIP
       del opponent.timer  # TODO: this is an HACK, refactor it away
-    if hasattr(opponent, 'tensorboard'):  # the timer has rlocks which cannot change process so RIP
-      del opponent.tensorboard  # TODO: this is an HACK, refactor it away
+    # if hasattr(opponent, 'tensorboard'):  # the timer has rlocks which cannot change process so RIP
+    #   del opponent.tensorboard  # TODO: this is an HACK, refactor it away
 
     assert pickle.dumps(opponent)
     self.opponents.append(opponent)

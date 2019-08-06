@@ -50,7 +50,7 @@ def train(args):
 
   elif args.p1 is not None and args.p2 is not None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
-    game_manager.add_learned_opponent(args.p1)
+    game_manager.add_learning_opponent(args.p1)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
     latest_checkpoint = load_latest_checkpoint()
