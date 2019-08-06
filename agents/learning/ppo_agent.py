@@ -113,7 +113,6 @@ class PPOAgent(agents.base_agent.Agent):
       if checkpoint_file:
         print(f"[Train] Loading ckpt {checkpoint_file}")
         assert game_manager.use_heuristic_opponent is False or num_updates == 1
-
         self.load_checkpoint(checkpoint_file)
 
     assert envs.observation_space.shape == (self.num_inputs,)
@@ -166,8 +165,10 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
           if performance > hs_config.PPOAgent.winratio_cutoff:
             with self.timer("eval_agents_self_play"):
+            # get performance from here and update helo against your distribution
               p = self.eval_agent(envs, eval_envs)
             performance = np.mean(p.values())
+            # {idx:[rewards]}
             self.timer.info("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
 

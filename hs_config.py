@@ -22,7 +22,6 @@ tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H
 if "DELETEME" in tensorboard_dir:
   tensorboard_dir = tempfile.mktemp()
 
-
 class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
