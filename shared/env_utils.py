@@ -13,7 +13,6 @@ from baselines_repo.baselines.common import vec_env
 from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as _DummyVecEnv
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
-from baselines_repo.baselines.common.vec_env.vec_normalize import VecNormalize as _VecNormalize
 
 
 class DummyVecEnv(_DummyVecEnv):
@@ -27,35 +26,6 @@ class DummyVecEnv(_DummyVecEnv):
       self._save_obs(e, obs)
 
     return self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones), self.buf_infos.copy()
-
-
-class VecNormalize(_VecNormalize):
-  def __init__(self, *args, **kwargs):
-    super(VecNormalize, self).__init__(*args, **kwargs)
-    self.training = True
-
-  def _obfilt(self, obs):
-    if self.ob_rms:
-      if self.training:
-        self.ob_rms.update(obs)
-      obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
-      return obs
-    else:
-      return obs
-
-  def train(self):
-    self.training = True
-
-  def eval(self):
-    self.training = False
-
-  def reset(self):
-    """
-    Reset all environments
-    """
-    obs, rewards, dones, infos = self.vectorized_env.reset()
-    filtered_obs = self._obfilt(obs)
-    return filtered_obs, rewards, dones, infos
 
 
 class PyTorchCompatibilityWrapper(VecEnvWrapper):
@@ -118,8 +88,7 @@ def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_
   else:
     vectorized_envs = SubprocVecEnv(envs)
 
-  normalized_envs = VecNormalize(vectorized_envs, ret=False)
-  pytorch_envs = PyTorchCompatibilityWrapper(normalized_envs, device)
+  pytorch_envs = PyTorchCompatibilityWrapper(vectorized_envs, device)
   return pytorch_envs
 
 

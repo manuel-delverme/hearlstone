@@ -210,7 +210,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
       reward = -1
     else:
       reward = 0
-    return np.array(reward, dtype=np.float32)
+    return np.float32(reward)
 
   def parse_options(self, game, return_options=False):
     if not hasattr(game, '_options'):
@@ -351,6 +351,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
         'outcome': reward,
         'life_adv': self.turn_stats[-1].life_adv,
         'mean_opponent': counts.mean(),
+        'opponent_nr': self.current_k,
       }
 
     info = frozendict.frozendict(info)

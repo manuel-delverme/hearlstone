@@ -19,7 +19,6 @@ from numpy import ndarray
 
 import hs_config
 import shared.constants as C
-import shared.env_utils
 from agents.base_agent import Agent
 from environments import base_env
 from sb_env.SabberStone_python_client import python_pb2
@@ -214,12 +213,6 @@ def one_hot_actions(actions: Union[Tuple[Tuple[int, int]], Tuple[Tuple[int, int,
     for pa in pas:
       possible_actions[row, pa] = 1
   return possible_actions
-
-
-def get_vec_normalize(venv):
-  if isinstance(venv, shared.env_utils.VecNormalize):
-    return venv
-  return get_vec_normalize(venv.vectorized_env)
 
 
 def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):

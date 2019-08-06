@@ -5,8 +5,7 @@ import itertools
 import os
 import shutil
 import time
-import warnings
-from typing import Text, Optional, Tuple
+from typing import Text, Optional, Tuple, List, Callable
 
 import numpy as np
 import tensorboardX
@@ -16,7 +15,6 @@ import tqdm
 import agents.base_agent
 import game_utils
 import hs_config
-import shared.utils
 import specs
 from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
@@ -156,8 +154,8 @@ class PPOAgent(agents.base_agent.Agent):
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(envs, total_num_steps)
 
-        great_performance = (1 - (1 - hs_config.PPOAgent.winratio_cutoff) * 2)
-        good_training_performance = len(episode_rewards) == episode_rewards.maxlen and (np.mean(episode_rewards) > great_performance)
+        good_training_performance = len(episode_rewards) == episode_rewards.maxlen and (
+            np.mean(episode_rewards) > hs_config.PPOAgent.good_training_performance)
 
         # todo replace with should_eval(episode_rewards)
         if ppo_update_num % self.eval_every == 0 or good_training_performance:
@@ -165,7 +163,7 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
           if performance > hs_config.PPOAgent.winratio_cutoff:
             with self.timer("eval_agents_self_play"):
-            # get performance from here and update helo against your distribution
+              # get performance from here and update helo against your distribution
               p = self.eval_agent(envs, eval_envs)
             performance = np.mean(p.values())
             # {idx:[rewards]}
@@ -175,9 +173,9 @@ class PPOAgent(agents.base_agent.Agent):
     checkpoint_file = self.save_model(envs, total_num_steps)
 
     with self.timer("eval_agents_hs"):
-      outcome = self.eval_agent(envs, valid_envs)
+      rewards, outcomes = self.eval_agent(valid_envs)
 
-    test_performance = float(np.mean(outcome))
+    test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
 
   def load_checkpoint(self, checkpoint_file):
@@ -227,21 +225,22 @@ class PPOAgent(agents.base_agent.Agent):
 
     return env
 
-  def eval_agent(self, train_envs, eval_envs):
-    vec_norm = shared.utils.get_vec_normalize(eval_envs)
-    assert vec_norm is not None
-    vec_norm.eval()
-    vec_norm.ob_rms = shared.utils.get_vec_normalize(train_envs).ob_rms
-
+  def eval_agent(self, eval_envs):
     rewards = []
 
     def stop_eval(rews, step):
       return len(rews) >= hs_config.PPOAgent.num_eval_games
 
-    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval)
-    return rewards
+    opponents = []
+    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, opponents=opponents)
 
-  def gather_rollouts(self, rollouts, rewards, envs, exit_condition, deterministic=False):
+    scores = collections.defaultdict(list)
+    for k, r in zip(opponents, rewards):
+      scores[k].append(r)
+    return rewards, dict(scores)
+
+  def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,
+      opponents: List = None):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -269,11 +268,14 @@ class PPOAgent(agents.base_agent.Agent):
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
       assert 'game_statistics' in specs.TERMINAL_GAME_INFO_KEYS
       if 'game_statistics' in infos:
-        warnings.warn('breaks if reward shaping')
+
         for info in infos['game_statistics']:
           outcome = info['outcome']
           if outcome != 0:
+            assert isinstance(outcome, np.float32)
             rewards.append(outcome)
+            if opponents is not None:
+              opponents.append(info['opponent_nr'])
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, explained_variance,
       grad_value, grad_pi):
