@@ -21,7 +21,7 @@ class GameManager(object):
     if self.use_heuristic_opponent:
       hs_game.set_opponents(opponents=[hs_config.Environment.get_opponent()()])
     else:
-      hs_game.set_opponents(opponents=self.opponents, opponent_obs_rmss=self.opponent_normalization_factors)
+      hs_game.set_opponents(opponents=self.opponents)
 
     return hs_game
 

@@ -386,21 +386,12 @@ class Sabberstone(environments.base_env.RenderableEnv):
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
     self.opponent = self.opponents[k]
-    # self.opponent = self.opponents[-1]
-
-    if self.opponent_obs_rmss is not None:
-      self.opponent_obs_rmss = self.opponent_obs_rmss[k]
-
     self.current_k = k
 
   def play_opponent_action(self):
     assert self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID
     with self.logger("opponent_step"):
       observation, _, terminal, info = self.gather_transition(auto_reset=False)
-
-    if self.opponent_obs_rms is not None:
-      raise NotImplementedError
-      observation = (observation - self.opponent_obs_rms.mean) / np.sqrt(self.opponent_obs_rms.var)
 
     bot_info = dict(info)
     bot_info['original_info'] = {
