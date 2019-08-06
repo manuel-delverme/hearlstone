@@ -97,7 +97,7 @@ class PPOAgent:
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
 
 
-tensorboard_dir = os.path.join((log_dir, f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt"))
+tensorboard_dir = os.path.join(log_dir, f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
 if "DELETEME" in tensorboard_dir:
   tensorboard_dir = tempfile.mktemp()
 
