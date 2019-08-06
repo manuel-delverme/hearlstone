@@ -68,8 +68,8 @@ PlayerTaskType.__call__ = lambda x: x
 
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
-_ACTION_SPACE = 249
-_STATE_SPACE = 92  # state space includes card_index
+ACTION_SPACE = 249
+STATE_SPACE = 92  # state space includes card_index
 
 Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
 Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])

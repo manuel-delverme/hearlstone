@@ -1,7 +1,10 @@
+import datetime
 import functools
-import sys
-from typing import Callable, Type
 import os
+import sys
+import tempfile
+from typing import Callable, Type
+
 import torch
 
 import agents.base_agent
@@ -15,12 +18,15 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 print_every = 20
 log_to_stdout = DEBUG
 
+tensorboard_dir = os.path.join(f"logs/tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
+if "DELETEME" in tensorboard_dir:
+  tensorboard_dir = tempfile.mktemp()
 
 class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  no_subprocess = True
+  no_subprocess = False
   address = "0.0.0.0:50052"
 
   newest_opponent_prob = 0.5
@@ -36,8 +42,8 @@ class Environment:
   def get_game_mode(address: str) -> Callable[[], Callable]:
     import environments.sabber_hs
     out = functools.partial(
-      environments.sabber_hs.Sabberstone,
-      address
+        environments.sabber_hs.Sabberstone,
+        address
     )
     return out
 
@@ -68,13 +74,11 @@ class PPOAgent:
   hidden_size = 256  # 64
   eval_interval = 40
   save_interval = 100
-  save_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone","logs/model")
-  log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
-  debug_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone",  "logs/debug")
-  adam_lr = 7e-4
+  _log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
+  save_dir = os.path.join(_log_dir, "model")
+  debug_dir = os.path.join(_log_dir, "debug")
 
-  # Algorithm use_linear_clip_decay = False
-  use_linear_lr_decay = False
+  adam_lr = 7e-4
 
   num_processes = 2 if DEBUG else 6  # number of CPU processes
   num_steps = 32
@@ -93,7 +97,8 @@ class PPOAgent:
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
 
 
-if Environment.ENV_DEBUG:
+if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
+        Environment.no_subprocess)):
   print('''
                                     _.---"'"""""'`--.._
                              _,.-'                   `-._
