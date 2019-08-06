@@ -200,6 +200,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.turn_stats = []
     self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
+    self.last_observation = None
 
   def cards_in_hand(self):
     raise len(self.game_snapshot.CurrentPlayer.hand_zone)
@@ -357,6 +358,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     info = frozendict.frozendict(info)
     assert info['possible_actions'].max() == 1 or terminal
     self.last_info = info  # for rendering render
+    self.last_observation = state
     return state, reward, terminal, info
 
   def game_matrix(self, idx, reward):

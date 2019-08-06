@@ -75,3 +75,13 @@ Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
 Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
 SPELL_IDS = set(SPELLS)
+
+
+class Players(enum.Enum):
+  AGENT = 0
+  OPPONENT = 1
+  LOG = 2
+
+
+CARD_WIDTH = 1  # width of box to draw card in
+CARD_HEIGHT = 3
