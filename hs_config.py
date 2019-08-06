@@ -18,9 +18,6 @@ device = torch.device("cuda:0" if use_gpu else "cpu")
 print_every = 20
 log_to_stdout = DEBUG
 
-tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
-if "DELETEME" in tensorboard_dir:
-  tensorboard_dir = tempfile.mktemp()
 
 class Environment:
   ENV_DEBUG = False
@@ -65,6 +62,8 @@ class SelfPlay:
 class PPOAgent:
   BIG_NUMBER = 9999999999999
   winratio_cutoff = 0.8
+  good_training_performance = 0.6
+
   num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256  # 64
@@ -92,6 +91,10 @@ class PPOAgent:
 
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
 
+
+tensorboard_dir = os.path.join(f"logs/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{comment}.pt")
+if "DELETEME" in tensorboard_dir:
+  tensorboard_dir = tempfile.mktemp()
 
 if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
         Environment.no_subprocess)):
