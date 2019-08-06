@@ -98,7 +98,7 @@ class RenderableEnv(BaseEnv):
     self.values = collections.deque(maxlen=100)
     self.health = collections.deque(maxlen=100)
 
-  def render(self, mode='human', choice=None, action_distribution=None, value=None):
+  def render(self, mode='human', choice=None, action_distribution=None, value=None, reward=None):
     if self.gui is None:
       import gui
       self.gui = gui.GUI()
@@ -106,72 +106,70 @@ class RenderableEnv(BaseEnv):
     if value is not None:
       self.values.append(float(value))
 
-    obs = self.last_info['observation']
-    offset, board, hand, mana, hero = self.render_player(obs)
-    self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
-    hero_health = hero.health
+    if reward is not None:
+      obs = self.last_info['last_observation']
+      offset, board, hand, mana, hero = self.render_player(obs)
+      self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
+      hero_health = hero.health
 
-    offset, board, hand, mana, hero = self.render_player(obs, offset, show_hand=False)
-    self.gui.draw_opponent(hero=hero, board=board, hand=hand, mana=mana)
-    self.health.append(float(hero_health) / float(hero.health))
+      offset, board, hand, mana, hero = self.render_player(obs, offset, show_hand=False)
+      self.gui.draw_opponent(hero=hero, board=board, hand=hand, mana=mana)
+      self.health.append(float(hero_health) / float(hero.health))
 
-    info = self.last_info.copy()
-    pi = np.argwhere(info['possible_actions']).flatten()
-    pretty_actions = []
-    options, _ = self.parse_options(self.game_snapshot, return_options=True)
+      info = self.last_info.copy()
+      pi = np.argwhere(info['possible_actions']).flatten()
+      pretty_actions = []
+      options, _ = self.parse_options(self.game_snapshot, return_options=True)
 
-    logit = {}
-    for possible_idx in pi:
-      logit[possible_idx] = action_distribution.log_prob(torch.tensor(possible_idx))
+      logit = {}
+      for possible_idx in pi:
+        logit[possible_idx] = action_distribution.log_prob(torch.tensor(possible_idx))
 
-    lk = logit.keys()
-    lv = [logit[k] for k in lk]
+      lk = logit.keys()
+      lv = [logit[k] for k in lk]
 
-    if len(lv) == 1:
-      probs = [1]
-    else:
-      _probs = torch.tensor(lv).softmax(dim=0)
-      probs = dict(zip(lk, _probs))
+      if len(lv) == 1:
+        probs = [1]
+      else:
+        _probs = torch.tensor(lv).softmax(dim=0)
+        probs = dict(zip(lk, _probs))
 
-    for possible_idx in pi:
-      action_log_prob = action_distribution.log_prob(torch.tensor(possible_idx))
-      pretty_actions.append(
-          (possible_idx, options[possible_idx].print, float(action_log_prob), float(probs[possible_idx])))
+      for possible_idx in pi:
+        action_log_prob = action_distribution.log_prob(torch.tensor(possible_idx))
+        pretty_actions.append(
+            (possible_idx, options[possible_idx].print, float(action_log_prob), float(probs[possible_idx])))
 
-    action_history = info['action_history']
-    del info['action_history']
-    del info['observation']
-    del info['game_statistics']
-    row_number = 0
-    if action_history:
-      self.gui.log(action_history[0], row=1)
+      row_number = 1
+      self.gui.log(str(self.__str__()), row=row_number, multiline=False)
       row_number += 1
-      if len(action_history) > 1:
-        self.gui.log(action_history[1], row=2)
-        row_number += 1
-    row_number += 1
-    self.gui.log(f"value: {float(value)}, choice: {int(choice)}", row=row_number, multiline=False)
-    row_number += 1
+      self.gui.log(f"value: {float(value)}, choice: {int(choice)}", row=row_number, multiline=False)
+      row_number += 1
 
-    row_number = self.log_plot(row_number, self.values)
-    row_number = self.log_plot(row_number, self.health)
+      row_number = self.log_plot(row_number, self.values)
+      row_number = self.log_plot(row_number, self.health)
 
-    first_row_number = row_number
-    if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
-      self.gui.log(f"{[p[1] for p in pretty_actions[:3]]}", row=row_number, multiline=True)
+      first_row_number = row_number
+      if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
+        self.gui.log(f"{[p[1] for p in pretty_actions[:3]]}", row=row_number, multiline=True)
+      else:
+        try:
+          for row_number, (k, v, logit, p) in enumerate(sorted(pretty_actions, key=lambda r: r[-2], reverse=True),
+                                                        start=row_number):
+            if k == choice:
+              self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v} SELECTED", row=row_number, multiline=True)
+            else:
+              self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v}", row=row_number, multiline=True)
+        except Exception as e:
+          print(f" {self.gui.game_height - len(pretty_actions) - first_row_number} " * 1000)
+          with open('/tmp/err.log', 'w') as f:
+            f.write(str(e))
+          time.sleep(1)
     else:
-      try:
-        for row_number, (k, v, logit, p) in enumerate(sorted(pretty_actions, key=lambda r: r[-2], reverse=True),
-                                                      start=row_number):
-          if k == choice:
-            self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v} SELECTED", row=row_number, multiline=True)
-          else:
-            self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v}", row=row_number, multiline=True)
-      except Exception as e:
-        print(f" {self.gui.game_height - len(pretty_actions) - first_row_number} " * 1000)
-        with open('/tmp/err.log', 'w') as f:
-          f.write(str(e))
-        time.sleep(1)
+      winner_player = C.AGENT_ID if reward > 0 else  C.OPPONENT_ID
+      self.gui.windows[C.Players.LOG].clear()
+      self.gui.log(f"Game Over. P {winner_player}, and get reward {reward.item()}", row=1)
+      time.sleep(5)
+      self.gui.log("Waiting for next game", row=2)
 
     if mode == 'human':
       return self.gui.screen.getch()
@@ -192,15 +190,6 @@ class RenderableEnv(BaseEnv):
     hero = C.Hero(*hero)
     offset += self.hero_encoding_size
 
-    # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
-    board = []
-    for minion_number in range(hs_config.Environment.max_cards_in_board):
-      card = obs[offset: offset + self.minion_encoding_size]
-      if card.max() > -1:
-        minion = C.Minion(*card)
-        board.append(minion)
-      offset += self.minion_encoding_size
-
     hand = []
     if show_hand:
       for minion_number in range(hs_config.Environment.max_cards_in_hand):
@@ -210,4 +199,12 @@ class RenderableEnv(BaseEnv):
           card = C.Card(*card)
           hand.append(card)
         offset += self.hand_encoding_size
+    # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
+    board = []
+    for minion_number in range(hs_config.Environment.max_cards_in_board):
+      card = obs[offset: offset + self.minion_encoding_size]
+      if card.max() > -1:
+        minion = C.Minion(*card)
+        board.append(minion)
+      offset += self.minion_encoding_size
     return offset, board, hand, mana, hero

@@ -15,6 +15,7 @@ class GameManager(object):
     self.game_class = hs_config.Environment.get_game_mode(address)
     self.opponents = collections.deque([agents.heuristic.random_agent.RandomAgent()], maxlen=hs_config.GameManager.max_opponents)
     self.game_matrix = []
+    self.use_heuristic_opponent = True
 
   def __call__(self):
     hs_game = self.game_class()
@@ -53,6 +54,7 @@ class GameManager(object):
 
     self.opponents.append(opponent)
 
+
 class Elo:
   def __init__(self):
     # https://arxiv.org/pdf/1806.02643.pdf
@@ -82,8 +84,8 @@ class Elo:
                 [- delta * self.c[opponent_idx, 0], delta * self.c[self._player_idx, 0]]
                 ]
 
-    self.scores[[self._player_idx, opponent_idx]] += torch.Tensor(r_update)
-    self.c[[self._player_idx, opponent_idx]] += torch.Tensor(c_update)
+    self.scores[[self._player_idx, opponent_idx]] = self.scores[[self._player_idx, opponent_idx]] + torch.Tensor(r_update)
+    self.c[[self._player_idx, opponent_idx]] = self.c[[self._player_idx, opponent_idx]] + torch.Tensor(c_update)
 
   @property
   def player_score(self) -> float:

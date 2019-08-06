@@ -347,7 +347,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
-      self.load_checkpoint(checkpoint_file, self.enjoy_env)
+      self.load_checkpoint(checkpoint_file)
 
     obs, _, _, infos = self.enjoy_env.reset()
 
@@ -360,6 +360,7 @@ class PPOAgent(agents.base_agent.Agent):
       obs, reward, done, infos = self.enjoy_env.step(action)
 
       if done:
+        self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value, reward=reward)
         self.enjoy_env.reset()
 
   def update(self, rollouts: RolloutStorage):

@@ -337,6 +337,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     info = {
       'possible_actions': possible_actions,
+      'last_observation':state # if you want to see shit leave it here...
     }
     if terminal:
       # TODO maybe make me better
