@@ -400,14 +400,13 @@ class PPOAgent(agents.base_agent.Agent):
         grad_norm_pi = get_grad_norm(self.actor_critic.actor)
         self.pi_optimizer.step()
 
-        # TODO check me
-        torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+        #torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
 
         self.value_optimizer.zero_grad()
         (value_loss * self.value_loss_coeff).backward()
 
         grad_norm_critic = get_grad_norm(self.actor_critic.critic)
-        torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
+        #torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
 
         self.value_optimizer.step()
         grad_norm_pi_epoch += grad_norm_pi
