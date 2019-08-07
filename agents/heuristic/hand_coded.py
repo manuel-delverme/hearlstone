@@ -7,9 +7,9 @@ import torch
 
 import agents.base_agent
 import agents.heuristic.random_agent
-import environments.sabber_hs
 import hs_config
 import shared.constants as C
+import shared.env_utils
 import shared.utils
 import specs
 
@@ -101,9 +101,9 @@ def parse_game(info):
   player_hero = C.Hero(*parse_hero(game_snapshot.CurrentPlayer.hero))
   opponent_hero = C.Hero(*parse_hero(game_snapshot.CurrentOpponent.hero))
 
-  hand_zone = list(map(lambda x: C.Card(*environments.sabber_hs.parse_card(x)), game_snapshot.CurrentPlayer.hand_zone.entities))
-  player_board = list(map(lambda x: C.Minion(*environments.sabber_hs.parse_minion(x)), game_snapshot.CurrentPlayer.board_zone.minions))
-  opponent_board = list(map(lambda x: C.Minion(*environments.sabber_hs.parse_minion(x)), game_snapshot.CurrentOpponent.board_zone.minions))
+  hand_zone = list(map(lambda x: C.Card(*shared.env_utils.parse_card(x)), game_snapshot.CurrentPlayer.hand_zone.entities))
+  player_board = list(map(lambda x: C.Minion(*shared.env_utils.parse_minion(x)), game_snapshot.CurrentPlayer.board_zone.minions))
+  opponent_board = list(map(lambda x: C.Minion(*shared.env_utils.parse_minion(x)), game_snapshot.CurrentOpponent.board_zone.minions))
   return player_hero, opponent_hero, hand_zone, player_board, opponent_board
 
 

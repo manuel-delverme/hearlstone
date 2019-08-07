@@ -69,17 +69,8 @@ class BaseEnv(gym.Env, ABC):
     self.opponent = None
     self.opponents = [None, ]
 
-  @property
   @abstractmethod
-  def cards_in_hand(self):
-    raise NotImplemented
-
-  @abstractmethod
-  def play_opponent_action(self):
-    raise NotImplemented
-
-  @abstractmethod
-  def game_value(self):
+  def agent_game_vale(self):
     raise NotImplemented
 
   def set_opponents(self, opponents):

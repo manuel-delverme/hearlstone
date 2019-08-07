@@ -32,7 +32,7 @@ class Environment:
 
   max_cards_in_hand = 10
 
-  max_turns = 50
+  # max_turns = 50
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:

@@ -18,6 +18,8 @@ from hearthstone.enums import CardClass, CardType
 from numpy import ndarray
 
 import hs_config
+import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
+import shared.constants as C
 from agents.base_agent import Agent
 from environments import base_env
 
@@ -148,7 +150,7 @@ def arena_fight(
       if action == environment.GameActions.PASS_TURN:
         active_player, passive_player = passive_player, active_player
 
-    game_value = environment.game_value()
+    game_value = environment.agent_game_vale()
 
     if game_value == 1:
       scoreboard['won'] += 1
@@ -233,6 +235,6 @@ def can_autoreset(auto_reset, game_ref):
     return True
   if game_ref.CurrentPlayer.id == C.AGENT_ID:
     return True
-  if game_ref.state == python_pb2.Game.COMPLETE:
+  if game_ref.state == sabberstone_protobuf.Game.COMPLETE:
     return True
   return False
