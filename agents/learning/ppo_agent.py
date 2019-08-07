@@ -406,13 +406,13 @@ class PPOAgent(agents.base_agent.Agent):
         grad_norm_pi = get_grad_norm(self.actor_critic.actor)  # SUPER SLOW
         self.pi_optimizer.step()
 
-        torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
+        # torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
 
         self.value_optimizer.zero_grad()
         (value_loss * self.value_loss_coeff).backward()
 
         grad_norm_critic = get_grad_norm(self.actor_critic.critic)  # SUPER SLOW
-        torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
+        # torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
 
         self.value_optimizer.step()
         grad_norm_pi_epoch += grad_norm_pi
@@ -465,8 +465,8 @@ class PPOAgent(agents.base_agent.Agent):
           # assert not game_manager._use_heuristic_opponent
 
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
-        self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
-        self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
+        # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
+        # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
 
         pbar.update(num_updates)
 

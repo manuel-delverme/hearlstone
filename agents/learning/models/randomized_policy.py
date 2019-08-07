@@ -16,7 +16,7 @@ class ActorCritic(nn.Module):
     self.num_inputs = num_inputs
     self.num_possible_actions = num_actions
 
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2) / 100)
 
     self.actor = nn.Sequential(
         init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
@@ -42,12 +42,12 @@ class ActorCritic(nn.Module):
 
   def reset_actor(self):
     logits = list(self.actor.children())[-1]
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
+    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.1)
     logits.apply(init_)
 
   def reset_critic(self):
     value_fn = list(self.critic.children())[-1]
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.0001)
+    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.001)
     self.critic_regression = init_(value_fn)
 
   def forward(self, observations: torch.FloatTensor, possible_actions: torch.FloatTensor,

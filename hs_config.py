@@ -82,7 +82,7 @@ class PPOAgent:
 
   num_processes = 2 if DEBUG else 12  # number of CPU processes
   num_steps = 32
-  ppo_epoch = 4  # times ppo goes over the data
+  ppo_epoch = 6  # times ppo goes over the data
 
   num_env_steps = int(1e5)
   gamma = 0.99  # discount for rewards
