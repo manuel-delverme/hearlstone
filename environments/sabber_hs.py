@@ -201,6 +201,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     observation = parse_game(self.game_snapshot)
     self.last_info = info
+    self.last_observation = observation
 
     return observation, reward, terminal, info
 
@@ -265,6 +266,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
       # 'mean_opponent': counts.mean(),
       'opponent_nr': self.current_k,
     }
+
+  def __str__(self):
+    return f"Player: {self.game_snapshot.CurrentPlayer.id} - status: {self.game_snapshot.state} - turns: {self.game_snapshot.turn}"
 
   def close(self):
     self.logger.warning("Not closing cleanly, restart the server")

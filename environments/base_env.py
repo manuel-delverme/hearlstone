@@ -140,7 +140,7 @@ class RenderableEnv(BaseEnv):
       self.values.append(float(value))
 
     if reward is None:
-      obs = self.last_info['last_observation']
+      obs = self.last_observation
       offset, board, hand, mana, hero = self.render_player(obs)
       self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
       hero_health = hero.health
@@ -174,12 +174,20 @@ class RenderableEnv(BaseEnv):
 
       row_number = 1
       self.gui.log(str(self.__str__()), row=row_number, multiline=False)
-      row_number += 1
-      self.gui.log(f"value: {float(value)}, choice: {int(choice)}", row=row_number, multiline=False)
-      row_number += 1
 
-      row_number = self.log_plot(row_number, self.values)
-      row_number = self.log_plot(row_number, self.health)
+      values = np.array(self.values)
+      mu, std = values.mean(), values.std()
+      value_norm = np.linalg.norm(values)
+      values = values / value_norm
+
+      row_number += 1
+      self.gui.log(
+          f"value: {float(value):.4f}, choice: {int(choice)}, ", row=row_number, multiline=False)
+      row_number += 1
+      self.gui.log(f"value norm:{float(value_norm):.4f}, mu:{float(mu):.4f}, std:{float(std):.4f}", row=row_number, multiline=False)
+      row_number += 1
+      row_number = self.log_plot(row_number, values)
+      #row_number = self.log_plot(row_number, self.health)
 
       first_row_number = row_number
       if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
