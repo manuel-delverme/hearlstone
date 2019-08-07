@@ -28,7 +28,7 @@ def get_grad_norm(model):
   for p in model.parameters():
     param_norm = p.grad.data.norm(2)
     total_norm += param_norm.item() ** 2
-  total_norm = total_norm ** (1. / 2)
+  total_norm = total_norm ** (1. / 2)  # SUPER SLOW
   return total_norm
 
 
@@ -409,7 +409,7 @@ class PPOAgent(agents.base_agent.Agent):
 
         self.pi_optimizer.zero_grad()
         (action_loss - dist_entropy * self.entropy_coeff).backward()
-        grad_norm_pi = get_grad_norm(self.actor_critic.actor)
+        grad_norm_pi = get_grad_norm(self.actor_critic.actor)  # SUPER SLOW
         self.pi_optimizer.step()
 
         #torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
@@ -417,7 +417,7 @@ class PPOAgent(agents.base_agent.Agent):
         self.value_optimizer.zero_grad()
         (value_loss * self.value_loss_coeff).backward()
 
-        grad_norm_critic = get_grad_norm(self.actor_critic.critic)
+        grad_norm_critic = get_grad_norm(self.actor_critic.critic)  # SUPER SLOW
         torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
 
         self.value_optimizer.step()
