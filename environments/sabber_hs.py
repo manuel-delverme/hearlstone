@@ -239,7 +239,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
         idxs = list(self._game_matrix.keys())
         counts = 1 / np.array(counts)
         p[idxs] = counts
-      assert p.sum() > 0
       p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)

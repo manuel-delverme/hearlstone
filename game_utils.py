@@ -16,9 +16,9 @@ class GameManager(object):
     self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
     self._game_score = Elo()
 
-  def update_score(self,score):
-   self._game_score.update(score)
-   return self._game_score.player_score
+  def update_score(self, score):
+    self._game_score.update(score)
+    return self._game_score.player_score
 
   @property
   def use_heuristic_opponent(self):

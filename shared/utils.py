@@ -6,7 +6,6 @@ import random
 import sys
 import tempfile
 import time
-import warnings
 from contextlib import contextmanager
 from functools import _lru_cache_wrapper
 from functools import lru_cache
@@ -223,7 +222,6 @@ def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
 
 
 def init(module, weight_init, bias_init, gain=1):
-  warnings.warn("TODO: refactor away initializations")
   weight_init(module.weight.data, gain=gain)
   bias_init(module.bias.data)
   return module

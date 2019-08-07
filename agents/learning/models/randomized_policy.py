@@ -17,6 +17,7 @@ class ActorCritic(nn.Module):
     self.num_possible_actions = num_actions
 
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
     self.actor = nn.Sequential(
         init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -24,6 +25,7 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
+        nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions),
     )
     self.critic = nn.Sequential(
         init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
@@ -32,17 +34,21 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
-        init_(nn.Linear(hs_config.PPOAgent.hidden_size, 1)),
+        nn.Linear(hs_config.PPOAgent.hidden_size, 1),
     )
-
-    self.actor_logits = None
     self.reset_actor()
-
+    self.reset_critic()
     self.train()
 
   def reset_actor(self):
+    logits = list(self.actor.children())[-1]
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
-    self.actor_logits = init_(nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions))
+    logits.apply(init_)
+
+  def reset_critic(self):
+    value_fn = list(self.critic.children())[-1]
+    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.0001)
+    self.critic_regression = init_(value_fn)
 
   def forward(self, observations: torch.FloatTensor, possible_actions: torch.FloatTensor,
       deterministic: bool = False) -> (torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
@@ -85,11 +91,15 @@ class ActorCritic(nn.Module):
     assert action_log_probs.size(1) == 1
     return action_log_probs
 
+  # def critic(self, inputs):
+  #   value_features = self.critic_features(inputs)
+  #   value = self.critic_regression(value_features)
+  #   return value
+
   def actor_critic(self, inputs, possible_actions):
     value = self.critic(inputs)
-    actor_features = self.actor(inputs)
+    logits = self.actor(inputs)
 
-    logits = self.actor_logits(actor_features)
     action_distribution = self._get_action_distribution(possible_actions, logits)
     return action_distribution, value
 

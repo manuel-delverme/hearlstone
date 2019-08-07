@@ -101,12 +101,12 @@ class BaseEnv(gym.Env, ABC):
     #   self.use_heuristic_opponent = False
     opponent_network, = torch.load(checkpoint_file)
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
-    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions)
+    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu')
 
     del opponent.pi_optimizer
     del opponent.value_optimizer
     opponent_network.eval()
-    for network in (opponent_network.actor, opponent_network.critic, opponent_network.actor_logits):
+    for network in (opponent_network.actor, opponent_network.critic):
       for param in network.parameters():
         param.requires_gradient = False
 

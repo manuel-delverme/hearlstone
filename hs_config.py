@@ -7,11 +7,10 @@ import torch
 
 import agents.base_agent
 
-use_gpu = False
-
+use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 # comment = "DELETEME" if DEBUG else "d10c4n3"
-comment = "DELETEME" if DEBUG else False
+comment = "DELETEME" if DEBUG else ""
 device = torch.device("cuda:0" if use_gpu else "cpu")
 
 print_every = 20
@@ -73,28 +72,31 @@ class PPOAgent:
   num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256  # 64
-  eval_interval = 40
-  save_interval = 100
+  eval_interval = 50
+  save_interval = 400
   save_dir = os.path.join(log_dir, "model")
   debug_dir = os.path.join(log_dir, "debug")
 
-  adam_lr = 7e-4
+  actor_adam_lr = 7e-4
+  critic_adam_lr = 1e-5
 
   num_processes = 2 if DEBUG else 12  # number of CPU processes
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
-  num_env_steps = int(1e6)
+  num_env_steps = int(1e5)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
   entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
+
   max_grad_norm = 0.5  # any bigger gradient is clipped
   num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
 
   num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
+  assert num_updates
 
 
 if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
