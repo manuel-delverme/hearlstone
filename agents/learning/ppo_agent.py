@@ -5,6 +5,7 @@ import glob
 import itertools
 import os
 import tempfile
+import shutil
 import time
 from typing import Text, Optional, Tuple, List, Callable
 
@@ -169,6 +170,8 @@ class PPOAgent(agents.base_agent.Agent):
         if ppo_update_num % self.eval_every == 0:
           with self.timer("eval_agents_self_play"):
             _rewards, _scores = self.eval_agent(eval_envs)
+          elo_score = game_manager.update_score(_scores)
+          self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           performance = np.mean(_rewards)
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
@@ -461,14 +464,13 @@ class PPOAgent(agents.base_agent.Agent):
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
         self.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter, updates_so_far)
 
-        checkpoint_file = new_checkpoint_file
-        # if win_ratio >= old_win_ratio:
-        #   print('updating checkpoint')
-        #   checkpoint_file = new_checkpoint_file
-        #   shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-        #   self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
-        #   old_win_ratio = win_ratio
-        #   assert not game_manager._use_heuristic_opponent
+        if win_ratio >= old_win_ratio:
+          print('updating checkpoint')
+          checkpoint_file = new_checkpoint_file
+          shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
+          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
+          old_win_ratio = win_ratio
+          assert not game_manager._use_heuristic_opponent
 
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state

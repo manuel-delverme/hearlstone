@@ -25,7 +25,7 @@ class Environment:
   single_process = False
   address = "0.0.0.0:50052"
 
-  newest_opponent_prob = 0.5
+  newest_opponent_prob = 0.8
 
   max_cards_in_board = 7
   max_entities_in_board = max_cards_in_board + 1
@@ -51,7 +51,6 @@ class Environment:
 
 class GameManager:
   max_opponents = 5
-  old_opponent_prob = 0.2
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
@@ -85,7 +84,7 @@ class PPOAgent:
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
-  num_env_steps = int(3e4)
+  num_env_steps = int(1e6)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 

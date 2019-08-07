@@ -14,7 +14,11 @@ class GameManager(object):
 
     self.game_class = hs_config.Environment.get_game_mode(address)
     self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
-    self.game_matrix = []
+    self._game_score = Elo()
+
+  def update_score(self,score):
+   self._game_score.update(score)
+   return self._game_score.player_score
 
   @property
   def use_heuristic_opponent(self):
@@ -55,7 +59,6 @@ class Elo:
 
   def update(self, scores: dict):
     for idx, score in scores.items():
-      idx += 1  # off by one from game manager distribution
       p = torch.Tensor(score).clamp(0, 1).mean()
       p_hat = self.__call__(idx)
       delta = p - p_hat

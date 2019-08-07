@@ -227,14 +227,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
     }
     return observation, 0, False, info
 
-  # def game_matrix(self, idx, reward):
-  #   try:
-  #     n, score = self._game_matrix[idx]
-  #   except KeyError:
-  #     n = 0
-  #     score = 0
-  #   self._game_matrix[idx] = (n + 1, score + reward)
-
   def _sample_opponent(self):
     if np.random.uniform() > hs_config.Environment.newest_opponent_prob and self.opponent is not None:
       return

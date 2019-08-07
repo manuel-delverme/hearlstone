@@ -15,7 +15,7 @@ def save_and_commit():
   except IndexError:
     pass
   msg = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-  os.system(f"cd {hs_config.PPOAgent.log_dir}; git add . ; git commit -m {msg}; git push origin master")
+  #os.system(f"cd {hs_config.log_dir}; git add . ; git commit -m {msg}; git push origin master")
   out = os.popen("git rev-parse HEAD")
   os.system(f"telegram-send 'latest commit {out.read().strip()}, dated at {msg}'")
   os.system(f"telegram-send 'Check for {link}'")
