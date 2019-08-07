@@ -13,6 +13,8 @@ import shared.constants as C
 
 
 # source: https://github.com/kroitor/asciichart/blob/master/asciichartpy/__init__.py
+
+
 def plot(series):
   minimum = min(series)
   maximum = max(series)
@@ -68,13 +70,53 @@ class BaseEnv(gym.Env, ABC):
   def __init__(self):
     self.opponent = None
     self.opponents = [None, ]
+    self.opponents_lookup = {}
 
   @abstractmethod
   def agent_game_vale(self):
     raise NotImplemented
 
   def set_opponents(self, opponents):
-    self.opponents = opponents
+    _opponents = []
+    for player_hash in opponents:
+      if player_hash not in self.opponents_lookup:
+        self.opponents_lookup[player_hash] = self.load_opponent(player_hash)
+
+      _opponents.append(self.opponents_lookup[player_hash])
+
+    self.opponents = _opponents
+
+  def load_opponent(self, checkpoint_file):
+    if checkpoint_file == 'default':
+      return hs_config.Environment.get_opponent()()
+    if checkpoint_file == 'random':
+      import agents.heuristic.random_agent
+      return agents.heuristic.random_agent.RandomAgent()
+
+    import agents.learning.ppo_agent
+
+    # if self.use_heuristic_opponent:
+    #   assert isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent)
+    #   self.opponents = []
+    #   self.use_heuristic_opponent = False
+    opponent_network, = torch.load(checkpoint_file)
+    assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
+    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions)
+
+    del opponent.pi_optimizer
+    del opponent.value_optimizer
+    opponent_network.eval()
+    for network in (opponent_network.actor, opponent_network.critic, opponent_network.actor_logits):
+      for param in network.parameters():
+        param.requires_gradient = False
+
+    opponent.actor_critic = opponent_network
+    if hasattr(opponent, 'logger'):  # the logger has rlocks which cannot change process so RIP
+      del opponent.logger  # TODO: this is an HACK, refactor it away
+    if hasattr(opponent, 'timer'):  # the timer has rlocks which cannot change process so RIP
+      del opponent.timer  # TODO: this is an HACK, refactor it away
+
+    return opponent
 
 
 class RenderableEnv(BaseEnv):

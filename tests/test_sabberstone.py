@@ -41,13 +41,13 @@ def test_multiprocessFPS():
   game_manager = game_utils.GameManager(seed=None, address='0.0.0.0:50052')
   game_manager.use_heuristic_opponent = False
 
-  no_subprocess = hs_config.Environment.no_subprocess
+  no_subprocess = hs_config.Environment.single_process
   # hs_config.Environment.no_subprocess = False
   nr_processes = 10
 
   envs = shared.env_utils.make_vec_envs(game_manager, nr_processes, -1, None, None, False)
 
-  hs_config.Environment.no_subprocess = no_subprocess
+  hs_config.Environment.single_process = no_subprocess
 
   _, reward, terminal, info = envs.reset()
 

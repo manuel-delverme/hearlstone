@@ -22,7 +22,7 @@ class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  no_subprocess = False
+  single_process = False
   address = "0.0.0.0:50052"
 
   newest_opponent_prob = 0.5
@@ -68,7 +68,7 @@ class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55
 
-  performance_for_early_eval = 0.50
+  performance_for_early_eval = 0.80
   num_episodes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
@@ -81,7 +81,7 @@ class PPOAgent:
 
   adam_lr = 7e-4
 
-  num_processes = 2 if DEBUG else 6  # number of CPU processes
+  num_processes = 2 if DEBUG else 12  # number of CPU processes
   num_steps = 32
   ppo_epoch = 4  # times ppo goes over the data
 
@@ -90,7 +90,7 @@ class PPOAgent:
   tau = 0.95  # gae parameter
 
   entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
-  value_loss_coeff = 0.0005
+  value_loss_coeff = 0.5
   max_grad_norm = 0.5  # any bigger gradient is clipped
   num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
@@ -99,7 +99,7 @@ class PPOAgent:
 
 
 if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
-        Environment.no_subprocess)):
+        Environment.single_process)):
   print('''
                                     _.---"'"""""'`--.._
                              _,.-'                   `-._

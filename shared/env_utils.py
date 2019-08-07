@@ -84,7 +84,7 @@ def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_
 ) -> PyTorchCompatibilityWrapper:
   envs = [_make_env(load_env) for _ in range(num_processes)]
 
-  if len(envs) == 1 or hs_config.Environment.no_subprocess:
+  if len(envs) == 1 or hs_config.Environment.single_process:
     vectorized_envs = DummyVecEnv(envs)
   else:
     vectorized_envs = SubprocVecEnv(envs)
