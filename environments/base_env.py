@@ -181,7 +181,7 @@ class RenderableEnv(BaseEnv):
       row_number += 1
 
       row_number = self.log_plot(row_number, self.values)
-      row_number = self.log_plot(row_number, self.health)
+      # row_number = self.log_plot(row_number, self.health)
 
       first_row_number = row_number
       if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
@@ -203,8 +203,10 @@ class RenderableEnv(BaseEnv):
       winner_player = C.AGENT_ID if reward > 0 else C.OPPONENT_ID
       self.gui.windows[C.Players.LOG].clear()
       self.gui.log(f"Game Over. P {winner_player}, reward {reward.item()}", row=1)
-      time.sleep(4)
+      time.sleep(3)
       self.gui.screen.nodelay(True)
+      self.health.clear()
+      self.values.clear()
       for _ in range(1000):
         if -1 == self.gui.screen.getch():
           break

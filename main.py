@@ -16,6 +16,7 @@ import shared.constants as C
 
 
 def load_latest_checkpoint():
+  print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
   checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
   if checkpoints:
     # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
@@ -23,19 +24,23 @@ def load_latest_checkpoint():
     checkpoint = checkpoint_files[-1]
   else:
     checkpoint = None
+  print('found', checkpoint)
   return checkpoint
 
 
 def train(args):
-  player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
-  game_manager = game_utils.GameManager(address=args.address)
-
   if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
+
+    game_manager = game_utils.GameManager(address=args.address)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
+
     player.enjoy(game_manager, checkpoint_file=args.p1)
 
   elif args.p1 is not None and args.p2 is not None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
+    game_manager = game_utils.GameManager(address=args.address)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
     game_manager.add_learning_opponent(args.p1)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
@@ -54,6 +59,9 @@ def train(args):
                                              f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
     if "DELETEME" in hs_config.tensorboard_dir:
       hs_config.tensorboard_dir = tempfile.mktemp()
+
+    game_manager = game_utils.GameManager(address=args.address)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
 
     latest_checkpoint = load_latest_checkpoint()
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
