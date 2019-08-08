@@ -27,20 +27,6 @@ def load_latest_checkpoint():
 
 
 def train(args):
-  if not hs_config.comment and args.comment is None:
-    import tkinter.simpledialog
-    try:
-      root = tkinter.Tk()
-      hs_config.comment = tkinter.simpledialog.askstring("comment", "comment")
-      root.destroy()
-    except tkinter.TclError as _:
-      print("no-comment")
-
-  hs_config.tensorboard_dir = os.path.join(hs_config.log_dir,
-                                           f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
-  if "DELETEME" in hs_config.tensorboard_dir:
-    hs_config.tensorboard_dir = tempfile.mktemp()
-
   player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
   game_manager = game_utils.GameManager(address=args.address)
 
@@ -53,6 +39,20 @@ def train(args):
     game_manager.add_learning_opponent(args.p1)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
+    if not hs_config.comment and args.comment is None:
+      import tkinter.simpledialog
+      try:
+        root = tkinter.Tk()
+        hs_config.comment = tkinter.simpledialog.askstring("comment", "comment")
+        root.destroy()
+      except tkinter.TclError as _:
+        print("no-comment")
+
+    hs_config.tensorboard_dir = os.path.join(hs_config.log_dir,
+                                             f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
+    if "DELETEME" in hs_config.tensorboard_dir:
+      hs_config.tensorboard_dir = tempfile.mktemp()
+
     latest_checkpoint = load_latest_checkpoint()
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 

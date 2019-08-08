@@ -176,19 +176,12 @@ class RenderableEnv(BaseEnv):
       row_number = 1
       self.gui.log(str(self.__str__()), row=row_number, multiline=False)
 
-      values = np.array(self.values)
-      mu, std = values.mean(), values.std()
-      value_norm = np.linalg.norm(values)
-      values = values / value_norm
+      row_number += 1
+      self.gui.log(f"value: {float(value)}, choice: {int(choice)}", row=row_number, multiline=False)
+      row_number += 1
 
-      row_number += 1
-      self.gui.log(
-          f"value: {float(value):.4f}, choice: {int(choice)}, ", row=row_number, multiline=False)
-      row_number += 1
-      self.gui.log(f"value norm:{float(value_norm):.4f}, mu:{float(mu):.4f}, std:{float(std):.4f}", row=row_number, multiline=False)
-      row_number += 1
-      row_number = self.log_plot(row_number, values)
-      #row_number = self.log_plot(row_number, self.health)
+      row_number = self.log_plot(row_number, self.values)
+      row_number = self.log_plot(row_number, self.health)
 
       first_row_number = row_number
       if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
@@ -218,8 +211,7 @@ class RenderableEnv(BaseEnv):
       else:
         raise TimeoutError('failed to flush the char buffer')
       self.gui.screen.nodelay(False)
-
-      self.gui.log("Waiting for next game", row=2)
+      self.gui.log("Press key to continue", row=2)
 
     if mode == 'human':
       return self.gui.screen.getch()
