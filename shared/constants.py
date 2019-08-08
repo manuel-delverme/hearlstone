@@ -11,12 +11,22 @@ class SPELLS(enum.IntEnum):
   Fireball = 315  # 6 damage
   ArcaneExplosion = 447  # 1 damage all
   ArcaneIntellect = 555  # 2 cards
-  FrostNova = 587  # freeze all TODO: implement
+  FrostNova = 587  # freeze all
   ArcaneMissels = 564  # 3 random damage
   Frostbolt = 662  # 3 damage  + freze
   Flamestrike = 1004  # 4 damage all minions
   MirrorImage = 1084  # summon two minions
-  TheCoin = 1746  # + 1 mana
+  TheCoin = 1746  # + 1 manA
+
+
+class MINIONS(enum.IntEnum):
+  novice_engineer = 284
+  water_elemental = 395
+  gurubashi_brserker = 768
+  ogre_magi = 995
+  kobold_geomancer = 672
+  acid_swamp_ooze = 906
+  archmage = 525
 
 
 class PlayerTaskType(IntEnum):
@@ -69,13 +79,15 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
 ACTION_SPACE = 249
-STATE_SPACE = 92  # state space includes card_index
+STATE_SPACE = 104 # 92  # state space includes card_index
 
 Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
-Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
+Card = collections.namedtuple('card', ['atk', 'health', 'cost'])
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
 SPELL_IDS = set(SPELLS)
+MINION_IDS = set(MINIONS)
 
+N_CARDS = max(len(MINIONS),len(SPELLS))
 
 class Players(enum.Enum):
   AGENT = 0

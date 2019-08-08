@@ -42,6 +42,7 @@ class _GameRef:
 class Stub:
   def __init__(self, stub):
     self.stub = stub
+    self._cards = None
 
   def NewGame(self, deck1, deck2):
     return _GameRef(self.stub.NewGame(sabberstone_protobuf.DeckStrings(deck1=deck1, deck2=deck2)))
@@ -54,6 +55,15 @@ class Stub:
 
   def GetOptions(self, game_id):
     return self.stub.GetOptions(game_id).list
+
+  def LoadCards(self):
+     self._cards = self.stub.GetCardDictionary(sabberstone_protobuf.Empty()).cards
+
+  def GetCard(self, idx):
+    if self._cards is None:
+      self.LoadCards()
+    return self._cards[idx]
+
 
 
 def enumerate_actions():

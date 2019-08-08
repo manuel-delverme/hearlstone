@@ -14,6 +14,7 @@ from baselines_repo.baselines.common.vec_env.dummy_vec_env import DummyVecEnv as
 from baselines_repo.baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines_repo.baselines.common.vec_env.vec_env import VecEnvWrapper
 from shared import constants as C
+from shared.utils import idx_to_one_hot
 
 
 class DummyVecEnv(_DummyVecEnv):
@@ -231,11 +232,22 @@ def game_stats(game):
 
 
 def parse_card(card):
-  return card.card_id, card.atk, card.base_health, card.cost
-
+  encoding = get_encoding(card.card_id).flatten()
+  return np.concatenate([encoding, [card.atk, card.base_health, card.cost]])
 
 def parse_minion(card):
-  return card.atk, card.base_health - card.damage, card.exhausted
+  return np.array([card.atk, card.base_health - card.damage, card.exhausted])
+
+
+# TODO move me in shared.constants
+MINIONS_ONE_HOT = collections.OrderedDict({k: idx_to_one_hot(idx, C.N_CARDS) for idx, k in enumerate(C.MINIONS)})
+SPELLS_ONE_HOT = collections.OrderedDict({k: idx_to_one_hot(idx, C.N_CARDS) for idx, k in enumerate(C.SPELLS)})
+
+def get_encoding(card_id):
+  if card_id in C.MINION_IDS:
+    return MINIONS_ONE_HOT[card_id].flatten()
+  else:
+    return SPELLS_ONE_HOT[card_id].flatten()
 
 
 def pad(x, length, parse):

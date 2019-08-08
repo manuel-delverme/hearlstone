@@ -236,3 +236,9 @@ def can_autoreset(auto_reset, game_ref):
   if game_ref.state == sabberstone_protobuf.Game.COMPLETE:
     return True
   return False
+
+
+def idx_to_one_hot(x, max_size):
+  targets = np.array(x).reshape(-1)
+  return np.eye(max_size)[targets]
+
