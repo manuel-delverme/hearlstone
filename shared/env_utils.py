@@ -230,18 +230,21 @@ def game_stats(game):
   # return {'mana_adv': mana_adv, 'hand_adv': hand_adv, 'draw_adv': draw_adv, 'life_adv': life_dav,
   #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
 
+# TODO: hack to maintain compatibility
+def parse_card(card, as_idx=False):
 
-def parse_card(card):
-  encoding = get_encoding(card.card_id).flatten()
-  return np.concatenate([encoding, [card.atk, card.base_health, card.cost]])
+  if as_idx is False:
+    encoding = get_encoding(card.card_id).flatten()
+    return np.concatenate([encoding, [card.atk, card.base_health, card.cost]])
+  return np.array([card.card_id, card.atk, card.base_health, card.cost])
 
 def parse_minion(card):
   return np.array([card.atk, card.base_health - card.damage, card.exhausted])
 
 
 # TODO move me in shared.constants
-MINIONS_ONE_HOT = collections.OrderedDict({k: idx_to_one_hot(idx, C.N_CARDS) for idx, k in enumerate(C.MINIONS)})
-SPELLS_ONE_HOT = collections.OrderedDict({k: idx_to_one_hot(idx, C.N_CARDS) for idx, k in enumerate(C.SPELLS)})
+MINIONS_ONE_HOT = collections.OrderedDict({k: idx_to_one_hot(idx, C.MAX_CARDS) for idx, k in enumerate(C.MINIONS)})
+SPELLS_ONE_HOT = collections.OrderedDict({k: idx_to_one_hot(idx, C.MAX_CARDS) for idx, k in enumerate(C.SPELLS)})
 
 def get_encoding(card_id):
   if card_id in C.MINION_IDS:
@@ -269,7 +272,7 @@ def parse_game(game):
     p.hero.base_health - p.hero.damage,
     p.hero.exhausted,
     p.hero.power.exhausted,
-    *pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
+    *pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4 * C.MAX_CARDS, parse=parse_card),
     *pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
 
     # opponent

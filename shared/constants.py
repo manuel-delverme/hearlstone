@@ -79,15 +79,15 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
 ACTION_SPACE = 249
-STATE_SPACE = 104 # 92  # state space includes card_index
+STATE_SPACE = 452 # 92  # state space includes card_index
 
 Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
-Card = collections.namedtuple('card', ['atk', 'health', 'cost'])
+Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
 SPELL_IDS = set(SPELLS)
 MINION_IDS = set(MINIONS)
 
-N_CARDS = max(len(MINIONS),len(SPELLS))
+MAX_CARDS = max(len(MINIONS), len(SPELLS)) # largest set of different cards
 
 class Players(enum.Enum):
   AGENT = 0

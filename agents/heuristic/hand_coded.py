@@ -101,7 +101,7 @@ def parse_game(info):
   player_hero = C.Hero(*parse_hero(game_snapshot.CurrentPlayer.hero))
   opponent_hero = C.Hero(*parse_hero(game_snapshot.CurrentOpponent.hero))
 
-  hand_zone = list(map(lambda x: C.Card(*shared.env_utils.parse_card(x)), game_snapshot.CurrentPlayer.hand_zone.entities))
+  hand_zone = list(map(lambda x: C.Card(*shared.env_utils.parse_card(x, as_idx=True)), game_snapshot.CurrentPlayer.hand_zone.entities))
   player_board = list(map(lambda x: C.Minion(*shared.env_utils.parse_minion(x)), game_snapshot.CurrentPlayer.board_zone.minions))
   opponent_board = list(map(lambda x: C.Minion(*shared.env_utils.parse_minion(x)), game_snapshot.CurrentOpponent.board_zone.minions))
   return player_hero, opponent_hero, hand_zone, player_board, opponent_board
