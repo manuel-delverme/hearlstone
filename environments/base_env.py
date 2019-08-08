@@ -209,8 +209,16 @@ class RenderableEnv(BaseEnv):
     else:
       winner_player = C.AGENT_ID if reward > 0 else C.OPPONENT_ID
       self.gui.windows[C.Players.LOG].clear()
-      self.gui.log(f"Game Over. P {winner_player}, and get reward {reward.item()}", row=1)
-      time.sleep(5)
+      self.gui.log(f"Game Over. P {winner_player}, reward {reward.item()}", row=1)
+      time.sleep(4)
+      self.gui.screen.nodelay(True)
+      for _ in range(1000):
+        if -1 == self.gui.screen.getch():
+          break
+      else:
+        raise TimeoutError('failed to flush the char buffer')
+      self.gui.screen.nodelay(False)
+
       self.gui.log("Waiting for next game", row=2)
 
     if mode == 'human':
