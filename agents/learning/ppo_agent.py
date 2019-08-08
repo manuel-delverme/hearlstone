@@ -227,6 +227,7 @@ class PPOAgent(agents.base_agent.Agent):
     return env
 
   def eval_agent(self, eval_envs):
+    self.actor_critic.eval()
     rewards = []
 
     def stop_eval(rews, step):
@@ -238,6 +239,8 @@ class PPOAgent(agents.base_agent.Agent):
     scores = collections.defaultdict(list)
     for k, r in zip(opponents, rewards):
       scores[k].append(r)
+
+    self.actor_critic.train()
     return rewards, dict(scores)
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,

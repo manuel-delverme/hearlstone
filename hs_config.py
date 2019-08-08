@@ -66,7 +66,6 @@ class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55
 
-  performance_for_early_eval = 0.80
   num_episodes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
