@@ -128,6 +128,7 @@ class RenderableEnv(BaseEnv):
     super().__init__()
     self.gui = None
     self.last_info = None
+    self.last_observation = None
     self.values = collections.deque(maxlen=100)
     self.health = collections.deque(maxlen=100)
 

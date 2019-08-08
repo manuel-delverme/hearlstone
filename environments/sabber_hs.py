@@ -225,6 +225,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
     info = {
       'possible_actions': possible_actions,
     }
+    self.last_info = info
+    self.last_observation = observation
     return observation, 0, False, info
 
   def _sample_opponent(self):
