@@ -35,6 +35,8 @@ def train(args):
       root.destroy()
     except tkinter.TclError as _:
       print("no-comment")
+    else:
+      hs_config.comment = args.comment
 
   hs_config.tensorboard_dir = os.path.join(hs_config.log_dir,
                                            f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
