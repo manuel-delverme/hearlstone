@@ -59,6 +59,9 @@ class ActorCritic(nn.Module):
       possible_actions = torch.from_numpy(possible_actions)
       possible_actions = possible_actions.unsqueeze(0)
 
+    if not self.training:
+      deterministic = False
+
     assert specs.check_observation(self.num_inputs, observations)
     assert specs.check_possible_actions(self.num_possible_actions, possible_actions)
     assert observations.shape[0] == possible_actions.shape[0]
