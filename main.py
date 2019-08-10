@@ -69,7 +69,7 @@ def train(args):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
-  parser.add_argument("--address", default="0.0.0.0:50052")
+  parser.add_argument("--address", default="localhost:50052")
   parser.add_argument("--p1", default=None)
   parser.add_argument("--p2", default=None)
   parser.add_argument("--comment", default=None)
