@@ -127,7 +127,7 @@ class SabberAgent(HeuristicAgent):
 
         actions.append(idx)
 
-        if self.action_is_play_minion(action):
+        if self.action_is_play_minion(action, hand_zone):
           minion = hand_zone[action.source_position]
           value = minion.cost
           if hs_config.Environment.ENV_DEBUG_HEURISTIC:
@@ -177,8 +177,8 @@ class SabberAgent(HeuristicAgent):
             self.logger.debug("".join(['Playing', desk[selected_action]]))
     return selected_action
 
-  def action_is_play_minion(self, action):
-    return action.type == C.PlayerTaskType.PLAY_CARD and 'Pos' in action.print
+  def action_is_play_minion(self, action, hand_zone):
+    return action.type == C.PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in C.MINION_IDS
 
   def action_is_trade(self, action, hand_zone):
     return action.type == C.PlayerTaskType.MINION_ATTACK

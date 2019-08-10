@@ -16,7 +16,17 @@ class SPELLS(enum.IntEnum):
   Frostbolt = 662  # 3 damage  + freze
   Flamestrike = 1004  # 4 damage all minions
   MirrorImage = 1084  # summon two minions
-  TheCoin = 1746  # + 1 mana
+  TheCoin = 1746  # + 1 man
+
+
+class MINIONS(enum.IntEnum):
+  novice_engineer = 284
+  water_elemental = 395
+  gurubashi_brserker = 768
+  ogre_magi = 995
+  kobold_geomancer = 672
+  acid_swamp_ooze = 906
+  archmage = 525
 
 
 class PlayerTaskType(IntEnum):
@@ -75,6 +85,7 @@ Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
 Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
 SPELL_IDS = set(SPELLS)
+MINION_IDS = set(MINIONS)
 
 
 class Players(enum.Enum):
