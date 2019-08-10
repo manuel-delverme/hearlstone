@@ -11,7 +11,7 @@ import sb_env.SabberStone_python_client.python_pb2_grpc as sabberstone_grpc
 import shared.constants as C
 import shared.env_utils
 import shared.utils
-from shared.env_utils import parse_game
+from shared.env_utils import parse_game, shape_reward
 
 
 class _GameRef:
@@ -168,6 +168,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
   #     new_stats = game_stats(self.game_snapshot)
   #     self.turn_stats.append(new_stats)
 
+  @shared.env_utils.episodic_log
+  @shape_reward
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray):
     rewards = []

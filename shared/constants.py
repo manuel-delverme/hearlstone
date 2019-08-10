@@ -1,9 +1,17 @@
 import collections
 import enum
-from enum import IntEnum
+from enum import IntEnum, Enum
 
 AGENT_ID = 1
 OPPONENT_ID = 2
+
+
+class RewardType(Enum):
+  mana_adv = "mana_adv"
+  hand_adv = "hand_adv"
+  life_adv = "life_adv"
+  minion_adv = "minion_adv"
+  time_left = "time_left"
 
 
 class SPELLS(enum.IntEnum):

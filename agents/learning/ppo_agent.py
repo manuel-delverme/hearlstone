@@ -193,7 +193,6 @@ class PPOAgent(agents.base_agent.Agent):
   def setup_envs(self, game_manager: game_utils.GameManager):
     if self.envs is None:
       print("[Train] Loading training environments")
-      # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs(game_manager, self.num_processes)
     else:
@@ -261,7 +260,6 @@ class PPOAgent(agents.base_agent.Agent):
 
       with self.timer("agent_step"):
         obs, reward, done, infos = envs.step(action)
-      assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, rewards))
 
       possible_actions = infos['possible_actions']
 
@@ -270,7 +268,7 @@ class PPOAgent(agents.base_agent.Agent):
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
       assert 'game_statistics' in specs.TERMINAL_GAME_INFO_KEYS
       if 'game_statistics' in infos:
-
+        assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, infos['game_statistics']['outcome']))
         for info in infos['game_statistics']:
           outcome = info['outcome']
           if outcome != 0:

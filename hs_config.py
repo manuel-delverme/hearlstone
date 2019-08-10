@@ -23,6 +23,9 @@ class Environment:
   ENV_DEBUG_METRICS = False
   single_process = False
   address = "0.0.0.0:50052"
+  max_life = 30
+  max_deck_size = 30
+  max_mana = 10
 
   newest_opponent_prob = 0.8
 
@@ -30,8 +33,13 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
+  reward_type = "mana_adv"
 
-  # max_turns = 50
+  @staticmethod
+  def get_reward_shape(r, game):
+    from shared.env_utils import game_stats
+    _r = game_stats(game, reward_type=Environment.reward_type)
+    return r + _r
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
@@ -79,7 +87,7 @@ class PPOAgent:
   actor_adam_lr = 7e-4
   critic_adam_lr = 1e-5
 
-  num_processes = 2 if DEBUG else 12  # number of CPU processes
+  num_processes = 2 if DEBUG else 3  # number of CPU processes
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
 
