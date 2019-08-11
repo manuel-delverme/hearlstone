@@ -92,7 +92,7 @@ class PPOAgent:
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
 
-  num_env_steps = int(1e5)
+  num_env_steps = int(1e10)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 

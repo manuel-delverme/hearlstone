@@ -458,7 +458,7 @@ class PPOAgent(agents.base_agent.Agent):
       for self_play_iter, num_updates in enumerate(updates_schedule):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
 
-        new_checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
+        checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
@@ -467,11 +467,9 @@ class PPOAgent(agents.base_agent.Agent):
 
         if win_ratio >= old_win_ratio:
           print('updating checkpoint')
-          checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
-          old_win_ratio = win_ratio
-          # assert not game_manager._use_heuristic_opponent
+        old_win_ratio = win_ratio
 
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
