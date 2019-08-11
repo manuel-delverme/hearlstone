@@ -7,7 +7,8 @@ import hs_config
 
 elo = Elo()
 manager = GameManager(hs_config.Environment.address)
-manager.use_heuristic_opponent = True
+manager.use_heuristic_opponent = False
+manager.opponents = ["random"] * 3
 env = manager()
 agent = RandomAgent()
 
@@ -23,5 +24,6 @@ for ep in range(10):
       break
 
 elo.update(scores)
+print(elo.games_count)
 
 

@@ -114,7 +114,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
     self.turn_stats = []
-    self._game_matrix = {}
+    self.game_matrix = None
     self.logger.info(f"Env with id {env_number} started.")
 
   def agent_game_vale(self):
@@ -196,6 +196,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     if terminal:
       reward = [r for r in rewards if r != 0.][0]
       info['game_statistics'] = self.gather_game_statistics(reward)
+      self.game_matrix[self.current_k] += [max(0., -reward), 1]  # prob of p2 winning, number of matches
     else:
       reward = 0.
 
@@ -229,18 +230,20 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.last_observation = observation
     return observation, 0, False, info
 
-  def _sample_opponent(self):
-    if np.random.uniform() > hs_config.Environment.newest_opponent_prob and self.opponent is not None:
-      return
+  def set_opponents(self, opponents):
+    super(Sabberstone, self).set_opponents(opponents)
+    self.game_matrix = np.zeros(shape=(len(self.opponents), 2))
 
-    p = np.ones(shape=(len(self.opponents)))
+  def _sample_opponent(self):
+    if hs_config.Environment.newest_opponent_prob > np.random.uniform() and self.opponent is not None:
+      return
+    p = np.ones(shape=len(self.opponents))
 
     if len(self.opponents) > 1:
-      if len(self._game_matrix.values()) > 1:
-        counts = [v[0] for v in self._game_matrix.values()]
-        idxs = list(self._game_matrix.keys())
-        counts = 1 / np.array(counts)
-        p[idxs] = counts
+      if self.game_matrix[:, 1].sum() > 0:
+        # TODO update me with probability of winning
+        idxs = self.game_matrix[:, 1] > 0  # only for the one who played
+        p[idxs] = 1 / self.game_matrix[:, 1][idxs]
       p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
@@ -249,7 +252,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.current_k = k
 
   def gather_game_statistics(self, reward):
-    # self.game_matrix(self.current_k, reward)
     # counts = np.array([v[1] for v in self._game_matrix.values()])
     # _stats = C.GameStatistics(*zip(*self.turn_stats))
     return {

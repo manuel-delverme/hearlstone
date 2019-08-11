@@ -18,7 +18,7 @@ class GameManager(object):
 
   def update_score(self, score):
     self._game_score.update(score)
-    return self._game_score.player_score
+    return self._game_score.player_score, self._game_score.games_count
 
   @property
   def use_heuristic_opponent(self):
@@ -48,6 +48,7 @@ class Elo:
 
     max_opponents = hs_config.GameManager.max_opponents
 
+    self.games = torch.zeros(max_opponents)
     self.scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
     self.c = torch.rand(size=(max_opponents + 1, 2))
     self.alpha = hs_config.GameManager.elo_scale
@@ -59,6 +60,7 @@ class Elo:
 
   def update(self, scores: dict):
     for idx, score in scores.items():
+      self.games[idx] += len(score)
       p = torch.Tensor(score).clamp(0, 1).mean()
       p_hat = self.__call__(idx)
       delta = p - p_hat
@@ -74,10 +76,14 @@ class Elo:
     self.c[[self._player_idx, opponent_idx]] = self.c[[self._player_idx, opponent_idx]] + torch.Tensor(c_update)
 
   @property
+  def games_count(self) -> torch.Tensor:
+    return self.games
+
+  @property
   def player_score(self) -> float:
     return self.__getitem__(self._player_idx)
 
-  def _apply_rotation(self, opponent_idx: int) -> float:
+  def _apply_rotation(self, opponent_idx: int) -> torch.Tensor:
     z = (self.c[self._player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self._player_idx, 1])
     return z
 

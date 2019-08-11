@@ -24,7 +24,7 @@ class Environment:
   single_process = False
   address = "0.0.0.0:50052"
 
-  newest_opponent_prob = 0.8
+  newest_opponent_prob = 0.1
 
   max_cards_in_board = 7
   max_entities_in_board = max_cards_in_board + 1
@@ -98,7 +98,7 @@ class PPOAgent:
   assert num_updates
 
 
-if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
+if any((DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
         Environment.single_process)):
   print('''
                                     _.---"'"""""'`--.._

@@ -158,14 +158,16 @@ class PPOAgent(agents.base_agent.Agent):
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
                        mean_value, grad_pi=grad_pi, grad_value=grad_value)
 
+
       if ppo_update_num > 1:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(total_num_steps)
 
         if ppo_update_num % self.eval_every == 0:
           _rewards, _scores = self.eval_agent(eval_envs)
-          elo_score = game_manager.update_score(_scores)
+          elo_score, games_count = game_manager.update_score(_scores)
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
+          self.tensorboard.add_histogram('dashboard/games_count', games_count.reshape((-1,1)),  total_num_steps)
           performance = np.mean(_rewards)
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
