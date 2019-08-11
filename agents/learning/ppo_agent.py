@@ -174,7 +174,7 @@ class PPOAgent(agents.base_agent.Agent):
             break
 
     checkpoint_file = self.save_model(total_num_steps)
-    rewards, outcomes = self.eval_agent(valid_envs)
+    rewards, outcomes = self.eval_agent(valid_envs, num_eval_games=1000)
 
     test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
@@ -226,14 +226,15 @@ class PPOAgent(agents.base_agent.Agent):
 
     return env
 
-  def eval_agent(self, eval_envs):
+  def eval_agent(self, eval_envs, num_eval_games=hs_config.PPOAgent.num_eval_games):
     rewards = []
 
     def stop_eval(rews, step):
-      return len(rews) >= hs_config.PPOAgent.num_eval_games
+      return len(rews) >= num_eval_games
 
     opponents = []
-    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, opponents=opponents, deterministic=True)
+    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, opponents=opponents, deterministic=True,
+                         timeout=num_eval_games * 100)
 
     scores = collections.defaultdict(list)
     for k, r in zip(opponents, rewards):
@@ -242,7 +243,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards, dict(scores)
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,
-      opponents: list = None):
+      opponents: list = None, timeout=10000):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -250,7 +251,7 @@ class PPOAgent(agents.base_agent.Agent):
       obs, possible_actions = rollouts.get_observation(0)
 
     for step in itertools.count():
-      if step == 10000:
+      if step == timeout:
         raise TimeoutError
 
       if exit_condition(rewards, step):
@@ -346,12 +347,10 @@ class PPOAgent(agents.base_agent.Agent):
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents)
 
-    # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
       self.load_checkpoint(checkpoint_file, self.enjoy_env)
 
     obs, _, _, infos = self.enjoy_env.reset()
-
     while True:
       with torch.no_grad():
         value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
@@ -462,8 +461,7 @@ class PPOAgent(agents.base_agent.Agent):
           checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
-          old_win_ratio = win_ratio
-          # assert not game_manager._use_heuristic_opponent
+        old_win_ratio = win_ratio
 
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
