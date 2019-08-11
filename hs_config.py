@@ -7,7 +7,6 @@ import torch
 
 import agents.base_agent
 import shared.constants as C
-from shared.env_utils import get_extra_reward
 
 use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
@@ -39,6 +38,7 @@ class Environment:
 
   @staticmethod
   def get_reward_shape(r, game):
+    from shared.env_utils import get_extra_reward
     _r = get_extra_reward(game, reward_type=Environment.reward_type)
     return r + _r
 
