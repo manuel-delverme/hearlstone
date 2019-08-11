@@ -6,6 +6,8 @@ from typing import Callable, Type
 import torch
 
 import agents.base_agent
+import shared.constants as C
+from shared.env_utils import get_extra_reward
 
 use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
@@ -33,12 +35,11 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  reward_type = "mana_adv"
+  reward_type = C.RewardType.default
 
   @staticmethod
   def get_reward_shape(r, game):
-    from shared.env_utils import game_stats
-    _r = game_stats(game, reward_type=Environment.reward_type)
+    _r = get_extra_reward(game, reward_type=Environment.reward_type)
     return r + _r
 
   @staticmethod
@@ -87,7 +88,7 @@ class PPOAgent:
   actor_adam_lr = 7e-4
   critic_adam_lr = 1e-5
 
-  num_processes = 2 if DEBUG else 3  # number of CPU processes
+  num_processes = 2 if DEBUG else 12  # number of CPU processes
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
 

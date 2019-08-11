@@ -12,6 +12,7 @@ class RewardType(Enum):
   life_adv = "life_adv"
   minion_adv = "minion_adv"
   time_left = "time_left"
+  default = "default"
 
 
 class SPELLS(enum.IntEnum):
@@ -85,7 +86,7 @@ HandPosition.__call__ = lambda x: x
 PlayerTaskType.__call__ = lambda x: x
 
 GameStatistics = collections.namedtuple('GameStatistics',
-                                        ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
+                                        ['mana_adv', 'hand_adv',  'life_adv', 'n_turns_left', 'minion_adv'])
 ACTION_SPACE = 249
 STATE_SPACE = 92  # state space includes card_index
 

@@ -11,7 +11,7 @@ import sb_env.SabberStone_python_client.python_pb2_grpc as sabberstone_grpc
 import shared.constants as C
 import shared.env_utils
 import shared.utils
-from shared.env_utils import parse_game, shape_reward
+from shared.env_utils import parse_game, shape_reward, game_stats
 
 
 class _GameRef:
@@ -194,10 +194,13 @@ class Sabberstone(environments.base_env.RenderableEnv):
       else:
         break
 
+    _game_stats = game_stats(self.game_snapshot)
+    self.turn_stats.append(_game_stats)
     terminal = any(rewards)
     if terminal:
       reward = [r for r in rewards if r != 0.][0]
       info['game_statistics'] = self.gather_game_statistics(reward)
+      self.turn_stats = []  # this here for simplicity
     else:
       reward = 0.
 
@@ -253,9 +256,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
   def gather_game_statistics(self, reward):
     # self.game_matrix(self.current_k, reward)
     # counts = np.array([v[1] for v in self._game_matrix.values()])
-    # _stats = C.GameStatistics(*zip(*self.turn_stats))
+    #_stats = C.GameStatistics(*zip(*self.turn_stats))
     return {
-      # **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
+      'game_eval': C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
       'outcome': reward,
       # 'life_adv': self.turn_stats[-1].life_adv,
       # 'mean_opponent': counts.mean(),

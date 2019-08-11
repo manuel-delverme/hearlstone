@@ -22,6 +22,7 @@ from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 from shared.utils import HSLogger
+import shared.constants as C
 
 
 def get_grad_norm(model):
@@ -134,6 +135,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     rollouts.store_first_transition(obs, possible_actions)
     episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
+    game_stats = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
 
     start = time.time()  # TODO: bugged
     total_num_steps = None
@@ -144,7 +146,7 @@ class PPOAgent(agents.base_agent.Agent):
         return step >= hs_config.PPOAgent.num_steps
 
       with self.timer("gather_rollouts"):
-        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
+        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False, game_stats=game_stats)
 
       with torch.no_grad():
         next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
@@ -155,8 +157,8 @@ class PPOAgent(agents.base_agent.Agent):
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
-      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
-                       mean_value, grad_pi=grad_pi, grad_value=grad_value)
+      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
+                       grad_value=grad_value, grad_pi=grad_pi, game_stats=game_stats)
 
       if ppo_update_num > 1:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
@@ -232,7 +234,8 @@ class PPOAgent(agents.base_agent.Agent):
       return len(rews) >= hs_config.PPOAgent.num_eval_games
 
     opponents = []
-    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, opponents=opponents, deterministic=True)
+    game_stats = []
+    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, deterministic=True, opponents=opponents, game_stats=game_stats)
 
     scores = collections.defaultdict(list)
     for k, r in zip(opponents, rewards):
@@ -241,7 +244,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards, dict(scores)
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,
-      opponents: list = None):
+      opponents: List = None, game_stats: List =None):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -271,14 +274,15 @@ class PPOAgent(agents.base_agent.Agent):
         assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, infos['game_statistics']['outcome']))
         for info in infos['game_statistics']:
           outcome = info['outcome']
+          game_stats.append(info['game_eval'])
           if outcome != 0:
             assert isinstance(outcome, np.float32)
             rewards.append(outcome)
             if opponents is not None:
               opponents.append(info['opponent_nr'])
 
-  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, mean_value,
-      grad_value, grad_pi):
+  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, mean_value, grad_value,
+      grad_pi, game_stats=None):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -287,6 +291,12 @@ class PPOAgent(agents.base_agent.Agent):
 
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
       self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
+
+      avg_game_stats = {k:v for k,v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=0))}
+      _ = [self.tensorboard.add_scalar(f'eval_game/{k}',v, time_step) for k,v in avg_game_stats.items()]
+
+
+    self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
 
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
     self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)

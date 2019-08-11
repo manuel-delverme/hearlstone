@@ -243,33 +243,76 @@ def parse_game(game):
   ), dtype=np.int32)
 
 
-def game_stats(game, reward_type=None):
-  if reward_type is None:
+def game_stats(game):
+  player = game.CurrentPlayer
+  opponent = game.CurrentOpponent
+
+  mana_adv = get_mana_adv(player)
+  hand_adv = get_hand_adv(player, opponent)
+  life_adv = get_life_adv(player, opponent)
+  n_remaining_turns = get_time_left(player, opponent)
+  minion_adv = get_board_adv(player, opponent)
+
+  return C.GameStatistics(mana_adv, hand_adv, life_adv, n_remaining_turns, minion_adv)
+
+
+def get_extra_reward(game, reward_type=None):
+  if reward_type == C.RewardType.default:
     return 0.
 
   player = game.CurrentPlayer
   opponent = game.CurrentOpponent
-  power, value = board_power(player)
-
-  hero_life, opponent_life = players_life(opponent, player)
-  reward = 0.
 
   if reward_type == C.RewardType.mana_adv:
-    mana_adv = (player.base_mana - player.remaining_mana) / hs_config.Environment.max_mana
-    reward = mana_adv / hs_config.Environment.max_mana
+    reward = get_mana_adv(player)
   elif reward_type == C.RewardType.hand_adv:
-    hand_adv = (len(player.hand_zone.entities) - len(opponent.hand_zone.entities))
-    draw_adv = (len(player.deck_zone.entities) - len(opponent.deck_zone.entities))  # number of remaining cards
-    reward = (hand_adv + draw_adv) / hs_config.Environment.max_deck_size
+    reward = get_hand_adv(player, opponent)
   elif reward_type == C.RewardType.life_adv:
-    life_adv = opponent_life - hero_life
-    reward = life_adv / hs_config.Environment.max_life
+    reward = get_life_adv(player, opponent)
   elif reward_type == C.RewardType.minion_adv:
-    defense = sum([minion.base_health for minion in opponent.board_zone.minions])
-    reward = value - defense / (10 + 10)
+    reward = get_board_adv(player, opponent)
   elif reward_type == C.RewardType.time_left:
-    reward = max(opponent_life / power, 1.)
+    reward = get_time_left(player, opponent)
+  else:
+    raise NameError("Misspecified reward type")
 
+  return reward
+
+
+def get_time_left(player, opponent):
+  hero_life, opponent_life = players_life(opponent, player)
+  power, value = board_power(player)
+  if power > 0:
+    reward = max(opponent_life / power, 1.)
+  else:
+    reward = 0
+  return reward
+
+
+def get_board_adv(player, opponent):
+  power, value = board_power(player)
+  defense = sum([minion.base_health for minion in opponent.board_zone.minions])
+  reward = value - defense / (10 + 10)
+  return reward
+
+
+def get_life_adv(player, opponent):
+  hero_life, opponent_life = players_life(opponent, player)
+  life_adv = opponent_life - hero_life
+  reward = life_adv / hs_config.Environment.max_life
+  return reward
+
+
+def get_hand_adv(player, opponent):
+  hand_adv = (len(player.hand_zone.entities) - len(opponent.hand_zone.entities))
+  draw_adv = (len(player.deck_zone.entities) - len(opponent.deck_zone.entities))  # number of remaining cards
+  reward = (hand_adv + draw_adv) / hs_config.Environment.max_deck_size
+  return reward
+
+
+def get_mana_adv(player):
+  mana_adv = (player.base_mana - player.remaining_mana) / hs_config.Environment.max_mana
+  reward = mana_adv / hs_config.Environment.max_mana
   return reward
 
 
