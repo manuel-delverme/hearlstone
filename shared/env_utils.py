@@ -311,7 +311,7 @@ def get_hand_adv(player, opponent):
 
 
 def get_mana_adv(player):
-  mana_adv = (player.base_mana - player.remaining_mana) / hs_config.Environment.max_mana
+  mana_adv = (player.base_mana - player.remaining_mana)
   reward = mana_adv / hs_config.Environment.max_mana
   return reward
 
