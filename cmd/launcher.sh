@@ -9,7 +9,8 @@
 #SBATCH -e /homedtic/stotaro/hearlstone/%N.%J.general.err # STDOUT
 
 set -x
-PID=$(sbatch run_server.sh $1 | grep -Eo '[[:digit:]]*')
+PID=$(sbatch run_server.sh $2 | grep -Eo '[[:digit:]]*')
 sleep 1m
 NODE=$(squeue --job $PID | grep -e "node\w*" -o)
-sbatch ./train_cluster.sh $2 $NODE:$PID
+ADDRESS="$NODE:$2"
+sbatch ./cmd/train_cluster.sh $1 $ADDRESS

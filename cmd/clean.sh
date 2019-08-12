@@ -5,7 +5,6 @@ mkdir ~/trash
 echo "Moving logs to trash"
 mv logs.tar.gz ~/trash
 echo "Cleaning up.."
-rm -f logs/*
-rm -f debug/
-rm -f jobs/*
+rm -r logs/*
+rm -r jobs/*
 rm *.std.{out, err}
