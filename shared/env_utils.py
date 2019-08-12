@@ -292,7 +292,7 @@ def get_time_left(player, opponent):
 def get_board_adv(player, opponent):
   power, value = board_power(player)
   defense = sum([minion.base_health for minion in opponent.board_zone.minions])
-  reward = value - defense / (10 + 10)
+  reward = value - defense / max(1,max(value, defense))
   return reward
 
 
