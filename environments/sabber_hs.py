@@ -94,8 +94,6 @@ def enumerate_actions():
 
 
 class Sabberstone(environments.base_env.RenderableEnv):
-  DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-  DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 
   action_to_id = enumerate_actions()
 
@@ -119,7 +117,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     with self.logger("call_init"):
       self.channel = grpc.insecure_channel(address)
       self.stub = Stub(sabberstone_grpc.SabberStonePythonStub(self.channel))
-      self.game_snapshot = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
+      self.game_snapshot = self.stub.NewGame(deck1=C.DECK1, deck2=C.DECK2)
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)

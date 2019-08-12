@@ -12,10 +12,8 @@ import hs_config
 import shared.constants as C
 
 
-# source: https://github.com/kroitor/asciichart/blob/master/asciichartpy/__init__.py
-
-
 def plot(series):
+  # source: https://github.com/kroitor/asciichart/blob/master/asciichartpy/__init__.py
   minimum = min(series)
   maximum = max(series)
 
