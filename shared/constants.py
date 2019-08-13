@@ -10,7 +10,7 @@ class RewardType(Enum):
   mana_adv = "mana_adv"
   hand_adv = "hand_adv"
   life_adv = "life_adv"
-  minion_adv = "minion_adv"
+  board_adv = "board_adv"
   time_left = "time_left"
   default = "default"
 

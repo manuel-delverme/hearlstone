@@ -269,7 +269,7 @@ def get_extra_reward(game, reward_type=None):
     reward = get_hand_adv(player, opponent)
   elif reward_type == C.RewardType.life_adv:
     reward = get_life_adv(player, opponent)
-  elif reward_type == C.RewardType.minion_adv:
+  elif reward_type == C.RewardType.board_adv:
     reward = get_board_adv(player, opponent)
   elif reward_type == C.RewardType.time_left:
     reward = get_time_left(player, opponent)
@@ -291,8 +291,8 @@ def get_time_left(player, opponent):
 
 def get_board_adv(player, opponent):
   power, value = board_power(player)
-  defense = sum([minion.base_health for minion in opponent.board_zone.minions])
-  reward = value - defense / max(1,max(value, defense))
+  defense = sum([minion.base_health - minion.damage for minion in opponent.board_zone.minions])
+  reward = (value - defense) / max(1,max(value, defense))
   return reward
 
 
@@ -323,7 +323,7 @@ def players_life(opponent, player):
 
 
 def board_power(player):
-  power = [(minion.atk, minion.base_health) for minion in player.board_zone.minions]
+  power = [(minion.atk, minion.base_health - minion.damage) for minion in player.board_zone.minions]
   if len(power):
     power, value = np.sum(power, axis=0)
   else:
