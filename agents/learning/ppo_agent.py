@@ -22,6 +22,7 @@ from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 from shared.utils import HSLogger
+import shared.constants as C
 
 
 def get_grad_norm(model):
@@ -134,6 +135,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     rollouts.store_first_transition(obs, possible_actions)
     episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
+    game_stats = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
 
     start = time.time()  # TODO: bugged
     total_num_steps = None
@@ -144,7 +146,7 @@ class PPOAgent(agents.base_agent.Agent):
         return step >= hs_config.PPOAgent.num_steps
 
       with self.timer("gather_rollouts"):
-        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
+        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False, game_stats=game_stats)
 
       with torch.no_grad():
         next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
@@ -155,8 +157,8 @@ class PPOAgent(agents.base_agent.Agent):
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
-      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
-                       mean_value, grad_pi=grad_pi, grad_value=grad_value)
+      self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
+                       grad_value=grad_value, grad_pi=grad_pi, game_stats=game_stats)
 
 
       if ppo_update_num > 1:
@@ -176,7 +178,7 @@ class PPOAgent(agents.base_agent.Agent):
             break
 
     checkpoint_file = self.save_model(total_num_steps)
-    rewards, outcomes = self.eval_agent(valid_envs, num_eval_games=1000)
+    rewards, outcomes = self.eval_agent(valid_envs)
 
     test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
@@ -195,7 +197,6 @@ class PPOAgent(agents.base_agent.Agent):
   def setup_envs(self, game_manager: game_utils.GameManager):
     if self.envs is None:
       print("[Train] Loading training environments")
-      # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs(game_manager, self.num_processes)
     else:
@@ -228,15 +229,15 @@ class PPOAgent(agents.base_agent.Agent):
 
     return env
 
-  def eval_agent(self, eval_envs, num_eval_games=hs_config.PPOAgent.num_eval_games):
+  def eval_agent(self, eval_envs):
     rewards = []
 
     def stop_eval(rews, step):
-      return len(rews) >= num_eval_games
+      return len(rews) >= hs_config.PPOAgent.num_eval_games
 
     opponents = []
-    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, opponents=opponents, deterministic=True,
-                         timeout=num_eval_games * 100)
+    game_stats = []
+    self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, deterministic=True, opponents=opponents, game_stats=game_stats)
 
     scores = collections.defaultdict(list)
     for k, r in zip(opponents, rewards):
@@ -245,7 +246,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards, dict(scores)
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,
-      opponents: list = None, timeout=10000):
+      opponents: List = None, game_stats: List =None):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -253,7 +254,7 @@ class PPOAgent(agents.base_agent.Agent):
       obs, possible_actions = rollouts.get_observation(0)
 
     for step in itertools.count():
-      if step == timeout:
+      if step == 10000:
         raise TimeoutError
 
       if exit_condition(rewards, step):
@@ -264,7 +265,6 @@ class PPOAgent(agents.base_agent.Agent):
 
       with self.timer("agent_step"):
         obs, reward, done, infos = envs.step(action)
-      assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, rewards))
 
       possible_actions = infos['possible_actions']
 
@@ -273,17 +273,18 @@ class PPOAgent(agents.base_agent.Agent):
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
       assert 'game_statistics' in specs.TERMINAL_GAME_INFO_KEYS
       if 'game_statistics' in infos:
-
+        assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, infos['game_statistics']['outcome']))
         for info in infos['game_statistics']:
           outcome = info['outcome']
+          game_stats.append(info['game_eval'])
           if outcome != 0:
             assert isinstance(outcome, np.float32)
             rewards.append(outcome)
             if opponents is not None:
               opponents.append(info['opponent_nr'])
 
-  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, mean_value,
-      grad_value, grad_pi):
+  def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, mean_value, grad_value,
+      grad_pi, game_stats=None):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -292,6 +293,12 @@ class PPOAgent(agents.base_agent.Agent):
 
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
       self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
+
+      avg_game_stats = {k:v for k,v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=0))}
+      _ = [self.tensorboard.add_scalar(f'eval_game/{k}',v, time_step) for k,v in avg_game_stats.items()]
+
+
+    self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
 
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
     self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
@@ -349,10 +356,12 @@ class PPOAgent(agents.base_agent.Agent):
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents)
 
+    # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
       self.load_checkpoint(checkpoint_file, self.enjoy_env)
 
     obs, _, _, infos = self.enjoy_env.reset()
+
     while True:
       with torch.no_grad():
         value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
@@ -451,7 +460,7 @@ class PPOAgent(agents.base_agent.Agent):
       for self_play_iter, num_updates in enumerate(updates_schedule):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
 
-        new_checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
+        checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
         self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
@@ -460,7 +469,6 @@ class PPOAgent(agents.base_agent.Agent):
 
         if win_ratio >= old_win_ratio:
           print('updating checkpoint')
-          checkpoint_file = new_checkpoint_file
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
         old_win_ratio = win_ratio

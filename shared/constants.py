@@ -1,9 +1,18 @@
 import collections
 import enum
-from enum import IntEnum
+from enum import IntEnum, Enum
 
 AGENT_ID = 1
 OPPONENT_ID = 2
+
+
+class RewardType(Enum):
+  mana_adv = "mana_adv"
+  hand_adv = "hand_adv"
+  life_adv = "life_adv"
+  board_adv = "board_adv"
+  time_left = "time_left"
+  default = "default"
 
 
 class SPELLS(enum.IntEnum):
@@ -77,7 +86,7 @@ HandPosition.__call__ = lambda x: x
 PlayerTaskType.__call__ = lambda x: x
 
 GameStatistics = collections.namedtuple('GameStatistics',
-                                        ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
+                                        ['mana_adv', 'hand_adv',  'life_adv', 'n_turns_left', 'minion_adv'])
 ACTION_SPACE = 249
 STATE_SPACE = 92  # state space includes card_index
 

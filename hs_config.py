@@ -6,6 +6,7 @@ from typing import Callable, Type
 import torch
 
 import agents.base_agent
+import shared.constants as C
 
 use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
@@ -23,6 +24,9 @@ class Environment:
   ENV_DEBUG_METRICS = False
   single_process = False
   address = "0.0.0.0:50052"
+  max_life = 30
+  max_deck_size = 30
+  max_mana = 10
 
   newest_opponent_prob = 0.1
 
@@ -30,8 +34,13 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
+  reward_type = C.RewardType.default
 
-  # max_turns = 50
+  @staticmethod
+  def get_reward_shape(r, game):
+    from shared.env_utils import get_extra_reward
+    _r = get_extra_reward(game, reward_type=Environment.reward_type)
+    return r + _r
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:

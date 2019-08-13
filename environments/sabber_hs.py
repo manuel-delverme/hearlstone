@@ -196,7 +196,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
     if terminal:
       reward = [r for r in rewards if r != 0.][0]
       info['game_statistics'] = self.gather_game_statistics(reward)
-      self.game_matrix[self.current_k] += [max(0., -reward), 1]  # prob of p2 winning, number of matches
     else:
       reward = 0.
 
