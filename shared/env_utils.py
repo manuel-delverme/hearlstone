@@ -251,9 +251,9 @@ def game_stats(game):
   hand_adv = get_hand_adv(player, opponent)
   life_adv = get_life_adv(player, opponent)
   n_remaining_turns = get_time_left(player, opponent)
-  minion_adv = get_board_adv(player, opponent)
+  board_adv = get_board_adv(player, opponent)
 
-  return C.GameStatistics(mana_adv, hand_adv, life_adv, n_remaining_turns, minion_adv)
+  return C.GameStatistics(mana_adv, hand_adv, life_adv, n_remaining_turns, board_adv)
 
 
 def get_extra_reward(game, reward_type=None):

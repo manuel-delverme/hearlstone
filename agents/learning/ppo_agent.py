@@ -167,9 +167,10 @@ class PPOAgent(agents.base_agent.Agent):
 
         if ppo_update_num % self.eval_every == 0:
           _rewards, _scores = self.eval_agent(eval_envs)
-          elo_score, games_count = game_manager.update_score(_scores)
+          elo_score, _ = game_manager.update_score(_scores)
+          opponent_dist = game_manager.opponent_dist(hs_config.GameManager.max_opponents)
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
-          self.tensorboard.add_histogram('dashboard/games_count', games_count.reshape((-1,1)),  total_num_steps)
+          self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist.reshape((-1,1)),  ppo_update_num)
           performance = np.mean(_rewards)
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
@@ -195,13 +196,16 @@ class PPOAgent(agents.base_agent.Agent):
         lr=hs_config.PPOAgent.critic_adam_lr, )
 
   def setup_envs(self, game_manager: game_utils.GameManager):
+
+    opponent_dist = game_manager.opponent_dist()
+
     if self.envs is None:
       print("[Train] Loading training environments")
       game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs(game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents)
+      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -209,7 +213,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.eval_envs = make_vec_envs(game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents)
+      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")

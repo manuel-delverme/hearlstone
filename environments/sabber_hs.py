@@ -11,7 +11,7 @@ import sb_env.SabberStone_python_client.python_pb2_grpc as sabberstone_grpc
 import shared.constants as C
 import shared.env_utils
 import shared.utils
-from shared.env_utils import parse_game
+from shared.env_utils import parse_game, shape_reward, game_stats
 
 
 class _GameRef:
@@ -117,6 +117,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.game_matrix = None
     self.logger.info(f"Env with id {env_number} started.")
 
+
   def agent_game_vale(self):
     player = self.game_snapshot.CurrentPlayer
     if player.play_state == sabberstone_protobuf.Controller.WON:  # maybe PlayState
@@ -169,6 +170,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
   #     self.turn_stats.append(new_stats)
 
   @shared.env_utils.episodic_log
+  @shape_reward
+  @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray):
     rewards = []
     while True:
@@ -192,10 +195,14 @@ class Sabberstone(environments.base_env.RenderableEnv):
       else:
         break
 
+    _game_stats = game_stats(self.game_snapshot)
+    self.turn_stats.append(_game_stats)
     terminal = any(rewards)
     if terminal:
       reward = [r for r in rewards if r != 0.][0]
       info['game_statistics'] = self.gather_game_statistics(reward)
+      self.turn_stats = []
+      # self.game_matrix[self.current_k] += [max(0., -reward), 1]  # prob of p2 winning, number of matches
     else:
       reward = 0.
 
@@ -229,21 +236,23 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.last_observation = observation
     return observation, 0, False, info
 
-  def set_opponents(self, opponents):
+  def set_opponents(self, opponents, opponent_dist):
     super(Sabberstone, self).set_opponents(opponents)
-    self.game_matrix = np.zeros(shape=(len(self.opponents), 2))
+    self.opponent_dist = opponent_dist
 
   def _sample_opponent(self):
     if hs_config.Environment.newest_opponent_prob > np.random.uniform() and self.opponent is not None:
       return
-    p = np.ones(shape=len(self.opponents))
-
-    if len(self.opponents) > 1:
-      if self.game_matrix[:, 1].sum() > 0:
-        # TODO update me with probability of winning
-        idxs = self.game_matrix[:, 1] > 0  # only for the one who played
-        p[idxs] = 1 / self.game_matrix[:, 1][idxs]
-      p /= p.sum()
+    p = self.opponent_dist
+    p /= p.sum()
+    # p = np.ones(shape=len(self.opponents))
+    #
+    # if len(self.opponents) > 1:
+    #   if self.game_matrix[:, 1].sum() > 0:
+    #     # TODO update me with probability of winning
+    #     idxs = self.game_matrix[:, 1] > 0  # only for the one who played
+    #     p[idxs] = 1 / self.game_matrix[:, 1][idxs]
+    #   p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
@@ -255,7 +264,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
     # _stats = C.GameStatistics(*zip(*self.turn_stats))
     return {
       # **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
-      'outcome': reward,
+      'game_eval':C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
+    'outcome': reward,
       # 'life_adv': self.turn_stats[-1].life_adv,
       # 'mean_opponent': counts.mean(),
       'opponent_nr': self.current_k,

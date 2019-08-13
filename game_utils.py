@@ -20,6 +20,12 @@ class GameManager(object):
     self._game_score.update(score)
     return self._game_score.player_score, self._game_score.games_count
 
+  def opponent_dist(self, n_opponents=None):
+    if n_opponents is None:
+      n_opponents = len(self.opponents)
+    assert n_opponents <= hs_config.GameManager.max_opponents
+    return self._game_score.opponent_distribution(n_opponents)
+
   @property
   def use_heuristic_opponent(self):
     return self._use_heuristic_opponent
@@ -30,16 +36,19 @@ class GameManager(object):
 
   def __call__(self):
     hs_game = self.game_class()
+    initial_dist = self.opponent_dist()
     if self.use_heuristic_opponent:
-      hs_game.set_opponents(opponents=['default'])
+      initial_dist = self.opponent_dist(1)
+      hs_game.set_opponents(opponents=['default'], opponent_dist=initial_dist)
     else:
-      hs_game.set_opponents(opponents=self.opponents)
+      hs_game.set_opponents(opponents=self.opponents,opponent_dist=initial_dist)
 
     return hs_game
 
   def add_learned_opponent(self, checkpoint_file: Text):
     assert isinstance(checkpoint_file, str)
     self.opponents.append(checkpoint_file)
+    self._game_score.set_from_player(len(self.opponents))
 
 
 class Elo:
@@ -47,6 +56,7 @@ class Elo:
     # https://arxiv.org/pdf/1806.02643.pdf
 
     max_opponents = hs_config.GameManager.max_opponents
+    self.max_opponents = max_opponents
 
     self.games = torch.zeros(max_opponents)
     self.scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
@@ -57,6 +67,10 @@ class Elo:
 
   def __getitem__(self, item: int) -> float:
     return self.scores[item]
+
+  def set_from_player(self,idx):
+    self.scores[idx] = self.scores[self._player_idx]
+    self.c[idx] = self.c[self._player_idx]
 
   def update(self, scores: dict):
     for idx, score in scores.items():
@@ -82,6 +96,12 @@ class Elo:
   @property
   def player_score(self) -> float:
     return self.__getitem__(self._player_idx)
+
+  def opponent_distribution(self, opponents=None):
+    if opponents is None:
+      opponents = self.max_opponents
+    p_ij = torch.Tensor([1-self.__call__(idx) for idx in range(opponents)])
+    return (p_ij/p_ij.sum()).numpy()
 
   def _apply_rotation(self, opponent_idx: int) -> torch.Tensor:
     z = (self.c[self._player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self._player_idx, 1])

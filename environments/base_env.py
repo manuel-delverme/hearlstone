@@ -76,7 +76,7 @@ class BaseEnv(gym.Env, ABC):
   def agent_game_vale(self):
     raise NotImplemented
 
-  def set_opponents(self, opponents):
+  def set_opponents(self, opponents, *args, **kwargs):
     _opponents = []
     for player_hash in opponents:
       if player_hash not in self.opponents_lookup:

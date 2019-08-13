@@ -28,13 +28,13 @@ class Environment:
   max_deck_size = 30
   max_mana = 10
 
-  newest_opponent_prob = 0.1
+  newest_opponent_prob = 1.
 
   max_cards_in_board = 7
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  reward_type = C.RewardType.default
+  reward_type = C.RewardType.board_adv
 
   @staticmethod
   def get_reward_shape(r, game):
