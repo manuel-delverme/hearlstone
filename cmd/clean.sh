@@ -7,4 +7,4 @@ mv logs.tar.gz ~/trash
 echo "Cleaning up.."
 rm -r logs/*
 rm -r jobs/*
-rm *.std.{out, err}
+rm *.{out,err}
