@@ -20,7 +20,7 @@ class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  single_process = False
+  single_process = DEBUG
   address = "0.0.0.0:50052"
 
   newest_opponent_prob = 0.8

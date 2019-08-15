@@ -1,6 +1,6 @@
 import collections
 import random
-from typing import Dict, Text, Any
+from typing import Dict, Text, Any, List
 
 import numpy as np
 import torch
@@ -180,8 +180,8 @@ class SabberAgent(HeuristicAgent):
             self.logger.debug("".join(['Playing', desk[selected_action]]))
     return selected_action
 
-  def action_is_play_minion(self, action, hand_zone):
-    return action.type == C.PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in C.MINION_IDS
+  def action_is_play_minion(self, action, hand_zone: List[C.Card]):
+    return action.type == C.PlayerTaskType.PLAY_CARD and not action.is_playing_spell
 
   def action_is_trade(self, action, hand_zone):
     return action.type == C.PlayerTaskType.MINION_ATTACK
@@ -193,7 +193,7 @@ class SabberAgent(HeuristicAgent):
     return action.type == C.PlayerTaskType.HERO_ATTACK
 
   def action_is_spell(self, action, hand_zone):
-    return action.type == C.PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].health in (-1, 0)
+    return action.is_playing_spell
 
   def evaluate_trade(self, action, opponent_board, opponent_hero, player_board, player_hero):
     value = 0

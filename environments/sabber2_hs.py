@@ -1,8 +1,8 @@
 import os
 
 import environments.sabber_hs
+import pysabberstone.python.server as mm_server
 import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
-import sb_mm_env.SabberStone_python_client.sabber_protocol.server as mm_server
 
 
 class _GameRef(environments.sabber_hs._GameRef):
