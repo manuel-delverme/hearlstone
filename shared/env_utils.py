@@ -1,7 +1,8 @@
 import collections
+import os
 import pprint
 from collections import defaultdict
-from typing import Callable, Optional, List
+from typing import Callable, Optional, List, Text
 
 import numpy as np
 import torch
@@ -73,16 +74,18 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     return obs, rewards, dones, dict(new_infos)
 
 
-def _make_env(load_env: Callable[[], environments.base_env.BaseEnv]) -> Callable[[], environments.base_env.BaseEnv]:
+def _make_env(load_env: Callable[[], environments.base_env.BaseEnv], env_number: int) -> Callable[[], environments.base_env.BaseEnv]:
   def _thunk():
-    return load_env()
+    return load_env(env_number=env_number)
 
   return _thunk
 
 
-def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, device: torch.device = hs_config.device
+def make_vec_envs(name: Text, load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int,
+    device: torch.device = hs_config.device
 ) -> PyTorchCompatibilityWrapper:
-  envs = [_make_env(load_env) for _ in range(num_processes)]
+  pid = os.getpid()
+  envs = [_make_env(load_env, f"{pid}.{name}.{env_number}") for env_number in range(num_processes)]
 
   if len(envs) == 1 or hs_config.Environment.single_process:
     vectorized_envs = DummyVecEnv(envs)

@@ -28,8 +28,8 @@ class GameManager(object):
   def use_heuristic_opponent(self, value):
     self._use_heuristic_opponent = value
 
-  def __call__(self):
-    hs_game = self.game_class()
+  def __call__(self, env_number):
+    hs_game = self.game_class(env_number=env_number)
     if self.use_heuristic_opponent:
       hs_game.set_opponents(opponents=['default'])
     else:

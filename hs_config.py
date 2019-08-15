@@ -33,10 +33,10 @@ class Environment:
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
-    import environments.sabber_hs
+    import environments.sabber2_hs
     out = functools.partial(
-        environments.sabber_hs.Sabberstone,
-        address
+        environments.sabber2_hs.Sabberstone2,
+        address=address,
     )
     return out
 

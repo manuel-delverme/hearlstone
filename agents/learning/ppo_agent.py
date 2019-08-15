@@ -39,7 +39,7 @@ class PPOAgent(agents.base_agent.Agent):
       value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
     return action
 
-  def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Text, device=hs_config.device) -> None:
+  def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
     assert isinstance(__class__.__name__, str)
     self.device = device
     self.timer = HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
@@ -172,7 +172,7 @@ class PPOAgent(agents.base_agent.Agent):
 
           elo_score = game_manager.update_score(_scores)
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
-          performance = np.mean(_rewards)
+          performance = (np.mean(_rewards) + 1.0) / 2
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
@@ -201,7 +201,7 @@ class PPOAgent(agents.base_agent.Agent):
       print("[Train] Loading training environments")
       # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
-      self.envs = make_vec_envs(game_manager, self.num_processes)
+      self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
       self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents)
@@ -209,7 +209,7 @@ class PPOAgent(agents.base_agent.Agent):
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
       game_manager.use_heuristic_opponent = False
-      self.eval_envs = make_vec_envs(game_manager, self.num_processes)
+      self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
       self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents)
@@ -217,7 +217,7 @@ class PPOAgent(agents.base_agent.Agent):
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
       game_manager.use_heuristic_opponent = True
-      self.validation_envs = make_vec_envs(game_manager, self.num_processes)
+      self.validation_envs = make_vec_envs('validation', game_manager, self.num_processes)
 
     return self.envs, self.eval_envs, self.validation_envs
 
