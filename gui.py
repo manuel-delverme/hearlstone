@@ -11,8 +11,8 @@ class GUI:
     self.screen.resize(max(50, _height), _width)
     (self.game_height, self.game_width) = self.screen.getmaxyx()
 
-    opponent_rows = (C.CARD_HEIGHT + 2) * 1 + 2
-    player_rows = (C.CARD_HEIGHT + 2) * 2 + 2
+    opponent_rows = (C.GUI_CARD_HEIGHT + 2) * 1 + 2
+    player_rows = (C.GUI_CARD_HEIGHT + 2) * 2 + 2
     log_rows = int(self.game_height - (opponent_rows + player_rows))
     assert log_rows >= 3
 
@@ -84,13 +84,13 @@ class GUI:
     offset = 1
     if top_row:
       self.draw_zone(top_row, player, offset_row=offset, offset_column=1)
-      offset += C.CARD_HEIGHT + 2
+      offset += C.GUI_CARD_HEIGHT + 2
     self.draw_zone(bottom_row, player, offset_row=offset, offset_column=1)
 
   def draw_zone(self, cards_to_draw, player, offset_column, offset_row):
     for offset, card in enumerate(cards_to_draw):
       assert isinstance(card, (C.Minion, C.Hero, C.Card))
-      pixel_offset = offset * (C.CARD_WIDTH + 4)
+      pixel_offset = offset * (C.GUI_CARD_WIDTH + 4)
 
       ready = '+'
       if isinstance(card, C.Minion):
@@ -103,11 +103,11 @@ class GUI:
         card = C.Card(atk=card_id, health=card.cost, id=None, cost=None)
         ready = 's'
 
-      self.draw_rectangle(player, offset_row, offset_column + pixel_offset, C.CARD_HEIGHT, C.CARD_WIDTH)
+      self.draw_rectangle(player, offset_row, offset_column + pixel_offset, C.GUI_CARD_HEIGHT, C.GUI_CARD_WIDTH)
       self.windows[player].addstr(offset_row + 0, offset_column + 2 + pixel_offset, str(ready))
       self.windows[player].addstr(offset_row + 1, offset_column + 1 + pixel_offset, str(card.atk))
-      self.windows[player].addstr(offset_row + C.CARD_HEIGHT,
-                                  offset_column + 1 + C.CARD_WIDTH - len(str(card.health)) + pixel_offset,
+      self.windows[player].addstr(offset_row + C.GUI_CARD_HEIGHT,
+                                  offset_column + 1 + C.GUI_CARD_WIDTH - len(str(card.health)) + pixel_offset,
                                   str(card.health))
 
   def log(self, txt, row=1, multiline=False):

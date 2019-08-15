@@ -100,10 +100,13 @@ def parse_game(info):
 
   player_hero = C.Hero(*parse_hero(game_snapshot.CurrentPlayer.hero))
   opponent_hero = C.Hero(*parse_hero(game_snapshot.CurrentOpponent.hero))
+  hand_zone = []
+  for h in game_snapshot.CurrentPlayer.hand_zone.entities:
+    hand_zone.append(C.Card(*shared.env_utils.parse_card(h)))
 
-  hand_zone = list(map(lambda x: C.Card(*shared.env_utils.parse_card(x)), game_snapshot.CurrentPlayer.hand_zone.entities))
-  player_board = list(map(lambda x: C.Minion(*shared.env_utils.parse_minion(x)), game_snapshot.CurrentPlayer.board_zone.minions))
-  opponent_board = list(map(lambda x: C.Minion(*shared.env_utils.parse_minion(x)), game_snapshot.CurrentOpponent.board_zone.minions))
+  player_board = [C.Minion(*shared.env_utils.parse_minion(m)) for m in game_snapshot.CurrentPlayer.board_zone.minions]
+  opponent_board = [C.Minion(*shared.env_utils.parse_minion(m)) for m in game_snapshot.CurrentOpponent.board_zone.minions]
+
   return player_hero, opponent_hero, hand_zone, player_board, opponent_board
 
 
@@ -190,7 +193,7 @@ class SabberAgent(HeuristicAgent):
     return action.type == C.PlayerTaskType.HERO_ATTACK
 
   def action_is_spell(self, action, hand_zone):
-    return action.type == C.PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].id in C.SPELL_IDS
+    return action.type == C.PlayerTaskType.PLAY_CARD and hand_zone[action.source_position].health in (-1, 0)
 
   def evaluate_trade(self, action, opponent_board, opponent_hero, player_board, player_hero):
     value = 0
@@ -252,7 +255,10 @@ class SabberAgent(HeuristicAgent):
     return value
 
   def evaluate_spell(self, action, hand_zone, opponent_board, opponent_hero):
-    card_id = hand_zone[action.source_position].id
+    card = hand_zone[action.source_position]
+    onehot = tuple(card)[3:]
+    card_id = C.REVERSE_SPELL_LOOKUP[onehot]
+
     if action.target_position < 8:
       return -1  # hitting your own minions as mage is not a good idea
 

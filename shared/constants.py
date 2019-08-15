@@ -1,9 +1,12 @@
 import collections
 import enum
-from enum import IntEnum
 
-AGENT_ID = 1
-OPPONENT_ID = 2
+import hearthstone.deckstrings
+
+
+def idx_to_one_hot(index, max_size):
+  assert index < max_size
+  return tuple([0, ] * index + [1, ] + [0, ] * (max_size - index - 1))
 
 
 class SPELLS(enum.IntEnum):
@@ -11,25 +14,38 @@ class SPELLS(enum.IntEnum):
   Fireball = 315  # 6 damage
   ArcaneExplosion = 447  # 1 damage all
   ArcaneIntellect = 555  # 2 cards
-  FrostNova = 587  # freeze all TODO: implement
+  FrostNova = 587  # freeze all
   ArcaneMissels = 564  # 3 random damage
   Frostbolt = 662  # 3 damage  + freze
   Flamestrike = 1004  # 4 damage all minions
   MirrorImage = 1084  # summon two minions
-  TheCoin = 1746  # + 1 man
+  TheCoin = 1746  # + 1 manA
 
 
 class MINIONS(enum.IntEnum):
-  novice_engineer = 284
-  water_elemental = 395
-  gurubashi_brserker = 768
-  ogre_magi = 995
-  kobold_geomancer = 672
-  acid_swamp_ooze = 906
-  archmage = 525
+  NoviceEngineer = 284
+  WaterElemental = 395
+  GurubashiBerserker = 768
+  OgreMagi = 995
+  KoboldGeomancer = 672
+  AcidSwampOoze = 906
+  Archmage = 525
+  MirrorImageToken = 968
+  PolymorphToken = 796
 
 
-class PlayerTaskType(IntEnum):
+DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+DECK2 = DECK1
+
+AGENT_ID = 1
+OPPONENT_ID = 2
+
+
+# reverse enumerating allows for the first of two indices to overwrite the second, e.g. the idxes are 1..3..5 not 2..4..6
+
+
+
+class PlayerTaskType(enum.IntEnum):
   CHOOSE = 0
   CONCEDE = 1
   END_TURN = 2
@@ -39,7 +55,7 @@ class PlayerTaskType(IntEnum):
   PLAY_CARD = 6
 
 
-class BoardPosition(IntEnum):
+class BoardPosition(enum.IntEnum):
   RightMost = -1
   Hero = 0
   B1 = 1
@@ -59,7 +75,7 @@ class BoardPosition(IntEnum):
   oB7 = 7 + 8
 
 
-class HandPosition(IntEnum):
+class HandPosition(enum.IntEnum):
   H1 = 0
   H2 = 1
   H3 = 2
@@ -79,13 +95,8 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
 ACTION_SPACE = 249
-STATE_SPACE = 92  # state space includes card_index
-
-Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'])
-Card = collections.namedtuple('card', ['id', 'atk', 'health', 'cost'])
-Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
-SPELL_IDS = set(SPELLS)
-MINION_IDS = set(MINIONS)
+# STATE_SPACE = 635
+STATE_SPACE = 698
 
 
 class Players(enum.Enum):
@@ -94,5 +105,60 @@ class Players(enum.Enum):
   LOG = 2
 
 
-CARD_WIDTH = 1  # width of box to draw card in
-CARD_HEIGHT = 3
+GUI_CARD_WIDTH = 1  # width of box to draw card in
+GUI_CARD_HEIGHT = 3
+
+deck = hearthstone.deckstrings.Deck().from_deckstring(DECK1)
+# extra_spells = [SPELLS.TheCoin]
+# extra_minions = [MINIONS.MirrorImageToken, MINIONS.PolymorphToken]
+
+# SPELL_IDS = set(SPELLS)
+# MINION_IDS = set(MINIONS)
+_ONE_HOT_LENGTH = max(len(MINIONS), len(SPELLS))  # largest set of different cards
+
+# minion_onehots = []
+# minion_name = str(MINIONS(idx)).split('.')[1]
+# cards_onehots = minion_onehots
+# spell_name = str(SPELLS(idx)).split('.')[1]
+
+cards_onehots = [str(c).split('.')[1] for c in MINIONS]
+Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'] + cards_onehots.copy())
+
+for order_idx, spell in enumerate(SPELLS):
+  spell = str(spell).split('.')[1]
+
+  if order_idx < len(cards_onehots):
+    cards_onehots[order_idx] += f"_{spell}"
+  else:
+    cards_onehots.append(spell)
+
+Card = collections.namedtuple('card', ['atk', 'health', 'cost', ] + cards_onehots.copy())
+Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
+
+# assert all(card_id in set(MINIONS) or card_id in set(SPELLS) for card_id, count in deck.cards)
+# assert deck.heroes == [637, ]
+
+# SPELL_IDS.update(extra_spells)
+# MINION_IDS.update(extra_minions)
+
+# assert not {card_id for card_id, count in deck.cards} - {*MINION_IDS, *SPELL_IDS}, str(
+#     {card_id for card_id, count in deck.cards} - {*MINION_IDS, *SPELL_IDS}) + ' was not handled'
+
+# 3 is the hand crafted features (atk, health, cost) plus the ~one hot encodings
+INACTIVE_CARD_ENCODING_SIZE = len(Card._fields)
+ACTIVE_CARD_ENCODING_SIZE = len(Minion._fields)
+HERO_ENCODING_SIZE = len(Hero._fields)
+
+INACTIVE_CARDS_ONE_HOT = {k: idx_to_one_hot(idx, _ONE_HOT_LENGTH) for idx, k in enumerate(MINIONS)}
+INACTIVE_CARDS_ONE_HOT.update({k: idx_to_one_hot(idx, _ONE_HOT_LENGTH) for idx, k in enumerate(SPELLS)})
+
+ACTIVE_CARDS_ONE_HOT = {k: idx_to_one_hot(idx, len(MINIONS)) for idx, k in enumerate(MINIONS)}
+
+# DECK_POSITION_LOOKUP = {k: idx for idx, k in enumerate((*MINIONS, *SPELLS))}
+# MINIONS_ORDER = [MINIONS(card_id) for card_id, count in deck.cards if card_id in MINION_IDS]
+# SPELLS_ORDER = [SPELLS(card_id) for card_id, count in deck.cards if card_id in SPELL_IDS]
+DECK_IDS = [card_id for card_id, count in deck.cards for _ in range(count)]
+DECK_ID_TO_POSITION = {k: v for (v, k), in reversed(list(zip(enumerate(DECK_IDS))))}
+
+REVERSE_SPELL_LOOKUP = {idx_to_one_hot(idx, _ONE_HOT_LENGTH): k for idx, k in enumerate(SPELLS)}
+REVERSE_MINION_LOOKUP = {idx_to_one_hot(idx, _ONE_HOT_LENGTH): k for idx, k in enumerate(MINIONS)}

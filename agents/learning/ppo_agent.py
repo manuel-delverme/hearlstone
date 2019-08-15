@@ -39,12 +39,12 @@ class PPOAgent(agents.base_agent.Agent):
       value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
     return action
 
-  def __init__(self, num_inputs: int, num_possible_actions: int, device=hs_config.device) -> None:
+  def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
     assert isinstance(__class__.__name__, str)
     self.device = device
     self.timer = HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
 
-    self.experiment_id = hs_config.comment
+    self.experiment_id = experiment_id
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
     self.tensorboard = None
@@ -138,8 +138,10 @@ class PPOAgent(agents.base_agent.Agent):
     start = time.time()  # TODO: bugged
     total_num_steps = None
     ppo_update_num = None
+    pbar = tqdm.tqdm(position=1, desc='train', total=num_updates)
 
-    for ppo_update_num in tqdm.tqdm(range(updates_offset, updates_offset + num_updates), position=1, desc='train'):
+    for ppo_update_num in range(updates_offset, updates_offset + num_updates):
+      pbar.update(1)
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
@@ -163,10 +165,14 @@ class PPOAgent(agents.base_agent.Agent):
           self.save_model(total_num_steps)
 
         if ppo_update_num % self.eval_every == 0:
+          pbar.set_description('eval_agent')
+
           _rewards, _scores = self.eval_agent(eval_envs)
+          pbar.set_description('train')
+
           elo_score = game_manager.update_score(_scores)
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
-          performance = np.mean(_rewards)
+          performance = (np.mean(_rewards) + 1.0) / 2
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
@@ -195,7 +201,7 @@ class PPOAgent(agents.base_agent.Agent):
       print("[Train] Loading training environments")
       # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
-      self.envs = make_vec_envs(game_manager, self.num_processes)
+      self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
       self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents)
@@ -203,7 +209,7 @@ class PPOAgent(agents.base_agent.Agent):
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
       game_manager.use_heuristic_opponent = False
-      self.eval_envs = make_vec_envs(game_manager, self.num_processes)
+      self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
       self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents)
@@ -211,7 +217,7 @@ class PPOAgent(agents.base_agent.Agent):
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
       game_manager.use_heuristic_opponent = True
-      self.validation_envs = make_vec_envs(game_manager, self.num_processes)
+      self.validation_envs = make_vec_envs('validation', game_manager, self.num_processes)
 
     return self.envs, self.eval_envs, self.validation_envs
 
@@ -347,10 +353,12 @@ class PPOAgent(agents.base_agent.Agent):
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents)
 
+    # We need to use the same statistics for normalization as used in training
     if checkpoint_file:
       self.load_checkpoint(checkpoint_file, self.enjoy_env)
 
     obs, _, _, infos = self.enjoy_env.reset()
+
     while True:
       with torch.no_grad():
         value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
@@ -461,7 +469,6 @@ class PPOAgent(agents.base_agent.Agent):
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
         old_win_ratio = win_ratio
-
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
