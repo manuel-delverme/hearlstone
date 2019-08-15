@@ -126,3 +126,5 @@ runs/
 strings/
 tensorboard/
 logs/
+
+sabberstone2_*mmf_server_output.txt

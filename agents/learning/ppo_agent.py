@@ -138,7 +138,7 @@ class PPOAgent(agents.base_agent.Agent):
     start = time.time()  # TODO: bugged
     total_num_steps = None
     ppo_update_num = None
-    pbar = tqdm.tqdm(position=1, desc='train')
+    pbar = tqdm.tqdm(position=1, desc='train', total=num_updates)
 
     for ppo_update_num in range(updates_offset, updates_offset + num_updates):
       pbar.update(1)

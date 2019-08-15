@@ -140,7 +140,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
   def parse_options(self, game, return_options=False):
     if not hasattr(game, '_options'):
-      options = self.stub.GetOptions(game.id)
+      options = self.stub.GetOptions(game)
       possible_options = {}
 
       for option in options:
@@ -171,11 +171,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
     else:
       return game._possible_options
 
-  # def update_stats(self):
-  #   if self.game_snapshot.CurrentPlayer.id == 1:
-  #     new_stats = game_stats(self.game_snapshot)
-  #     self.turn_stats.append(new_stats)
-
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray):
     rewards = []
@@ -185,7 +180,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
-        self.game_snapshot = self.stub.Reset(self.game_snapshot.id)
+        self.game_snapshot = self.stub.Reset(self.game_snapshot)
 
       observation = parse_game(self.game_snapshot)
       info = {'possible_actions': self.gather_possible_actions(), }
@@ -227,6 +222,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
   @shared.env_utils.episodic_log
   def reset(self):
     self._sample_opponent()
+    self.game_snapshot = self.stub.Reset(self.game_snapshot)
     observation = parse_game(self.game_snapshot)
     possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
     possible_actions[list(self.parse_options(self.game_snapshot).keys())] = 1
@@ -235,6 +231,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     }
     self.last_info = info
     self.last_observation = observation
+    assert self.game_snapshot.CurrentPlayer.hand_zone.count in (4, 5)
     return observation, 0, False, info
 
   def _sample_opponent(self):

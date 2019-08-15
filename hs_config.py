@@ -20,7 +20,7 @@ class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  single_process = DEBUG
+  single_process = False
   address = "0.0.0.0:50052"
 
   newest_opponent_prob = 0.8
@@ -30,8 +30,6 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-
-  # max_turns = 50
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
@@ -78,11 +76,13 @@ class PPOAgent:
   actor_adam_lr = 7e-4
   critic_adam_lr = 1e-5
 
-  num_processes = 1 if DEBUG else 12  # number of CPU processes
+  num_processes = 1 if DEBUG else 4  # number of CPU processes
+  if num_processes > 0:
+    raise NotImplementedError(">4 processes seem to crash")
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
 
-  num_env_steps = int(1e5)
+  num_env_steps = int(1e10)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
@@ -97,7 +97,7 @@ class PPOAgent:
   assert num_updates
 
 
-if any((Environment.ENV_DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
+if any((DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,
         Environment.single_process)):
   print('''
                                     _.---"'"""""'`--.._
