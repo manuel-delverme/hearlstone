@@ -77,7 +77,7 @@ class PPOAgent:
   critic_adam_lr = 1e-5
 
   num_processes = 1 if DEBUG else 4  # number of CPU processes
-  if num_processes > 0:
+  if num_processes > 4:
     raise NotImplementedError(">4 processes seem to crash")
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
