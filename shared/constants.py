@@ -3,6 +3,8 @@ import enum
 
 import hearthstone.deckstrings
 
+import sb_mm_env.SabberStone_python_client.sabber_protocol.option
+
 
 def idx_to_one_hot(index, max_size):
   assert index < max_size
@@ -19,7 +21,7 @@ class SPELLS(enum.IntEnum):
   Frostbolt = 662  # 3 damage  + freze
   Flamestrike = 1004  # 4 damage all minions
   MirrorImage = 1084  # summon two minions
-  TheCoin = 1746  # + 1 manA
+  TheCoin = 1746  # + 1 mana
 
 
 class MINIONS(enum.IntEnum):
@@ -41,7 +43,6 @@ AGENT_ID = 1
 OPPONENT_ID = 2
 
 
-# reverse enumerating allows for the first of two indices to overwrite the second, e.g. the idxes are 1..3..5 not 2..4..6
 
 
 
@@ -53,6 +54,10 @@ class PlayerTaskType(enum.IntEnum):
   HERO_POWER = 4
   MINION_ATTACK = 5
   PLAY_CARD = 6
+
+
+assert all(a == b and repr(a) == repr(b) for a, b in
+           zip(PlayerTaskType, sb_mm_env.SabberStone_python_client.sabber_protocol.option.PlayerTaskType))
 
 
 class BoardPosition(enum.IntEnum):
