@@ -34,8 +34,8 @@ class GameManager(object):
   def use_heuristic_opponent(self, value):
     self._use_heuristic_opponent = value
 
-  def __call__(self):
-    hs_game = self.game_class()
+  def __call__(self, env_number):
+    hs_game = self.game_class(env_number=env_number)
     initial_dist = self.opponent_dist()
     if self.use_heuristic_opponent:
       initial_dist = self.opponent_dist(1)

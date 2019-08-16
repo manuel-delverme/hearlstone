@@ -10,7 +10,6 @@ import shared.constants as C
 
 use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
-# comment = "DELETEME" if DEBUG else "d10c4n3"
 comment = "DELETEME" if DEBUG else ""
 device = torch.device("cuda:0" if use_gpu else "cpu")
 
@@ -22,7 +21,7 @@ class Environment:
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
-  single_process = False
+  single_process = DEBUG
   address = "0.0.0.0:50052"
   max_life = 30
   max_deck_size = 30
@@ -31,6 +30,7 @@ class Environment:
   newest_opponent_prob = 1.
 
   max_cards_in_board = 7
+  max_cards_in_deck = 30
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
@@ -44,10 +44,10 @@ class Environment:
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
-    import environments.sabber_hs
+    import environments.sabber2_hs
     out = functools.partial(
-        environments.sabber_hs.Sabberstone,
-        address
+        environments.sabber2_hs.Sabberstone2,
+        address=address,
     )
     return out
 
@@ -74,12 +74,11 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55
-
   num_episodes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
-  hidden_size = 256  # 64
+  hidden_size = 256
   eval_interval = 50
   save_interval = 400
   save_dir = os.path.join(log_dir, "model")
@@ -88,7 +87,9 @@ class PPOAgent:
   actor_adam_lr = 7e-4
   critic_adam_lr = 1e-5
 
-  num_processes = 2 if DEBUG else 12  # number of CPU processes
+  num_processes = 1 if DEBUG else 4  # number of CPU processes
+  if num_processes > 4:
+    raise NotImplementedError(">4 processes seem to crash")
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
 

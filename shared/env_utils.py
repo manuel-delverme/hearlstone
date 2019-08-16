@@ -1,8 +1,9 @@
 import collections
+import os
 import functools
 import pprint
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Optional, List, Text
 
 import numpy as np
 import torch
@@ -74,16 +75,18 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     return obs, rewards, dones, dict(new_infos)
 
 
-def _make_env(load_env: Callable[[], environments.base_env.BaseEnv]) -> Callable[[], environments.base_env.BaseEnv]:
+def _make_env(load_env: Callable[[], environments.base_env.BaseEnv], env_number: int) -> Callable[[], environments.base_env.BaseEnv]:
   def _thunk():
-    return load_env()
+    return load_env(env_number=env_number)
 
   return _thunk
 
 
-def make_vec_envs(load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int, device: torch.device = hs_config.device
+def make_vec_envs(name: Text, load_env: Callable[[int], environments.base_env.BaseEnv], num_processes: int,
+    device: torch.device = hs_config.device
 ) -> PyTorchCompatibilityWrapper:
-  envs = [_make_env(load_env) for _ in range(num_processes)]
+  pid = os.getpid()
+  envs = [_make_env(load_env, f"{pid}.{name}.{env_number}") for env_number in range(num_processes)]
 
   if len(envs) == 1 or hs_config.Environment.single_process:
     vectorized_envs = DummyVecEnv(envs)
@@ -192,6 +195,7 @@ def dump_log(self):
 
 
 def parse_player(player):
+  raise NotImplementedError
   return (
     player.hero.atk,
     player.hero.base_health - player.hero.damage,
@@ -203,14 +207,14 @@ def parse_player(player):
 
 
 def parse_card(card):
-  return card.card_id, card.atk, card.base_health, card.cost
+  return (card.atk, card.base_health, card.cost) + C.INACTIVE_CARDS_ONE_HOT[card.card_id]
 
 
 def parse_minion(card):
-  return card.atk, card.base_health - card.damage, card.exhausted
+  return (card.atk, card.base_health - card.damage, card.exhausted, *C.ACTIVE_CARDS_ONE_HOT[card.card_id])
 
 
-def pad(x, length, parse):
+def pad(x: List, length: int, parse: Optional[Callable]):
   _x = []
   for xi in x:
     _x.extend(parse(xi))
@@ -218,19 +222,56 @@ def pad(x, length, parse):
   return _x
 
 
+def parse_deck(entities):
+  entities = sorted(entities, key=lambda x: x.card_id)
+  deck = np.ones(shape=(hs_config.Environment.max_cards_in_deck * C.INACTIVE_CARD_ENCODING_SIZE,)) * -1
+  old_id = None
+  forbiddenf = {}
+  forbiddent = {}
+  for e in entities:
+    card_encoding_pos = C.DECK_ID_TO_POSITION[e.card_id]
+    card_encoding_pos += card_encoding_pos == old_id
+    assert old_id != card_encoding_pos
+    _from, _to = card_encoding_pos * C.INACTIVE_CARD_ENCODING_SIZE, (card_encoding_pos + 1) * C.INACTIVE_CARD_ENCODING_SIZE
+
+    assert _from not in forbiddenf
+    assert _to not in forbiddent
+
+    c = parse_card(e)
+    assert C.Card(*c)
+    assert all(deck[_from: _to] == -1)
+    deck[_from: _to] = c
+    # print(deck[_from: _to])
+    # print(_from, _to, card_encoding_pos)
+
+    old_id = card_encoding_pos
+  return deck
+
+
 def parse_game(game):
   o = game.CurrentOpponent
   p = game.CurrentPlayer
 
-  return np.array((
+  deck = parse_deck(p.deck_zone.entities)
+  assert len(deck) == 390
+
+  p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
+  assert len(p_hand) == 130
+  p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
+  assert len(p_board) == 84 == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+  o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
+  assert len(o_board) == 84
+
+  retr = np.array((
     # player
     p.remaining_mana,
     p.hero.atk,
     p.hero.base_health - p.hero.damage,
     p.hero.exhausted,
     p.hero.power.exhausted,
-    *pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
-    *pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
+    *p_hand,
+    *p_board,
+    *deck,
 
     # opponent
     o.remaining_mana,
@@ -239,8 +280,10 @@ def parse_game(game):
     o.hero.exhausted,
     o.hero.power.exhausted,
     # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
-    *pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
+    *o_board,
   ), dtype=np.int32)
+  assert retr.shape[0] == C.STATE_SPACE
+  return retr
 
 
 def game_stats(game):

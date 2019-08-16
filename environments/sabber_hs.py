@@ -6,8 +6,8 @@ import numpy as np
 
 import environments.base_env
 import hs_config
-import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
-import sb_env.SabberStone_python_client.python_pb2_grpc as sabberstone_grpc
+import pysabberstone.python.rpc.python_pb2 as sabberstone_protobuf
+import pysabberstone.python.rpc.python_pb2_grpc as sabberstone_grpc
 import shared.constants as C
 import shared.env_utils
 import shared.utils
@@ -42,6 +42,7 @@ class _GameRef:
 class Stub:
   def __init__(self, stub):
     self.stub = stub
+    self._cards = None
 
   def NewGame(self, deck1, deck2):
     return _GameRef(self.stub.NewGame(sabberstone_protobuf.DeckStrings(deck1=deck1, deck2=deck2)))
@@ -49,15 +50,24 @@ class Stub:
   def Reset(self, game_id):
     return _GameRef(self.stub.Reset(game_id))
 
-  def Process(self, selected_action):
+  def Process(self, game_id, selected_action):
     return _GameRef(self.stub.Process(selected_action))
 
   def GetOptions(self, game_id):
     return self.stub.GetOptions(game_id).list
 
+  def LoadCards(self):
+    self._cards = self.stub.GetCardDictionary(sabberstone_protobuf.Empty()).cards
+
+  def GetCard(self, idx):
+    if self._cards is None:
+      self.LoadCards()
+    return self._cards[idx]
+
 
 def enumerate_actions():
-  id_to_action = [(C.PlayerTaskType.END_TURN, 0, 0)]
+  pass_action = (C.PlayerTaskType.END_TURN, 0, 0)
+  id_to_action = [pass_action]
 
   # place minions or play spell
   for src_id in range(hs_config.Environment.max_cards_in_hand):
@@ -79,22 +89,20 @@ def enumerate_actions():
     id_to_action.append((C.PlayerTaskType.HERO_ATTACK, C.BoardPosition(0), C.BoardPosition(target_id)))
 
   action_to_id_dict = {v: k for k, v in enumerate(id_to_action)}
+
+  action_to_id_dict[(C.PlayerTaskType.END_TURN, 1, 2)] = action_to_id_dict[pass_action]
+  action_to_id_dict[(C.PlayerTaskType.END_TURN, 2, 1)] = action_to_id_dict[pass_action]
+
   assert len(id_to_action) == C.ACTION_SPACE
   return action_to_id_dict
 
 
 class Sabberstone(environments.base_env.RenderableEnv):
-  DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-  DECK2 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-
   action_to_id = enumerate_actions()
-
-  hand_encoding_size = 4  # atk, health, exhaust
-  hero_encoding_size = 4  # atk, health, exhaust, hero_power
-  minion_encoding_size = 3  # atk, health, exhaust
   board_to_board = {C.PlayerTaskType.MINION_ATTACK, C.PlayerTaskType.HERO_ATTACK, C.PlayerTaskType.HERO_POWER}
 
-  def __init__(self, address: str, seed: int = None, env_number: int = None):
+  def __init__(self, *, address: str = None, seed: int = None, env_number: int = None):
+    assert address is not None or env_number is not None
     super().__init__()
     self.gui = None
     self.logger = shared.utils.HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
@@ -102,14 +110,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
     if seed is not None:
       warnings.warn("Setting the seed is not implemented")
 
-    if env_number is not None:
-      warnings.warn("Setting the seed is not implemented")
-      self.extra_seed = env_number
-
-    with self.logger("call_init"):
-      self.channel = grpc.insecure_channel(address)
-      self.stub = Stub(sabberstone_grpc.SabberStonePythonStub(self.channel))
-      self.game_snapshot = self.stub.NewGame(deck1=self.DECK1, deck2=self.DECK2)
+    self.connect(address, env_number)
+    self.game_snapshot = self.stub.NewGame(deck1=C.DECK1, deck2=C.DECK2)
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
@@ -117,6 +119,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.game_matrix = None
     self.logger.info(f"Env with id {env_number} started.")
 
+  def connect(self, address, env_number):
+    self.channel = grpc.insecure_channel(address)
+    self.stub = Stub(sabberstone_grpc.SabberStonePythonStub(self.channel))
 
   def agent_game_vale(self):
     player = self.game_snapshot.CurrentPlayer
@@ -133,9 +138,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
   def parse_options(self, game, return_options=False):
     if not hasattr(game, '_options'):
-      options = self.stub.GetOptions(game.id)
+      options = self.stub.GetOptions(game)
       possible_options = {}
-
+      # self.source_position,; self.target_position,; self.sub_option,; self.choice
       for option in options:
         option_type = option.type
         assert option_type != C.PlayerTaskType.CHOOSE
@@ -175,12 +180,12 @@ class Sabberstone(environments.base_env.RenderableEnv):
   def step(self, action_id: np.ndarray):
     rewards = []
     while True:
-      self.game_snapshot = self.stub.Process(self.action_int_to_obj(action_id))
+      self.game_snapshot = self.stub.Process(self.game_snapshot, self.action_int_to_obj(action_id))
       rewards.append(self.agent_game_vale())
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
-        self.game_snapshot = self.stub.Reset(self.game_snapshot.id)
+        self.game_snapshot = self.stub.Reset(self.game_snapshot)
 
       observation = parse_game(self.game_snapshot)
       info = {'possible_actions': self.gather_possible_actions(), }
@@ -226,14 +231,14 @@ class Sabberstone(environments.base_env.RenderableEnv):
   @shared.env_utils.episodic_log
   def reset(self):
     self._sample_opponent()
+    self.game_snapshot = self.stub.Reset(self.game_snapshot)
     observation = parse_game(self.game_snapshot)
     possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
     possible_actions[list(self.parse_options(self.game_snapshot).keys())] = 1
-    info = {
-      'possible_actions': possible_actions,
-    }
+    info = {'possible_actions': possible_actions, }
     self.last_info = info
     self.last_observation = observation
+    assert self.game_snapshot.CurrentPlayer.hand_zone.count in (4, 5)
     return observation, 0, False, info
 
   def set_opponents(self, opponents, opponent_dist):
