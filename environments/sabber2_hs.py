@@ -2,7 +2,6 @@ import os
 
 import environments.sabber_hs
 import pysabberstone.python.server as mm_server
-import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
 
 
 class _GameRef(environments.sabber_hs._GameRef):
@@ -36,9 +35,6 @@ class Stub2:
   def GetOptions(self, game):
     return self.stub.options(game.game_ref)
 
-  def LoadCards(self):
-    self._cards = self.stub.GetCardDictionary(sabberstone_protobuf.Empty()).cards
-
   def GetCard(self, idx):
     if self._cards is None:
       self.LoadCards()
@@ -54,9 +50,6 @@ class Sabberstone2(environments.sabber_hs.Sabberstone):
     super().__init__(*args, **kwargs)
 
   def connect(self, address, rank):
-    # print("sleeping", rank)
-    # time.sleep(int(rank.split('.')[-1]) + 1)
-    # print("waking", rank)
     server = mm_server.SabberStoneServer(id=f"sabberstone2_{rank}")
     self.stub = Stub2(server)
 

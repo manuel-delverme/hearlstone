@@ -17,7 +17,7 @@ from hearthstone.enums import CardClass, CardType
 from numpy import ndarray
 
 import hs_config
-import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
+import pysabberstone.python.rpc.python_pb2 as sabberstone_protobuf
 import shared.constants as C
 from agents.base_agent import Agent
 from environments import base_env

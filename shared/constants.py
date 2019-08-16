@@ -3,7 +3,7 @@ import enum
 
 import hearthstone.deckstrings
 
-import sb_mm_env.SabberStone_python_client.sabber_protocol.option
+import pysabberstone.python.option
 
 
 def idx_to_one_hot(index, max_size):
@@ -43,9 +43,6 @@ AGENT_ID = 1
 OPPONENT_ID = 2
 
 
-
-
-
 class PlayerTaskType(enum.IntEnum):
   CHOOSE = 0
   CONCEDE = 1
@@ -57,7 +54,7 @@ class PlayerTaskType(enum.IntEnum):
 
 
 assert all(a == b and repr(a) == repr(b) for a, b in
-           zip(PlayerTaskType, sb_mm_env.SabberStone_python_client.sabber_protocol.option.PlayerTaskType))
+           zip(PlayerTaskType, pysabberstone.python.option.PlayerTaskType))
 
 
 class BoardPosition(enum.IntEnum):

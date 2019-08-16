@@ -6,8 +6,8 @@ import numpy as np
 
 import environments.base_env
 import hs_config
-import sb_env.SabberStone_python_client.python_pb2 as sabberstone_protobuf
-import sb_env.SabberStone_python_client.python_pb2_grpc as sabberstone_grpc
+import pysabberstone.python.rpc.python_pb2 as sabberstone_protobuf
+import pysabberstone.python.rpc.python_pb2_grpc as sabberstone_grpc
 import shared.constants as C
 import shared.env_utils
 import shared.utils
