@@ -248,6 +248,7 @@ class PPOAgent(agents.base_agent.Agent):
       return len(rews) >= num_eval_games
 
     opponents = []
+    game_stats = []
     self.gather_rollouts(None, rewards, eval_envs, exit_condition=stop_eval, opponents=opponents, deterministic=True,
                          timeout=num_eval_games * 100, game_stats=game_stats)
 

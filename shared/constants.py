@@ -104,7 +104,7 @@ HandPosition.__call__ = lambda x: x
 PlayerTaskType.__call__ = lambda x: x
 
 GameStatistics = collections.namedtuple('GameStatistics',
-                                        ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
+                                        ['mana_adv', 'hand_adv',  'life_adv', 'n_turns_left', 'board_adv'])
 ACTION_SPACE = 249
 # STATE_SPACE = 635
 STATE_SPACE = 698
