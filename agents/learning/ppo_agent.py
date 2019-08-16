@@ -142,6 +142,7 @@ class PPOAgent(agents.base_agent.Agent):
 
     for ppo_update_num in range(updates_offset, updates_offset + num_updates):
       pbar.update(1)
+
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
@@ -349,7 +350,7 @@ class PPOAgent(agents.base_agent.Agent):
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:
       print("[Train] Loading training environments")
-      self.enjoy_env = make_vec_envs(game_manager, num_processes=1, device=hs_config.device)
+      self.enjoy_env = make_vec_envs('GUI', game_manager, num_processes=1, device=hs_config.device)
     else:
       self.get_last_env(self.enjoy_env).set_opponent(opponents=game_manager.opponents)
 
@@ -458,21 +459,22 @@ class PPOAgent(agents.base_agent.Agent):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
 
         checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
+        win_ratio = win_ratio / 2 + 0.5
+
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
-        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio / 2 + 0.5, self_play_iter)
+        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
         self.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter,
                                     (updates_so_far * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps))
 
         if win_ratio >= old_win_ratio:
           print('updating checkpoint')
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio / 2 + 0.5, self_play_iter)
-        old_win_ratio = win_ratio
+          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
+        old_win_ratio = max(old_win_ratio, win_ratio)
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
-
         pbar.update(num_updates)
 
     except KeyboardInterrupt:

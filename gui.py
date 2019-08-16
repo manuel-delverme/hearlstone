@@ -64,8 +64,15 @@ class GUI:
     self.windows[C.Players.OPPONENT].addstr(y, x, message, options)
 
   def draw_opponent(self, hero, board, hand, mana):
-    top_row = [C.Minion(atk=hero.health, health=hero.power_exhausted, exhausted=hero.atk_exhausted)]
-    top_row.extend(C.Minion(minion.health, minion.atk, minion.exhausted) for minion in board)
+    onehot = {k: 0 for k in C.Minion._fields if k not in ('atk', 'exhausted', 'health')}
+    top_row = [C.Minion(atk=hero.health, health=hero.power_exhausted, exhausted=hero.atk_exhausted, **onehot)]
+
+    for minion in board:
+      minion = minion._asdict()
+      minion['health'], minion['atk'] = minion['atk'], minion['health']
+      minion = C.Minion(**minion)
+      top_row.append(minion)
+
     self.draw_player_side(C.Players.OPPONENT, top_row=None, bottom_row=top_row)
     nametag = 'Opponent mana:{}'.format(mana)
     self.opponent_addstr(0, self.game_width - 1 - len(nametag), nametag)
@@ -96,11 +103,7 @@ class GUI:
       if isinstance(card, C.Minion):
         if card.exhausted:
           ready = 'z'
-      elif isinstance(card, C.Card) and not card.health:
-        card_id = ''.join(i for i in str(C.SPELLS(card.id))[7:] if i.isupper())
-        if len(card_id) == 1:
-          card_id = str(C.SPELLS(card.id))[7:9]
-        card = C.Card(atk=card_id, health=card.cost, id=None, cost=None)
+      elif isinstance(card, C.Card) and card.health == -1 and card.atk == -1:
         ready = 's'
 
       self.draw_rectangle(player, offset_row, offset_column + pixel_offset, C.GUI_CARD_HEIGHT, C.GUI_CARD_WIDTH)
