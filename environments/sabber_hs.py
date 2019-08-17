@@ -266,3 +266,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
   def close(self):
     self.logger.warning("Not closing cleanly, restart the server")
+
+  def __del__(self):
+    del self.gui

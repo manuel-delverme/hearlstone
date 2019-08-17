@@ -365,12 +365,18 @@ class PPOAgent(agents.base_agent.Agent):
         value, action, _ = self.actor_critic(obs, infos['possible_actions'], deterministic=True)
         action_distribution, value = self.actor_critic.actor_critic(obs, infos['possible_actions'])
 
-      self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value)
+      try:
+        self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value)
+      except Exception as e:
+        self.enjoy_env.close()
+        print('intercepted Exception', e)
+        raise e
+
       obs, reward, done, infos = self.enjoy_env.step(action)
 
       if done:
         self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value, reward=reward)
-        self.enjoy_env.reset()
+        observation, _, _, info = self.enjoy_env.reset()
 
   def update(self, rollouts: RolloutStorage):
     advantages = rollouts.get_advantages()
