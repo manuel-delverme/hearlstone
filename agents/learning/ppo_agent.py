@@ -376,7 +376,6 @@ class PPOAgent(agents.base_agent.Agent):
 
       if done:
         self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value, reward=reward)
-        observation, _, _, info = self.enjoy_env.reset()
 
   def update(self, rollouts: RolloutStorage):
     advantages = rollouts.get_advantages()
