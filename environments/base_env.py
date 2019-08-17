@@ -185,21 +185,23 @@ class RenderableEnv(BaseEnv):
       # row_number = self.log_plot(row_number, self.health)
 
       first_row_number = row_number
-      if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
-        self.gui.log(f"{[p[1] for p in pretty_actions[:3]]}", row=row_number, multiline=True)
-      else:
-        try:
-          for row_number, (k, v, logit, p) in enumerate(sorted(pretty_actions, key=lambda r: r[-2], reverse=True),
-                                                        start=row_number):
-            if k == choice:
-              self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v} SELECTED", row=row_number, multiline=True)
-            else:
-              self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v}", row=row_number, multiline=True)
-        except Exception as e:
-          print(f" {self.gui.game_height - len(pretty_actions) - first_row_number} " * 1000)
-          with open('/tmp/err.log', 'w') as f:
-            f.write(str(e))
-          time.sleep(1)
+      max_rows = self.gui.game_height - first_row_number - 6 - 16
+      if len(pretty_actions) > max_rows:
+        pretty_actions = pretty_actions[:max_rows]
+
+      # self.gui.log(f"{[p[1] for p in pretty_actions[:3]]}", row=row_number, multiline=True)
+      try:
+        for row_number, (k, v, logit, p) in enumerate(sorted(pretty_actions, key=lambda r: r[-2], reverse=True),
+                                                      start=row_number):
+          if k == choice:
+            self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v} SELECTED", row=row_number, multiline=True)
+          else:
+            self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v}", row=row_number, multiline=True)
+      except Exception as e:
+        print(f" {self.gui.game_height - len(pretty_actions) - first_row_number} " * 1000)
+        with open('/tmp/err.log', 'w') as f:
+          f.write(str(e))
+        time.sleep(1)
     else:
       winner_player = C.AGENT_ID if reward > 0 else C.OPPONENT_ID
       self.gui.windows[C.Players.LOG].clear()

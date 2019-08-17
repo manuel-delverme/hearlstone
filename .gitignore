@@ -128,3 +128,5 @@ tensorboard/
 logs/
 
 sabberstone2_*mmf_server_output.txt
+/pysabberstone/
+/old_envs/
