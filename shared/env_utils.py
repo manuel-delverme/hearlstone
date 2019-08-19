@@ -290,10 +290,10 @@ def game_stats(game):
   player = game.CurrentPlayer
   opponent = game.CurrentOpponent
 
-  mana_adv = get_mana_adv(player)
+  mana_adv = get_mana_efficiency(player)
   hand_adv = get_hand_adv(player, opponent)
   life_adv = get_life_adv(player, opponent)
-  n_remaining_turns = get_time_left(player, opponent)
+  n_remaining_turns = get_turns_to_letal(player, opponent)
   board_adv = get_board_adv(player, opponent)
 
   return C.GameStatistics(mana_adv, hand_adv, life_adv, n_remaining_turns, board_adv)
@@ -307,7 +307,7 @@ def get_extra_reward(game, reward_type=None):
   opponent = game.CurrentOpponent
 
   if reward_type == C.RewardType.mana_adv:
-    reward = get_mana_adv(player)
+    reward = get_mana_efficiency(player)
   elif reward_type == C.RewardType.hand_adv:
     reward = get_hand_adv(player, opponent)
   elif reward_type == C.RewardType.life_adv:
@@ -315,14 +315,14 @@ def get_extra_reward(game, reward_type=None):
   elif reward_type == C.RewardType.board_adv:
     reward = get_board_adv(player, opponent)
   elif reward_type == C.RewardType.time_left:
-    reward = get_time_left(player, opponent)
+    reward = get_turns_to_letal(player, opponent)
   else:
     raise NameError("Misspecified reward type")
 
   return reward
 
 
-def get_time_left(player, opponent):
+def get_turns_to_letal(player, opponent):
   hero_life, opponent_life = players_life(opponent, player)
   power, value = board_power(player)
   if power > 0:
@@ -353,9 +353,9 @@ def get_hand_adv(player, opponent):
   return reward
 
 
-def get_mana_adv(player):
+def get_mana_efficiency(player):
   mana_adv = (player.base_mana - player.remaining_mana)
-  reward = mana_adv / hs_config.Environment.max_mana
+  reward = mana_adv / player.base_mana
   return reward
 
 
