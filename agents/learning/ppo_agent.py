@@ -310,6 +310,7 @@ class PPOAgent(agents.base_agent.Agent):
       _ = [self.tensorboard.add_scalar(f'eval_game/{k}',v, time_step) for k,v in avg_game_stats.items()]
 
 
+    self.tensorboard.add_scalar('train/kl', dist_kl, time_step)
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
 
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
@@ -409,19 +410,12 @@ class PPOAgent(agents.base_agent.Agent):
         # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(obs_batch, actions_batch, possible_actions)
 
-
-        for log_pi in old_action_log_probs_batch:
-          log_pi.requires_grad = False
-
         dist_kl = (torch.exp(action_log_probs)*(action_log_probs - old_action_log_probs_batch)).mean()
-
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
         surr1 = (ratio * adv_targ).mean()
-        # surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-
-        # action_loss = -torch.min(surr1, surr2).mean()
-        action_loss = - surr1 + hs_config.PPOAgent.kl_coeff * dist_kl
+        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+        action_loss = -torch.min(surr1, surr2).mean()
 
         if self.use_clipped_value_loss:
           value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
