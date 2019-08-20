@@ -12,10 +12,10 @@ import hs_config
 import shared.constants as C
 
 
-def load_latest_checkpoint(checkpoint=None):
+def load_latest_checkpoint(checkpoint=None, experiment_id=hs_config.comment):
   if checkpoint is None:
-    print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
-    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
+    print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{experiment_id}*')
+    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{experiment_id}*')
     if checkpoints:
       # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
       checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
@@ -45,6 +45,14 @@ def setup_logging():
 
 def train(args):
   game_manager = game_utils.GameManager(address=args.address)
+
+  if hs_config.Environment.arena is True:
+    for experiment_id in hs_config.Environment.opponent_keys:
+      ckpt = load_latest_checkpoint(experiment_id=experiment_id)
+      if ckpt is not None:
+        print(f"[ARENA] Loading ckpt {ckpt}")
+        game_manager.add_learned_opponent(ckpt)
+
   if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
     player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )

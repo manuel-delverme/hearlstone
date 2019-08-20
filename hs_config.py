@@ -34,13 +34,17 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  reward_type = C.RewardType.board_adv
+  max_actions_per_game = 100
+  reward_type = C.RewardType.default
+
+  arena = True
+  opponent_keys = ['board_adv', 'mana_efficency', 'opponent_dist', 'state_id']
 
   @staticmethod
   def get_reward_shape(r, game):
     from shared.env_utils import get_extra_reward
     _r = get_extra_reward(game, reward_type=Environment.reward_type)
-    return r + _r
+    return r + _r / Environment.max_actions_per_game
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
@@ -68,7 +72,7 @@ class SelfPlay:
   num_opponent_updates = 99
 
 
-log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
 
 class PPOAgent:

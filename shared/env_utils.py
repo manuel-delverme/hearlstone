@@ -306,7 +306,7 @@ def get_extra_reward(game, reward_type=None):
   player = game.CurrentPlayer
   opponent = game.CurrentOpponent
 
-  if reward_type == C.RewardType.mana_adv:
+  if reward_type == C.RewardType.mana_efficency:
     reward = get_mana_efficiency(player)
   elif reward_type == C.RewardType.hand_adv:
     reward = get_hand_adv(player, opponent)

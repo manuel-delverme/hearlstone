@@ -11,7 +11,7 @@ def idx_to_one_hot(index, max_size):
   return tuple([0, ] * index + [1, ] + [0, ] * (max_size - index - 1))
 
 class RewardType(enum.Enum):
-  mana_adv = "mana_adv"
+  mana_efficency = "mana_efficency"
   hand_adv = "hand_adv"
   life_adv = "life_adv"
   board_adv = "board_adv"

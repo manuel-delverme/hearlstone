@@ -25,14 +25,10 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
-        init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
-        nn.ReLU(),
         nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions),
     )
     self.critic = nn.Sequential(
         init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
-        nn.ReLU(),
-        init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
