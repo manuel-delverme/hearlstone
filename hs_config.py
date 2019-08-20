@@ -27,7 +27,7 @@ class Environment:
   max_deck_size = 30
   max_mana = 10
 
-  newest_opponent_prob = 1.
+  newest_opponent_prob = 0.1
 
   max_cards_in_board = 7
   max_cards_in_deck = 30
