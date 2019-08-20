@@ -99,7 +99,8 @@ class BaseEnv(gym.Env, ABC):
     #   self.use_heuristic_opponent = False
     opponent_network, = torch.load(checkpoint_file)
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
-    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu', experiment_id=None)
+    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu',
+                                                  experiment_id=None)
 
     del opponent.pi_optimizer
     del opponent.value_optimizer
@@ -118,9 +119,9 @@ class BaseEnv(gym.Env, ABC):
 
 
 class RenderableEnv(BaseEnv):
-  hand_encoding_size = None  # atk, health, exhaust
-  hero_encoding_size = None  # atk, health, exhaust, hero_power
-  minion_encoding_size = None  # atk, health, exhaust
+  hand_encoding_size = len(C.Card._fields)  # atk, health, exhaust
+  hero_encoding_size = len(C.Hero._fields)  # atk, health, exhaust, hero_power
+  minion_encoding_size = len(C.Minion._fields)  # atk, health, exhaust
 
   def __init__(self):
     super().__init__()
@@ -141,6 +142,8 @@ class RenderableEnv(BaseEnv):
     if reward is None:
       obs = self.last_observation
       offset, board, hand, mana, hero = self.render_player(obs)
+      offset += 30 * C.INACTIVE_CARD_ENCODING_SIZE  # SKIP SHOWING THE DECK
+
       self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
       hero_health = hero.health
 
@@ -182,21 +185,23 @@ class RenderableEnv(BaseEnv):
       # row_number = self.log_plot(row_number, self.health)
 
       first_row_number = row_number
-      if len(pretty_actions) > self.gui.game_height - first_row_number - 6 - 16:
-        self.gui.log(f"{[p[1] for p in pretty_actions[:3]]}", row=row_number, multiline=True)
-      else:
-        try:
-          for row_number, (k, v, logit, p) in enumerate(sorted(pretty_actions, key=lambda r: r[-2], reverse=True),
-                                                        start=row_number):
-            if k == choice:
-              self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v} SELECTED", row=row_number, multiline=True)
-            else:
-              self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v}", row=row_number, multiline=True)
-        except Exception as e:
-          print(f" {self.gui.game_height - len(pretty_actions) - first_row_number} " * 1000)
-          with open('/tmp/err.log', 'w') as f:
-            f.write(str(e))
-          time.sleep(1)
+      max_rows = self.gui.game_height - first_row_number - 6 - 16
+      if len(pretty_actions) > max_rows:
+        pretty_actions = pretty_actions[:max_rows]
+
+      # self.gui.log(f"{[p[1] for p in pretty_actions[:3]]}", row=row_number, multiline=True)
+      try:
+        for row_number, (k, v, logit, p) in enumerate(sorted(pretty_actions, key=lambda r: r[-2], reverse=True),
+                                                      start=row_number):
+          if k == choice:
+            self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v} SELECTED", row=row_number, multiline=True)
+          else:
+            self.gui.log(f"{k}\t{logit:.1f}\t{p}\t{v}", row=row_number, multiline=True)
+      except Exception as e:
+        print(f" {self.gui.game_height - len(pretty_actions) - first_row_number} " * 1000)
+        with open('/tmp/err.log', 'w') as f:
+          f.write(str(e))
+        time.sleep(1)
     else:
       winner_player = C.AGENT_ID if reward > 0 else C.OPPONENT_ID
       self.gui.windows[C.Players.LOG].clear()
@@ -235,10 +240,21 @@ class RenderableEnv(BaseEnv):
     hand = []
     if show_hand:
       for minion_number in range(hs_config.Environment.max_cards_in_hand):
-        card = obs[offset: offset + self.hand_encoding_size]
-        if card.max() > -1:
-          assert card.min() > -1
-          card = C.Card(*card)
+        card_obs = obs[offset: offset + self.hand_encoding_size]
+        if card_obs.max() > -1:
+          card = C.Card(*card_obs)
+          if card.atk == -1 and card.health == -1:  # it's a spell
+            card_dict = card._asdict()
+            spell = C.REVERSE_SPELL_LOOKUP[tuple(card_obs[-C._ONE_HOT_LENGTH:])]
+
+            card_id = ''.join(i for i in str(spell)[7:] if i.isupper())
+            if len(card_id) == 1:
+              card_id = str(spell)[7:9]
+            card_dict['atk'] = card_id
+            card_dict['health'] = card.cost
+
+            card = C.Card(**card_dict)
+
           hand.append(card)
         offset += self.hand_encoding_size
     # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
