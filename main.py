@@ -55,14 +55,14 @@ def train(args):
 
   if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None)
 
     player.enjoy(game_manager, checkpoint_file=args.p1)
 
   elif args.p1 is not None and args.p2 is not None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
     game_manager.add_learning_opponent(args.p1)
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, )
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None)
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
     experiment_id = setup_logging()
