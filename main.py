@@ -67,7 +67,8 @@ def train(args):
   else:
     experiment_id = setup_logging()
     player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=experiment_id)
-    latest_checkpoint = load_latest_checkpoint()
+    latest_checkpoint = load_latest_checkpoint(experiment_id=experiment_id)
+    print(f"[MAIN] Found latest checkpoint, {latest_checkpoint}")
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 
