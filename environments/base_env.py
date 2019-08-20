@@ -100,6 +100,7 @@ class BaseEnv(gym.Env, ABC):
     opponent_network, = torch.load(checkpoint_file)
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu', experiment_id=None)
+    print(f"[ENV] Created opponent from ckpt {checkpoint_file}")
 
     del opponent.pi_optimizer
     del opponent.value_optimizer
