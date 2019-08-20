@@ -413,11 +413,11 @@ class PPOAgent(agents.base_agent.Agent):
         for log_pi in old_action_log_probs_batch:
           log_pi.requires_grad = False
 
-        dist_kl = torch.exp(action_log_probs)*(action_log_probs - old_action_log_probs_batch).mean()
+        dist_kl = (torch.exp(action_log_probs)*(action_log_probs - old_action_log_probs_batch)).mean()
 
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-        surr1 = ratio * adv_targ
+        surr1 = (ratio * adv_targ).mean()
         # surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
 
         # action_loss = -torch.min(surr1, surr2).mean()
