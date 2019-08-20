@@ -22,7 +22,6 @@ from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 from shared.utils import HSLogger
-from shared.radam import RAdam
 import shared.constants as C
 
 
@@ -96,11 +95,11 @@ class PPOAgent(agents.base_agent.Agent):
     self.eval_every = hs_config.PPOAgent.eval_interval
     assert specs.check_positive_type(self.eval_every, int)
 
-    self.pi_optimizer = RAdam(
+    self.pi_optimizer = torch.optim.Adam(
         self.actor_critic.actor.parameters(),
         lr=hs_config.PPOAgent.actor_adam_lr,
     )
-    self.value_optimizer = RAdam(
+    self.value_optimizer = torch.optim.Adam(
         self.actor_critic.critic.parameters(),
         lr=hs_config.PPOAgent.critic_adam_lr,
     )
@@ -194,11 +193,11 @@ class PPOAgent(agents.base_agent.Agent):
   def load_checkpoint(self, checkpoint_file, envs):
     self.actor_critic, = torch.load(checkpoint_file)
     self.actor_critic.to(hs_config.device)
-    self.pi_optimizer = RAdam(
+    self.pi_optimizer = torch.optim.Adam(
         self.actor_critic.parameters(),
         lr=hs_config.PPOAgent.actor_adam_lr,
     )
-    self.value_optimizer = RAdam(
+    self.value_optimizer = torch.optim.Adam(
         self.actor_critic.parameters(),
         lr=hs_config.PPOAgent.critic_adam_lr, )
 
