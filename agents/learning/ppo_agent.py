@@ -37,7 +37,7 @@ def get_grad_norm(model):
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     with torch.no_grad():
-      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
+      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=self.deterministic)
     return action
 
   def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
@@ -48,6 +48,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.experiment_id = experiment_id
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
+    self.deterministic = False
     self.tensorboard = None
     self.envs = None
     self.eval_envs = None
@@ -163,7 +164,6 @@ class PPOAgent(agents.base_agent.Agent):
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
                        grad_value=grad_value, grad_pi=grad_pi, game_stats=game_stats, dist_kl=dist_kl)
 
-
       if ppo_update_num > 1:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(total_num_steps)
@@ -177,7 +177,7 @@ class PPOAgent(agents.base_agent.Agent):
           pbar.set_description('train')
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
-          self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist,  ppo_update_num)
+          self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           performance = (np.mean(_rewards) + 1.0) / 2
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
@@ -213,7 +213,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
+      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist, deterministic=False)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -221,7 +221,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
+      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist, deterministic=True)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
@@ -259,7 +259,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards, dict(scores)
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], deterministic: bool = False,
-      opponents: list = None, timeout=10000, game_stats: List=None):
+      opponents: list = None, timeout=10000, game_stats: List = None):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
@@ -307,9 +307,8 @@ class PPOAgent(agents.base_agent.Agent):
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
       self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
 
-      avg_game_stats = {k:v for k,v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=0))}
-      _ = [self.tensorboard.add_scalar(f'eval_game/{k}',v, time_step) for k,v in avg_game_stats.items()]
-
+      avg_game_stats = {k: v for k, v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=0))}
+      _ = [self.tensorboard.add_scalar(f'eval_game/{k}', v, time_step) for k, v in avg_game_stats.items()]
 
     self.tensorboard.add_scalar('train/kl', dist_kl, time_step)
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
@@ -416,7 +415,7 @@ class PPOAgent(agents.base_agent.Agent):
         # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(obs_batch, actions_batch, possible_actions)
 
-        dist_kl = (torch.exp(action_log_probs)*(action_log_probs - old_action_log_probs_batch)).mean()
+        dist_kl = (torch.exp(action_log_probs) * (action_log_probs - old_action_log_probs_batch)).mean()
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
         surr1 = (ratio * adv_targ).mean()

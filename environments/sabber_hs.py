@@ -241,24 +241,17 @@ class Sabberstone(environments.base_env.RenderableEnv):
     assert self.game_snapshot.CurrentPlayer.hand_zone.count in (4, 5)
     return observation, 0, False, info
 
-  def set_opponents(self, opponents, opponent_dist):
+  def set_opponents(self, opponents, opponent_dist, deterministic=False):
     super(Sabberstone, self).set_opponents(opponents)
     self.opponent_dist = opponent_dist
+    for p in self.opponents:
+      p.deterministic = deterministic
 
   def _sample_opponent(self):
     if hs_config.Environment.newest_opponent_prob > np.random.uniform() and self.opponent is not None:
       return
     p = self.opponent_dist
     p /= p.sum()
-    # p = np.ones(shape=len(self.opponents))
-    #
-    # if len(self.opponents) > 1:
-    #   if self.game_matrix[:, 1].sum() > 0:
-    #     # TODO update me with probability of winning
-    #     idxs = self.game_matrix[:, 1] > 0  # only for the one who played
-    #     p[idxs] = 1 / self.game_matrix[:, 1][idxs]
-    #   p /= p.sum()
-
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
     self.opponent = self.opponents[k]
@@ -269,8 +262,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
     # _stats = C.GameStatistics(*zip(*self.turn_stats))
     return {
       # **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
-      'game_eval':C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
-    'outcome': reward,
+      'game_eval': C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
+      'outcome': reward,
       # 'life_adv': self.turn_stats[-1].life_adv,
       # 'mean_opponent': counts.mean(),
       'opponent_nr': self.current_k,
