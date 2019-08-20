@@ -155,12 +155,12 @@ class PPOAgent(agents.base_agent.Agent):
 
       rollouts.compute_returns(next_value)
 
-      value_loss, action_loss, dist_entropy, policy_ratio, mean_value, grad_pi, grad_value = self.update(rollouts)
+      value_loss, action_loss, dist_entropy, policy_ratio, mean_value, grad_pi, grad_value, dist_kl = self.update(rollouts)
 
       rollouts.roll_over_last_transition()
       total_num_steps = ((ppo_update_num + 1) * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps)
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
-                       grad_value=grad_value, grad_pi=grad_pi, game_stats=game_stats)
+                       grad_value=grad_value, grad_pi=grad_pi, game_stats=game_stats, dist_kl=dist_kl)
 
 
       if ppo_update_num > 1:
@@ -296,7 +296,7 @@ class PPOAgent(agents.base_agent.Agent):
               opponents.append(info['opponent_nr'])
 
   def print_stats(self, action_loss, dist_entropy, episode_rewards, time_step, start, value_loss, policy_ratio, mean_value, grad_value,
-      grad_pi, game_stats=None):
+      grad_pi, dist_kl, game_stats=None):
     end = time.time()
     if episode_rewards:
       fps = int(time_step / (end - start))
@@ -392,6 +392,7 @@ class PPOAgent(agents.base_agent.Agent):
     value_loss_epoch = 0
     action_loss_epoch = 0
     dist_entropy_epoch = 0
+    dist_kl_epoch = 0
     grad_norm_pi_epoch = 0
     grad_norm_value_epoch = 0
     values_pred = []
@@ -408,11 +409,19 @@ class PPOAgent(agents.base_agent.Agent):
         # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(obs_batch, actions_batch, possible_actions)
 
-        ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-        surr1 = ratio * adv_targ
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
 
-        action_loss = -torch.min(surr1, surr2).mean()
+        for log_pi in old_action_log_probs_batch:
+          log_pi.requires_grad = False
+
+        dist_kl = (torch.exp(action_log_probs)*(action_log_probs - old_action_log_probs_batch)).mean()
+
+
+        ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+        surr1 = (ratio * adv_targ).mean()
+        # surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+
+        # action_loss = -torch.min(surr1, surr2).mean()
+        action_loss = - surr1 + hs_config.PPOAgent.kl_coeff * dist_kl
 
         if self.use_clipped_value_loss:
           value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
@@ -441,6 +450,7 @@ class PPOAgent(agents.base_agent.Agent):
         value_loss_epoch += value_loss.item()
         action_loss_epoch += action_loss.item()
         dist_entropy_epoch += dist_entropy.item()
+        dist_kl_epoch += dist_kl.item()
 
         values_pred.extend(value_preds_batch)
         values_gt.extend(values)
@@ -454,10 +464,11 @@ class PPOAgent(agents.base_agent.Agent):
     value_loss_epoch /= num_updates
     action_loss_epoch /= num_updates
     dist_entropy_epoch /= num_updates
+    dist_kl_epoch /= num_updates
     ratio_epoch /= num_updates
     value_mean = torch.mean(values_pred)
 
-    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, value_mean, grad_norm_pi_epoch, grad_norm_value_epoch
+    return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, value_mean, grad_norm_pi_epoch, grad_norm_value_epoch, dist_kl_epoch
 
   def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
     self.update_experiment_logging()

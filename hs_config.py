@@ -101,6 +101,8 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
+  kl_coeff = 1.
+
   entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
 
