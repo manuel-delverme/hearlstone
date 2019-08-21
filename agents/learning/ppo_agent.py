@@ -166,13 +166,14 @@ class PPOAgent(agents.base_agent.Agent):
 
       if ppo_update_num > 1:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
-          self.save_model(total_num_steps)
+          self.save_model(total_num_steps, score=int(self.actor_critic.score.item()))
 
         if ppo_update_num % self.eval_every == 0:
           pbar.set_description('eval_agent')
 
           _rewards, _scores = self.eval_agent(eval_envs)
           elo_score, _ = game_manager.update_score(_scores)
+          self.actor_critic.score = elo_score
           opponent_dist = game_manager.opponent_dist(hs_config.GameManager.max_opponents)
           pbar.set_description('train')
 
@@ -186,8 +187,8 @@ class PPOAgent(agents.base_agent.Agent):
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
 
-    checkpoint_file = self.save_model(total_num_steps)
-    rewards, outcomes = self.eval_agent(valid_envs, num_eval_games=1000)
+    checkpoint_file = self.save_model(total_num_steps, score=int(self.actor_critic.score.item()))
+    rewards, outcomes = self.eval_agent(valid_envs, num_eval_games=hs_config.PPOAgent.num_eval_games)
 
     test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
@@ -196,11 +197,11 @@ class PPOAgent(agents.base_agent.Agent):
     self.actor_critic, = torch.load(checkpoint_file)
     self.actor_critic.to(hs_config.device)
     self.pi_optimizer = torch.optim.Adam(
-        self.actor_critic.parameters(),
+        self.actor_critic.actor.parameters(),
         lr=hs_config.PPOAgent.actor_adam_lr,
     )
     self.value_optimizer = torch.optim.Adam(
-        self.actor_critic.parameters(),
+        self.actor_critic.critic.parameters(),
         lr=hs_config.PPOAgent.critic_adam_lr, )
 
   def setup_envs(self, game_manager: game_utils.GameManager):
@@ -327,7 +328,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
     self.tensorboard.add_scalar('zlosses/action_loss', action_loss, time_step)
 
-  def save_model(self, total_num_steps):
+  def save_model(self, total_num_steps, score=None):
     try:
       os.makedirs(hs_config.PPOAgent.save_dir)
     except OSError:
@@ -339,29 +340,30 @@ class PPOAgent(agents.base_agent.Agent):
       model = self.actor_critic
 
     save_model = (model,)
-    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt"
+    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}:score={score}.pt" # int(actor_criti.score.item())
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
 
   def get_latest_checkpoint_file(self):
-    checkpoint_name = "{}:{}.pt".format(self.experiment_id, "*")
-    checkpoint_files = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
-    checkpoints = glob.glob(checkpoint_files)
-
-    if not checkpoints:
-      return None
-
-    ids = {}
-    for file_name in checkpoints:
-      x = file_name.replace(":", "-")
-      last_part = x.split("-")[-1]
-      num_iters = last_part[:-3]
-      ids[file_name] = int(num_iters)
-
-    checkpoints = sorted(checkpoints, key=lambda xi: ids[xi])
-    latest_checkpoint = checkpoints[-1]
-    return latest_checkpoint
+    raise NotImplementedError()
+    # checkpoint_name = "{}:{}.pt".format(self.experiment_id, "*")
+    # checkpoint_files = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
+    # checkpoints = glob.glob(checkpoint_files)
+    #
+    # if not checkpoints:
+    #   return None
+    #
+    # ids = {}
+    # for file_name in checkpoints:
+    #   x = file_name.replace(":", "-")
+    #   last_part = x.split("-")[-1]
+    #   num_iters = last_part[:-3]
+    #   ids[file_name] = int(num_iters)
+    #
+    # checkpoints = sorted(checkpoints, key=lambda xi: ids[xi])
+    # latest_checkpoint = checkpoints[-1]
+    # return latest_checkpoint
 
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:

@@ -17,11 +17,26 @@ def load_latest_checkpoint(checkpoint=None, experiment_id=hs_config.comment):
     print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{experiment_id}*')
     checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{experiment_id}*')
     if checkpoints:
+      specs = list(map(get_ckpt_specs, checkpoints))
+      checkpoint_files = sorted(zip(checkpoints, specs), key=lambda x: (int(x[1].score), int(x[1].steps)))
       # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
-      checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
+      # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
       checkpoint = checkpoint_files[-1]
   print('found', checkpoint)
   return checkpoint
+
+
+def get_ckpt_specs(file_name):
+  # TODO make me a regex
+  import collections
+  import os
+  FileName = collections.namedtuple('FileName', ['id', 'steps', 'score'], defaults=(None, None, 0))
+  file_name = file_name.split('/')[-1]
+  file_name = os.path.splitext(file_name)[0]
+  ret = file_name.split(':')
+  ret = [r.split('=')[1] for r in ret]
+  file_name = FileName(*ret)
+  return file_name
 
 
 def setup_logging():
@@ -79,7 +94,7 @@ if __name__ == "__main__":
   parser.add_argument("--address", default="0.0.0.0:50052")
   parser.add_argument("--p1", default=None)
   parser.add_argument("--p2", default=None)
-  parser.add_argument("--load-latest", default=False)
+  parser.add_argument("--load-latest", default=True)
   parser.add_argument("--comment", default=None)
   args = parser.parse_args()
   train(args)

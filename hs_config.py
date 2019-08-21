@@ -80,7 +80,7 @@ class PPOAgent:
   performance_to_early_exit = 0.55
   num_episodes_for_early_exit = 50
 
-  num_eval_games = 10 if DEBUG else 100
+  num_eval_games = 10 if DEBUG else 1000
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50

@@ -100,9 +100,9 @@ class Elo:
   def opponent_distribution(self, opponents=None):
     if opponents is None:
       opponents = self.max_opponents
-    return torch.softmax(self.scores[:opponents], dim=0).numpy()
-    # p_ij = torch.Tensor([1-self.__call__(idx) for idx in range(opponents)])
-    # return (p_ij/p_ij.sum()).numpy()
+    # return torch.softmax(self.scores[:opponents], dim=0).numpy()
+    p_ij = torch.Tensor([1-self.__call__(idx) for idx in range(opponents)])
+    return (p_ij/p_ij.sum()).numpy()
 
   def _apply_rotation(self, opponent_idx: int) -> torch.Tensor:
     z = (self.c[self._player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self._player_idx, 1])
