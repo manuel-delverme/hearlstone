@@ -27,7 +27,7 @@ class Environment:
   max_deck_size = 30
   max_mana = 10
 
-  newest_opponent_prob = 0.1
+  newest_opponent_prob = 1.
 
   max_cards_in_board = 7
   max_cards_in_deck = 30
@@ -37,7 +37,7 @@ class Environment:
   max_actions_per_game = 100
   reward_type = C.RewardType.default
 
-  arena = True
+  arena = False
   opponent_keys = ['board_adv', 'mana_efficency', 'opponent_dist', 'state_id']
 
   @staticmethod
@@ -101,9 +101,9 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  kl_coeff = 1.
+  kl_coeff = 3.
 
-  entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
+  entropy_coeff = 0. #1e-1  # 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped

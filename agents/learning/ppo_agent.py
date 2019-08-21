@@ -77,6 +77,9 @@ class PPOAgent(agents.base_agent.Agent):
     self.entropy_coeff = hs_config.PPOAgent.entropy_coeff
     assert specs.check_positive_type(self.entropy_coeff, float)
 
+    self.kl_coeff = hs_config.PPOAgent.kl_coeff
+    assert specs.check_positive_type(self.kl_coeff, float)
+
     self.max_grad_norm = hs_config.PPOAgent.max_grad_norm
     assert specs.check_positive_type(self.max_grad_norm, float)
 
@@ -324,6 +327,8 @@ class PPOAgent(agents.base_agent.Agent):
     self.tensorboard.add_scalar('train/policy_ratio', policy_ratio, time_step)
     self.tensorboard.add_scalar('train/mean_value', mean_value, time_step)
 
+    self.tensorboard.add_scalar('zlosses/kl', dist_kl * self.kl_coeff, time_step)
+
     self.tensorboard.add_scalar('zlosses/entropy', dist_entropy * self.entropy_coeff, time_step)
     self.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
     self.tensorboard.add_scalar('zlosses/action_loss', action_loss, time_step)
@@ -340,7 +345,7 @@ class PPOAgent(agents.base_agent.Agent):
       model = self.actor_critic
 
     save_model = (model,)
-    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt" # int(actor_criti.score.item())
+    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt"  # int(actor_criti.score.item())
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
@@ -422,8 +427,9 @@ class PPOAgent(agents.base_agent.Agent):
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
         surr1 = (ratio * adv_targ).mean()
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-        action_loss = -torch.min(surr1, surr2).mean()
+        # surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+        # action_loss = -torch.min(surr1, surr2).mean()
+        action_loss = - surr1.mean() + dist_kl
 
         if self.use_clipped_value_loss:
           value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
