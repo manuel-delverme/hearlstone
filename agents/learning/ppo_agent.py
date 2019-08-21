@@ -340,7 +340,7 @@ class PPOAgent(agents.base_agent.Agent):
       model = self.actor_critic
 
     save_model = (model,)
-    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}:score={score}.pt" # int(actor_criti.score.item())
+    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt" # int(actor_criti.score.item())
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
