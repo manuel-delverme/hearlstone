@@ -5,6 +5,7 @@ from typing import Text
 import torch
 
 import hs_config
+from shared.utils import load_latest_checkpoint
 
 
 class GameManager(object):
@@ -41,14 +42,27 @@ class GameManager(object):
       initial_dist = self.opponent_dist(1)
       hs_game.set_opponents(opponents=['default'], opponent_dist=initial_dist)
     else:
-      hs_game.set_opponents(opponents=self.opponents,opponent_dist=initial_dist)
+      hs_game.set_opponents(opponents=self.opponents, opponent_dist=initial_dist)
 
     return hs_game
 
   def add_learned_opponent(self, checkpoint_file: Text):
     assert isinstance(checkpoint_file, str)
+
+    # refresh the queue looking at other files
+    if hs_config.Environment.arena:
+      for experiment_id in hs_config.Environment.opponent_keys:
+        ckpt = load_latest_checkpoint(experiment_id=experiment_id)
+        if ckpt is not None and ckpt not in self.opponents:
+          assert isinstance(ckpt, str)
+          self.opponents.append(ckpt)
+          self._game_score.set_from_player(len(self.opponents))
+
+    # replace worst performer with the lastest copy
+    worst_opponent_idx = self._game_score.scores[:len(self.opponents)].argmin().item()
+    self.opponents.remove(self.opponents[worst_opponent_idx])
     self.opponents.append(checkpoint_file)
-    self._game_score.set_from_player(len(self.opponents))
+    self._game_score.set_from_player(worst_opponent_idx)
 
 
 class Elo:
@@ -68,7 +82,7 @@ class Elo:
   def __getitem__(self, item: int) -> float:
     return self.scores[item]
 
-  def set_from_player(self,idx):
+  def set_from_player(self, idx):
     self.scores[idx] = self.scores[self._player_idx]
     self.c[idx] = self.c[self._player_idx]
 
@@ -101,8 +115,8 @@ class Elo:
     if opponents is None:
       opponents = self.max_opponents
     # return torch.softmax(self.scores[:opponents], dim=0).numpy()
-    p_ij = torch.Tensor([1-self.__call__(idx) for idx in range(opponents)])
-    return (p_ij/p_ij.sum()).numpy()
+    p_ij = torch.Tensor([1 - self.__call__(idx) for idx in range(opponents)])
+    return (p_ij / p_ij.sum()).numpy()
 
   def _apply_rotation(self, opponent_idx: int) -> torch.Tensor:
     z = (self.c[self._player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self._player_idx, 1])

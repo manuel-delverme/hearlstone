@@ -1,6 +1,4 @@
 import argparse
-import glob
-import re
 
 import torch
 
@@ -10,20 +8,7 @@ import agents.learning.ppo_agent
 import game_utils
 import hs_config
 import shared.constants as C
-
-
-def load_latest_checkpoint(checkpoint=None, experiment_id=hs_config.comment):
-  if checkpoint is None:
-    print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{experiment_id}*')
-    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{experiment_id}*')
-    if checkpoints:
-      # specs = list(map(get_ckpt_specs, checkpoints))
-      # checkpoint_files = sorted(zip(checkpoints, specs), key=lambda x: (int(x[1].score), int(x[1].steps)))
-      # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
-      checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
-      checkpoint = checkpoint_files[-1]
-  print('found', checkpoint)
-  return checkpoint
+from shared.utils import load_latest_checkpoint
 
 
 def get_ckpt_specs(file_name):

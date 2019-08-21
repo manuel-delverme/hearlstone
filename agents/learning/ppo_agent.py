@@ -427,9 +427,9 @@ class PPOAgent(agents.base_agent.Agent):
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
         surr1 = (ratio * adv_targ).mean()
-        # surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-        # action_loss = -torch.min(surr1, surr2).mean()
-        action_loss = - surr1.mean() + dist_kl
+        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+        action_loss = -torch.min(surr1, surr2).mean()
+        # action_loss = - surr1.mean() + dist_kl
 
         if self.use_clipped_value_loss:
           value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
@@ -503,6 +503,7 @@ class PPOAgent(agents.base_agent.Agent):
           shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
         old_win_ratio = max(old_win_ratio, win_ratio)
+
         game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state

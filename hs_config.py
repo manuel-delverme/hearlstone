@@ -38,7 +38,7 @@ class Environment:
   reward_type = C.RewardType.default
 
   arena = False
-  opponent_keys = ['board_adv', 'mana_efficency', 'opponent_dist', 'state_id']
+  opponent_keys = ['kl', 'boltzmann', 'arena', 'board_adv']
 
   @staticmethod
   def get_reward_shape(r, game):
@@ -103,7 +103,7 @@ class PPOAgent:
 
   kl_coeff = 3.
 
-  entropy_coeff = 0. #1e-1  # 0.043  # randomness, 1e-2 to 1e-4
+  entropy_coeff = 1e-1 #1e-1  # 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped
