@@ -178,6 +178,7 @@ class PPOAgent(agents.base_agent.Agent):
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
+          self.tensorboard.add_histogram('dashboard/league', game_manager._game_score.scores, ppo_update_num)
           performance = (np.mean(_rewards) + 1.0) / 2
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 

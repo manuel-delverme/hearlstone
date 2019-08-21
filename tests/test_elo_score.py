@@ -9,7 +9,7 @@ elo = Elo()
 manager = GameManager(hs_config.Environment.address)
 manager.use_heuristic_opponent = False
 manager.opponents = ["random"] * 3
-env = manager()
+env = manager(env_number=1)
 agent = RandomAgent()
 from collections import defaultdict
 for _ in range(10):
