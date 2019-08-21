@@ -80,6 +80,19 @@ class GUI:
   def draw_agent(self, hero, board, hand, mana):
     top_row = [hero]
     top_row.extend(minion for minion in board)
+    for idx in range(len(hand)):
+      card = hand[idx]
+      if card.atk == -1 and card.health == -1:  # it's a spell
+        card_dict = card._asdict()
+        spell = C.REVERSE_SPELL_LOOKUP[tuple(tuple(card)[-C._ONE_HOT_LENGTH:])]
+
+        card_id = ''.join(i for i in str(spell)[7:] if i.isupper())
+        if len(card_id) == 1:
+          card_id = str(spell)[7:9]
+        card_dict['atk'] = card_id
+        card_dict['health'] = card.cost
+        card = C.Card(**card_dict)
+        hand[idx] = card
 
     self.draw_player_side(C.Players.AGENT, top_row=top_row, bottom_row=hand)
     nametag = 'Agent mana:{}'.format(mana)

@@ -26,7 +26,7 @@ from shared.utils import HSLogger
 
 def get_grad_norm(model):
   total_norm = 0
-  for p in model.parameters():
+  for p in model:
     param_norm = p.grad.data.norm(2)
     total_norm += param_norm.item() ** 2
   total_norm = total_norm ** (1. / 2)  # SUPER SLOW
@@ -95,11 +95,11 @@ class PPOAgent(agents.base_agent.Agent):
     assert specs.check_positive_type(self.eval_every, int)
 
     self.pi_optimizer = torch.optim.Adam(
-        self.actor_critic.actor.parameters(),
+        params=self.actor_critic.actor_parameters,
         lr=hs_config.PPOAgent.actor_adam_lr,
     )
     self.value_optimizer = torch.optim.Adam(
-        self.actor_critic.critic.parameters(),
+        params=self.actor_critic.critic_parameters,
         lr=hs_config.PPOAgent.critic_adam_lr,
     )
 
@@ -416,16 +416,17 @@ class PPOAgent(agents.base_agent.Agent):
           value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
         self.pi_optimizer.zero_grad()
-        (action_loss - dist_entropy * self.entropy_coeff).backward()
-        grad_norm_pi = get_grad_norm(self.actor_critic.actor)  # SUPER SLOW
+        self.value_optimizer.zero_grad()
+
+        (action_loss - dist_entropy * self.entropy_coeff).backward(retain_graph=True)
+        (value_loss * self.value_loss_coeff).backward()
+
+        grad_norm_pi = get_grad_norm(self.actor_critic.actor_parameters)  # SUPER SLOW
         self.pi_optimizer.step()
 
         # torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
 
-        self.value_optimizer.zero_grad()
-        (value_loss * self.value_loss_coeff).backward()
-
-        grad_norm_critic = get_grad_norm(self.actor_critic.critic)  # SUPER SLOW
+        grad_norm_critic = get_grad_norm(self.actor_critic.critic_parameters)  # SUPER SLOW
         # torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
 
         self.value_optimizer.step()

@@ -58,6 +58,53 @@ def plot(series):
   return '\n'.join([''.join(row) for row in result])
 
 
+def render_player(obs, offset=0, current_player=True, preserve_types=False):
+  mana = obs[:, offset].reshape(-1, 1)
+  offset += 1
+
+  hero = obs[:, offset: offset + C.HERO_ENCODING_SIZE]
+  if not preserve_types:
+    hero = C.Hero(*hero)
+  offset += C.HERO_ENCODING_SIZE
+
+  hand = []
+  if current_player:
+    for minion_number in range(hs_config.Environment.max_cards_in_hand):
+      offset = parse_inactive(hand, obs, offset, preserve_types)
+
+  # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
+  board = []
+  for minion_number in range(hs_config.Environment.max_cards_in_board):
+    offset = parse_active(board, obs, offset, preserve_types)
+
+  deck = []
+  # if current_player:
+  #   for minion_number in range(hs_config.Environment.max_cards_in_deck):
+  #     offset = parse_inactive(deck, obs, offset, preserve_types)
+
+  return offset, board, hand, mana, hero, deck
+
+
+def parse_active(board, obs, offset, preserve_types):
+  minion = obs[:, offset: offset + C.ACTIVE_CARD_ENCODING_SIZE]
+  if minion.max() > -1:
+    if not preserve_types:
+      minion = C.Minion(*minion)
+    board.append(minion)
+  offset += C.ACTIVE_CARD_ENCODING_SIZE
+  return offset
+
+
+def parse_inactive(deck, obs, offset, preserve_types):
+  card = obs[:, offset: offset + C.INACTIVE_CARD_ENCODING_SIZE]
+  if card.max() > -1:
+    if not preserve_types:
+      card = C.Card(*card)
+    deck.append(card)
+  offset += C.INACTIVE_CARD_ENCODING_SIZE
+  return offset
+
+
 class BaseEnv(gym.Env, ABC):
   class GameActions(IntEnum):
     PASS_TURN = 0
@@ -105,8 +152,8 @@ class BaseEnv(gym.Env, ABC):
     del opponent.pi_optimizer
     del opponent.value_optimizer
     opponent_network.eval()
-    for network in (opponent_network.actor, opponent_network.critic):
-      for param in network.parameters():
+    for network in (opponent_network.actor_parameters, opponent_network.critic_parameters):
+      for param in network:
         param.requires_gradient = False
 
     opponent.actor_critic = opponent_network
@@ -119,10 +166,6 @@ class BaseEnv(gym.Env, ABC):
 
 
 class RenderableEnv(BaseEnv):
-  hand_encoding_size = len(C.Card._fields)  # atk, health, exhaust
-  hero_encoding_size = len(C.Hero._fields)  # atk, health, exhaust, hero_power
-  minion_encoding_size = len(C.Minion._fields)  # atk, health, exhaust
-
   def __init__(self):
     super().__init__()
     self.gui = None
@@ -141,13 +184,13 @@ class RenderableEnv(BaseEnv):
 
     if reward is None:
       obs = self.last_observation
-      offset, board, hand, mana, hero = self.render_player(obs)
+      offset, board, hand, mana, hero = render_player(obs)
       offset += 30 * C.INACTIVE_CARD_ENCODING_SIZE  # SKIP SHOWING THE DECK
 
       self.gui.draw_agent(hero=hero, board=board, hand=hand, mana=mana)
       hero_health = hero.health
 
-      offset, board, hand, mana, hero = self.render_player(obs, offset, show_hand=False)
+      offset, board, hand, mana, hero = render_player(obs, offset, current_player=False)
       self.gui.draw_opponent(hero=hero, board=board, hand=hand, mana=mana)
       self.health.append(float(hero_health) / float(hero.health))
 
@@ -228,41 +271,3 @@ class RenderableEnv(BaseEnv):
     self.gui.log(figure[1:], row=row_number, multiline=True)
     row_number += figure.count('\n') + 2
     return row_number
-
-  def render_player(self, obs, offset=0, show_hand=True):
-    mana = obs[offset]
-    offset += 1
-
-    hero = obs[offset: offset + self.hero_encoding_size]
-    hero = C.Hero(*hero)
-    offset += self.hero_encoding_size
-
-    hand = []
-    if show_hand:
-      for minion_number in range(hs_config.Environment.max_cards_in_hand):
-        card_obs = obs[offset: offset + self.hand_encoding_size]
-        if card_obs.max() > -1:
-          card = C.Card(*card_obs)
-          if card.atk == -1 and card.health == -1:  # it's a spell
-            card_dict = card._asdict()
-            spell = C.REVERSE_SPELL_LOOKUP[tuple(card_obs[-C._ONE_HOT_LENGTH:])]
-
-            card_id = ''.join(i for i in str(spell)[7:] if i.isupper())
-            if len(card_id) == 1:
-              card_id = str(spell)[7:9]
-            card_dict['atk'] = card_id
-            card_dict['health'] = card.cost
-
-            card = C.Card(**card_dict)
-
-          hand.append(card)
-        offset += self.hand_encoding_size
-    # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
-    board = []
-    for minion_number in range(hs_config.Environment.max_cards_in_board):
-      card = obs[offset: offset + self.minion_encoding_size]
-      if card.max() > -1:
-        minion = C.Minion(*card)
-        board.append(minion)
-      offset += self.minion_encoding_size
-    return offset, board, hand, mana, hero

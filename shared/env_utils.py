@@ -281,14 +281,14 @@ def parse_game(game):
   p = game.CurrentPlayer
 
   deck = parse_deck(p.deck_zone.entities)
-  assert len(deck) == 390
+  assert len(deck) == C.DECK_REPR_LENGTH
 
   p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
-  assert len(p_hand) == 130
+  assert len(p_hand) == C.HAND_REPR_LENGTH
   p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(p_board) == 84 == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+  assert len(p_board) == C.BOARD_REPR_LENGTH == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
   o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(o_board) == 84
+  assert len(o_board) == C.BOARD_REPR_LENGTH
 
   retr = np.array((
     # player

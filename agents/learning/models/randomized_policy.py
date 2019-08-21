@@ -1,25 +1,35 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
+import environments.base_env
 import hs_config
+import shared.constants as C
 import specs
 from shared.utils import init
 
 
 class ActorCritic(nn.Module):
+  actor_parameters = None
+  critic_parameters = None
+
   def __init__(self, num_inputs: int, num_actions: int):
     super(ActorCritic, self).__init__()
     assert num_inputs > 0
     assert num_actions > 0
 
-    self.num_inputs = num_inputs
+    self.num_inputs = C.STATE_SPACE  # num_inputs
     self.num_possible_actions = num_actions
 
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2) / 100)
 
+    self.inactive_card_summarizer = nn.Conv1d(1, 64, kernel_size=C.INACTIVE_CARD_ENCODING_SIZE, stride=C.INACTIVE_CARD_ENCODING_SIZE)
+    self.deck_summarizer = nn.Conv1d(1, 16, kernel_size=C.INACTIVE_CARD_ENCODING_SIZE, stride=C.INACTIVE_CARD_ENCODING_SIZE)
+    self.active_card_summarizer = nn.Conv1d(1, 64, kernel_size=C.ACTIVE_CARD_ENCODING_SIZE, stride=C.ACTIVE_CARD_ENCODING_SIZE)
+
     self.actor = nn.Sequential(
-        init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
+        init_(nn.Linear(678, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -27,8 +37,8 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions),
     )
-    self.critic = nn.Sequential(
-        init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
+    self.critic_head = nn.Sequential(
+        init_(nn.Linear(678, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -36,19 +46,29 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         nn.Linear(hs_config.PPOAgent.hidden_size, 1),
     )
-    self.reset_actor()
-    self.reset_critic()
-    self.train()
-
-  def reset_actor(self):
     logits = list(self.actor.children())[-1]
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.1)
-    logits.apply(init_)
+    logits.apply(lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.1))
 
-  def reset_critic(self):
-    value_fn = list(self.critic.children())[-1]
-    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.001)
-    self.critic_regression = init_(value_fn)
+    value_fn = list(self.critic_head.children())[-1]
+    value_fn.apply(lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.001))
+
+    # This is necessary for the optimizer.
+    # TODO: should we have 3 optimizers?
+    # Actor, critic, features so that features has 0.5 learning rate.
+    self.actor_parameters = [
+      *list(self.inactive_card_summarizer.parameters()),
+      *list(self.deck_summarizer.parameters()),
+      *list(self.active_card_summarizer.parameters()),
+      *list(self.actor.parameters()),
+    ]
+    self.critic_parameters = [
+      *list(self.inactive_card_summarizer.parameters()),
+      *list(self.deck_summarizer.parameters()),
+      *list(self.active_card_summarizer.parameters()),
+      *list(self.critic_head.parameters()),
+    ]
+
+    self.train()
 
   def forward(self, observations: torch.FloatTensor, possible_actions: torch.FloatTensor,
       deterministic: bool = False) -> (torch.FloatTensor, torch.LongTensor, torch.FloatTensor):
@@ -59,7 +79,7 @@ class ActorCritic(nn.Module):
       possible_actions = torch.from_numpy(possible_actions)
       possible_actions = possible_actions.unsqueeze(0)
 
-    assert specs.check_observation(self.num_inputs, observations)
+    # assert specs.check_observation(self.num_inputs, observations)
     assert specs.check_possible_actions(self.num_possible_actions, possible_actions)
     assert observations.shape[0] == possible_actions.shape[0]
     assert isinstance(deterministic, bool)
@@ -91,17 +111,63 @@ class ActorCritic(nn.Module):
     assert action_log_probs.size(1) == 1
     return action_log_probs
 
-  # def critic(self, inputs):
-  #   value_features = self.critic_features(inputs)
-  #   value = self.critic_regression(value_features)
-  #   return value
+  def critic(self, observation):
+    features = self.extract_features(observation)
+    return self.critic_head(features)
 
-  def actor_critic(self, inputs, possible_actions):
-    value = self.critic(inputs)
-    logits = self.actor(inputs)
+  def actor_critic(self, observation, possible_actions):
+    features = self.extract_features(observation)
+
+    value = self.critic_head(features)
+    logits = self.actor(features)
 
     action_distribution = self._get_action_distribution(possible_actions, logits)
     return action_distribution, value
+
+  def extract_features(self, observation):
+    batch_size = observation.shape[0]
+    offset, board, hand, mana, hero, deck = environments.base_env.render_player(observation, preserve_types=True)
+    deck = observation[:, offset: offset + hs_config.Environment.max_cards_in_deck * C.INACTIVE_CARD_ENCODING_SIZE]
+    deck = deck.view(batch_size, 1, -1)
+    _, o_board, _, o_mana, o_hero, _ = environments.base_env.render_player(observation, offset, current_player=False, preserve_types=True)
+    board_repr = self.parse_active_zone(batch_size, board)
+    hand_repr = self.parse_inactive_zone(batch_size, hand).flatten(start_dim=1)
+    o_board_repr = self.parse_active_zone(batch_size, o_board)
+    deck_repr = self.deck_summarizer(deck).flatten(start_dim=1)
+    assert mana.shape == (batch_size, 1)
+    assert hero.shape == (batch_size, 4)
+    assert board_repr.flatten(start_dim=1).shape == (batch_size, 64)
+    assert hand_repr.flatten(start_dim=1).shape == (batch_size, 64)
+    assert deck_repr.flatten(start_dim=1).shape == (batch_size, 16 * hs_config.Environment.max_cards_in_deck)
+    assert o_board_repr.flatten(start_dim=1).shape == (batch_size, 64)
+    assert o_mana.shape == (batch_size, 1)
+    features = torch.cat((
+      mana,
+      hero,
+      board_repr.flatten(start_dim=1),
+      hand_repr.flatten(start_dim=1),
+      deck_repr.flatten(start_dim=1),
+      o_board_repr.flatten(start_dim=1),
+      o_mana,
+    ), dim=1)
+    return features
+
+  def parse_inactive_zone(self, batch_size, zone):
+    if zone:
+      zone = torch.cat(zone).view(batch_size, 1, -1)
+      zone = self.inactive_card_summarizer(zone)
+      hand_repr = F.max_pool1d(zone, kernel_size=zone.shape[-1], stride=zone.shape[-1])
+    else:
+      hand_repr = torch.ones((batch_size, 1, self.active_card_summarizer.out_channels)) * -1
+    return hand_repr
+
+  def parse_active_zone(self, batch_size, zone):
+    if zone:
+      zone = torch.cat(zone).view(batch_size, 1, -1)
+      zone = self.active_card_summarizer(zone)
+      return F.max_pool1d(zone, kernel_size=zone.shape[-1], stride=zone.shape[-1])
+    else:
+      return torch.ones((batch_size, 1, self.active_card_summarizer.out_channels)) * -1
 
   def evaluate_actions(self, observations: torch.FloatTensor, action: torch.LongTensor,
       possible_actions: torch.FloatTensor) -> (

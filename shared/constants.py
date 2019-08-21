@@ -97,7 +97,6 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'draw_adv', 'life_adv', 'n_turns_left', 'minion_adv'])
 ACTION_SPACE = 249
-# STATE_SPACE = 635
 STATE_SPACE = 698
 
 
@@ -164,3 +163,7 @@ DECK_ID_TO_POSITION = {k: v for (v, k), in reversed(list(zip(enumerate(DECK_IDS)
 
 REVERSE_SPELL_LOOKUP = {idx_to_one_hot(idx, _ONE_HOT_LENGTH): k for idx, k in enumerate(SPELLS)}
 REVERSE_MINION_LOOKUP = {idx_to_one_hot(idx, _ONE_HOT_LENGTH): k for idx, k in enumerate(MINIONS)}
+
+DECK_REPR_LENGTH = 30 * INACTIVE_CARD_ENCODING_SIZE
+HAND_REPR_LENGTH = 10 * INACTIVE_CARD_ENCODING_SIZE
+BOARD_REPR_LENGTH = 7 * ACTIVE_CARD_ENCODING_SIZE
