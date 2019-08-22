@@ -47,6 +47,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.experiment_id = experiment_id
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
+    self.last_eval = None
     self.tensorboard = None
     self.envs = None
     self.eval_envs = None
@@ -161,11 +162,12 @@ class PPOAgent(agents.base_agent.Agent):
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio,
                        mean_value, grad_pi=grad_pi, grad_value=grad_value)
 
-      if ppo_update_num > 1:
+      if ppo_update_num > 0:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(total_num_steps)
 
-        if ppo_update_num % self.eval_every == 0:
+        if self.should_eval(ppo_update_num, episode_rewards):
+          self.last_eval = ppo_update_num
           pbar.set_description('eval_agent')
 
           _rewards, _scores = self.eval_agent(eval_envs)
@@ -173,7 +175,7 @@ class PPOAgent(agents.base_agent.Agent):
 
           elo_score = game_manager.update_score(_scores)
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
-          performance = (np.mean(_rewards) + 1.0) / 2
+          performance = game_utils.to_prob(np.mean(_rewards))
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
@@ -185,6 +187,16 @@ class PPOAgent(agents.base_agent.Agent):
 
     test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
+
+  def should_eval(self, ppo_update_num, episode_rewards):
+    if self.last_eval is not None and self.last_eval - ppo_update_num < hs_config.PPOAgent.min_iter_between_evals:  # cooldown
+      return False
+
+    if len(episode_rewards) == episode_rewards.maxlen:
+      if game_utils.to_prob(np.mean(episode_rewards)) > hs_config.PPOAgent.performance_to_early_exit:
+        return True
+
+    return False
 
   def load_checkpoint(self, checkpoint_file, envs):
     self.actor_critic, = torch.load(checkpoint_file)
