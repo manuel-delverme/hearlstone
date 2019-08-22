@@ -126,14 +126,17 @@ class ActorCritic(nn.Module):
 
   def extract_features(self, observation):
     batch_size = observation.shape[0]
+    observation.to(hs_config.device)
     offset, board, hand, mana, hero, deck = environments.base_env.render_player(observation, preserve_types=True)
     deck = observation[:, offset: offset + hs_config.Environment.max_cards_in_deck * C.INACTIVE_CARD_ENCODING_SIZE]
     deck = deck.view(batch_size, 1, -1)
     _, o_board, _, o_mana, o_hero, _ = environments.base_env.render_player(observation, offset, current_player=False, preserve_types=True)
-    board_repr = self.parse_active_zone(batch_size, board)
-    hand_repr = self.parse_inactive_zone(batch_size, hand).flatten(start_dim=1)
-    o_board_repr = self.parse_active_zone(batch_size, o_board)
-    deck_repr = self.deck_summarizer(deck).flatten(start_dim=1)
+    # TODO @manuel something is wrong here with tensor allocation
+    board_repr = self.parse_active_zone(batch_size, board).to(observation.device)
+    hand_repr = self.parse_inactive_zone(batch_size, hand).flatten(start_dim=1).to(observation.device)
+    o_board_repr = self.parse_active_zone(batch_size, o_board).to(observation.device)
+    deck_repr = self.deck_summarizer(deck).flatten(start_dim=1).to(observation.device)
+
     assert mana.shape == (batch_size, 1)
     assert hero.shape == (batch_size, 4)
     assert board_repr.flatten(start_dim=1).shape == (batch_size, 64)
