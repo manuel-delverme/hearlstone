@@ -227,7 +227,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
     info = {'possible_actions': possible_actions, }
     self.last_info = info
     self.last_observation = observation
-    assert self.game_snapshot.CurrentPlayer.hand_zone.count in (4, 5)
+    if not self.game_snapshot.CurrentPlayer.hand_zone.count in (4, 5):
+      raise ValueError('too many cards in hand after reset')
     return observation, 0, False, info
 
   def _sample_opponent(self):
