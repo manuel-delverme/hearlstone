@@ -126,7 +126,6 @@ class ActorCritic(nn.Module):
 
   def extract_features(self, observation):
     batch_size = observation.shape[0]
-    observation.to(hs_config.device)
     offset, board, hand, mana, hero, deck = environments.base_env.render_player(observation, preserve_types=True)
     deck = observation[:, offset: offset + hs_config.Environment.max_cards_in_deck * C.INACTIVE_CARD_ENCODING_SIZE]
     deck = deck.view(batch_size, 1, -1)
@@ -170,7 +169,7 @@ class ActorCritic(nn.Module):
       zone = self.active_card_summarizer(zone)
       return F.max_pool1d(zone, kernel_size=zone.shape[-1], stride=zone.shape[-1])
     else:
-      return torch.ones((batch_size, 1, self.active_card_summarizer.out_channels)) * -1
+      return torch.ones((batch_size, 1, self.active_card_summarizer.out_channels), device=self.device) * -1
 
   def evaluate_actions(self, observations: torch.FloatTensor, action: torch.LongTensor,
       possible_actions: torch.FloatTensor) -> (
