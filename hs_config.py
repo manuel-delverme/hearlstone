@@ -36,14 +36,14 @@ class Environment:
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
     if Environment.connection == 'rpc':
-      from environments.sabber_hs import Sabberstone as Sabberstone
+      from environments.sabber_hs import Sabberstone as _Sabberstone
       print("Running as rpc")
     else:
-      from environments.sabber2_hs import Sabberstone2 as Sabberstone
+      from environments.sabber2_hs import Sabberstone2 as _Sabberstone
       print("Running as mmf")
 
     out = functools.partial(
-        Sabberstone,
+        _Sabberstone,
         address=address,
     )
     return out
