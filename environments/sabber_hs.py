@@ -42,19 +42,25 @@ class _GameRef:
 class Stub:
   def __init__(self, stub):
     self.stub = stub
+    self._deck1 = None
+    self._deck2 = None
     self._cards = None
 
   def NewGame(self, deck1, deck2):
+    self._deck1 = deck1
+    self._deck2 = deck2
     return _GameRef(self.stub.NewGame(sabberstone_protobuf.DeckStrings(deck1=deck1, deck2=deck2)))
 
-  def Reset(self, game_id):
-    return _GameRef(self.stub.Reset(game_id))
+  def Reset(self, game):
+    assert isinstance(game, _GameRef)
+    return self.NewGame(self._deck1, self._deck2)
 
   def Process(self, game_id, selected_action):
     return _GameRef(self.stub.Process(selected_action))
 
-  def GetOptions(self, game_id):
-    return self.stub.GetOptions(game_id).list
+  def GetOptions(self, game):
+    assert isinstance(game, _GameRef)
+    return self.stub.GetOptions(game.game_ref.id).list
 
   def LoadCards(self):
     self._cards = self.stub.GetCardDictionary(sabberstone_protobuf.Empty()).cards
@@ -227,7 +233,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
     info = {'possible_actions': possible_actions, }
     self.last_info = info
     self.last_observation = observation
-    assert self.game_snapshot.CurrentPlayer.hand_zone.count in (4, 5)
+
+    if check_hand_size(self.game_snapshot.CurrentPlayer.hand_zone):
+      raise ValueError('Too many cards in player hand at restart')
     return observation, 0, False, info
 
   def _sample_opponent(self):
@@ -269,3 +277,11 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
   def __del__(self):
     del self.gui
+
+
+def check_hand_size(hand_zone):
+  if hasattr(hand_zone, 'count'):
+    count = hand_zone.count
+  else:
+    count = len(hand_zone.entities)
+  return count in (4, 5)

@@ -30,12 +30,20 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
+  connection = 'rpc'
+  max_processes = 4 if connection == 'mmf' else 12
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
-    import environments.sabber2_hs
+    if Environment.connection == 'rpc':
+      from environments.sabber_hs import Sabberstone as _Sabberstone
+      print("Running as rpc")
+    else:
+      from environments.sabber2_hs import Sabberstone2 as _Sabberstone
+      print("Running as mmf")
+
     out = functools.partial(
-        environments.sabber2_hs.Sabberstone2,
+        _Sabberstone,
         address=address,
     )
     return out
@@ -77,8 +85,8 @@ class PPOAgent:
   actor_adam_lr = 7e-4
   critic_adam_lr = 1e-5
 
-  num_processes = 1 if DEBUG else 4  # number of CPU processes
-  if num_processes > 4:
+  num_processes = 1 if DEBUG else Environment.max_processes  # number of CPU processes
+  if num_processes > 4 and Environment.connection == 'mmf':
     raise NotImplementedError(">4 processes seem to crash")
   num_steps = 32
   ppo_epoch = 6  # times ppo goes over the data
