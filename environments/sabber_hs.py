@@ -227,6 +227,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
   def reset(self):
     self._sample_opponent()
     self.game_snapshot = self.stub.Reset(self.game_snapshot)
+
     observation = parse_game(self.game_snapshot)
     possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
     possible_actions[list(self.parse_options(self.game_snapshot).keys())] = 1
@@ -234,8 +235,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.last_info = info
     self.last_observation = observation
 
-    if check_hand_size(self.game_snapshot.CurrentPlayer.hand_zone):
-      raise ValueError('Too many cards in player hand at restart')
+    if not check_hand_size(self.game_snapshot.CurrentPlayer.hand_zone):
+      raise ValueError(
+          f'found {list(self.game_snapshot.CurrentPlayer.hand_zone)} as starting hand, not valid')
     return observation, 0, False, info
 
   def _sample_opponent(self):

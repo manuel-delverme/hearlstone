@@ -47,7 +47,6 @@ class PPOAgent(agents.base_agent.Agent):
     self.experiment_id = experiment_id
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
-    self.last_eval = None
     self.tensorboard = None
     self.envs = None
     self.eval_envs = None
@@ -134,7 +133,7 @@ class PPOAgent(agents.base_agent.Agent):
     possible_actions = info['possible_actions']
 
     rollouts.store_first_transition(obs, possible_actions)
-    episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
+    episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_outcomes_for_early_exit)
 
     start = time.time()  # TODO: bugged
     total_num_steps = None
@@ -147,8 +146,7 @@ class PPOAgent(agents.base_agent.Agent):
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
-      with self.timer("gather_rollouts"):
-        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
+      self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False)
 
       with torch.no_grad():
         next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
@@ -167,7 +165,6 @@ class PPOAgent(agents.base_agent.Agent):
           self.save_model(total_num_steps)
 
         if self.should_eval(ppo_update_num, episode_rewards):
-          self.last_eval = ppo_update_num
           pbar.set_description('eval_agent')
 
           _rewards, _scores = self.eval_agent(eval_envs)
@@ -177,6 +174,7 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           performance = game_utils.to_prob(np.mean(_rewards))
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
+          episode_rewards.clear()
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
@@ -189,11 +187,9 @@ class PPOAgent(agents.base_agent.Agent):
     return checkpoint_file, test_performance, ppo_update_num + 1
 
   def should_eval(self, ppo_update_num, episode_rewards):
-    if self.last_eval is not None and self.last_eval - ppo_update_num < hs_config.PPOAgent.min_iter_between_evals:  # cooldown
-      return False
-
     if len(episode_rewards) == episode_rewards.maxlen:
-      if game_utils.to_prob(np.mean(episode_rewards)) > hs_config.PPOAgent.performance_to_early_exit:
+      performance = game_utils.to_prob(np.mean(episode_rewards))
+      if performance > hs_config.PPOAgent.performance_to_early_eval:
         return True
 
     return False
@@ -308,7 +304,7 @@ class PPOAgent(agents.base_agent.Agent):
         fps = float('nan')
 
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
-      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
+      self.tensorboard.add_scalar('dashboard/mean_reward', game_utils.to_prob(np.mean(episode_rewards)), time_step)
 
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
     self.tensorboard.add_scalar('train/grad_pi', grad_pi, time_step)
