@@ -138,8 +138,9 @@ class PPOAgent(agents.base_agent.Agent):
     possible_actions = info['possible_actions']
 
     rollouts.store_first_transition(obs, possible_actions)
-    episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
-    game_stats = collections.deque(maxlen=hs_config.PPOAgent.num_episodes_for_early_exit)
+    episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_outcomes_for_early_exit)
+    game_stats = collections.deque(maxlen=hs_config.PPOAgent.num_outcomes_for_early_exit)
+
 
     start = time.time()  # TODO: bugged
     total_num_steps = None
@@ -152,8 +153,7 @@ class PPOAgent(agents.base_agent.Agent):
       def stop_gathering(_, step):
         return step >= hs_config.PPOAgent.num_steps
 
-      with self.timer("gather_rollouts"):
-        self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False, game_stats=game_stats)
+      self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, False, game_stats=game_stats)
 
       with torch.no_grad():
         next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
@@ -167,11 +167,11 @@ class PPOAgent(agents.base_agent.Agent):
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
                        grad_value=grad_value, grad_pi=grad_pi, game_stats=game_stats, dist_kl=dist_kl)
 
-      if ppo_update_num > 1:
+      if ppo_update_num > 0:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
-          self.save_model(total_num_steps, score=int(self.actor_critic.score.item()))
+          self.save_model(total_num_steps)
 
-        if ppo_update_num % self.eval_every == 0:
+        if self.should_eval(ppo_update_num, episode_rewards):
           pbar.set_description('eval_agent')
 
           _rewards, _scores = self.eval_agent(eval_envs)
@@ -183,18 +183,27 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/league', game_manager._game_score.scores, ppo_update_num)
-          performance = (np.mean(_rewards) + 1.0) / 2
+          performance = game_utils.to_prob(np.mean(_rewards))
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
+          episode_rewards.clear()
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
 
-    checkpoint_file = self.save_model(total_num_steps, score=int(self.actor_critic.score.item()))
+    checkpoint_file = self.save_model(total_num_steps)
     rewards, outcomes = self.eval_agent(valid_envs, num_eval_games=hs_config.PPOAgent.num_eval_games)
 
     test_performance = float(np.mean(rewards))
     return checkpoint_file, test_performance, ppo_update_num + 1
+
+  def should_eval(self, ppo_update_num, episode_rewards):
+    if len(episode_rewards) == episode_rewards.maxlen:
+      performance = game_utils.to_prob(np.mean(episode_rewards))
+      if performance > hs_config.PPOAgent.performance_to_early_eval:
+        return True
+
+    return False
 
   def load_checkpoint(self, checkpoint_file, envs):
     self.actor_critic, = torch.load(checkpoint_file)
@@ -310,7 +319,7 @@ class PPOAgent(agents.base_agent.Agent):
         fps = float('nan')
 
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
-      self.tensorboard.add_scalar('dashboard/mean_reward', np.mean(episode_rewards) / 2 + 0.5, time_step)
+      self.tensorboard.add_scalar('dashboard/mean_reward', game_utils.to_prob(np.mean(episode_rewards)), time_step)
 
       avg_game_stats = {k: v for k, v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=0))}
       _ = [self.tensorboard.add_scalar(f'eval_game/{k}', v, time_step) for k, v in avg_game_stats.items()]
@@ -426,10 +435,9 @@ class PPOAgent(agents.base_agent.Agent):
         dist_kl = (torch.exp(action_log_probs) * (action_log_probs - old_action_log_probs_batch)).mean()
 
         ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-        surr1 = (ratio * adv_targ).mean()
+        surr1 = ratio * adv_targ
         surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
         action_loss = -torch.min(surr1, surr2).mean()
-        # action_loss = - surr1.mean() + dist_kl
 
         if self.use_clipped_value_loss:
           value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)

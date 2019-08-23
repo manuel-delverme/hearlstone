@@ -34,6 +34,9 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
+  connection = 'mmf'
+  max_processes = 4 if connection == 'mmf' else 12
+
   max_actions_per_game = 100
   reward_type = C.RewardType.default
 
@@ -48,9 +51,15 @@ class Environment:
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
-    import environments.sabber2_hs
+    if Environment.connection == 'rpc':
+      from environments.sabber_hs import Sabberstone as _Sabberstone
+      print("Running as rpc")
+    else:
+      from environments.sabber2_hs import Sabberstone2 as _Sabberstone
+      print("Running as mmf")
+
     out = functools.partial(
-        environments.sabber2_hs.Sabberstone2,
+        _Sabberstone,
         address=address,
     )
     return out
@@ -69,7 +78,7 @@ class GameManager:
 
 
 class SelfPlay:
-  num_opponent_updates = 99
+  num_opponent_updates = 9999999
 
 
 log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
@@ -78,7 +87,9 @@ log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55
-  num_episodes_for_early_exit = 50
+  performance_to_early_eval = 0.40
+  num_outcomes_for_early_exit = 50
+  min_iter_between_evals = 10
 
   num_eval_games = 10 if DEBUG else 1000
   clip_value_loss = True
@@ -91,10 +102,11 @@ class PPOAgent:
   actor_adam_lr = 7e-4
   critic_adam_lr = 1e-5
 
-  num_processes = 1 if DEBUG else 4  # number of CPU processes
-  if num_processes > 4:
+  num_processes = 1 if DEBUG else Environment.max_processes  # number of CPU processes
+  if num_processes > 4 and Environment.connection == 'mmf':
     raise NotImplementedError(">4 processes seem to crash")
-  num_steps = 32
+
+  num_steps = 256 # 32
   ppo_epoch = 6  # times ppo goes over the data
 
   num_env_steps = int(1e10)
@@ -110,7 +122,7 @@ class PPOAgent:
   num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
 
-  num_updates = 2 if DEBUG else num_env_steps // num_steps // num_processes
+  num_updates = 50 if DEBUG else num_env_steps // num_steps // num_processes
   assert num_updates
 
 

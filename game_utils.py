@@ -129,3 +129,7 @@ class Elo:
     p_hat = torch.nn.Sigmoid()(x)
     assert 0. < p_hat < 1.
     return p_hat
+
+
+def to_prob(r):
+  return r / 2 + 0.5

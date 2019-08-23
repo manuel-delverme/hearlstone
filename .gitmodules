@@ -1,3 +1,0 @@
-[submodule "sb_env"]
-	path = sb_env
-	url = git@github.com:rnilva/SabberStone-grpc-testbed.git

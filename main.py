@@ -1,4 +1,6 @@
 import argparse
+import glob
+import re
 
 import torch
 
@@ -8,20 +10,18 @@ import agents.learning.ppo_agent
 import game_utils
 import hs_config
 import shared.constants as C
-from shared.utils import load_latest_checkpoint
 
 
-def get_ckpt_specs(file_name):
-  # TODO make me a regex
-  import collections
-  import os
-  FileName = collections.namedtuple('FileName', ['id', 'steps', 'score'], defaults=(None, None, 0))
-  file_name = file_name.split('/')[-1]
-  file_name = os.path.splitext(file_name)[0]
-  ret = file_name.split(':')
-  ret = [r.split('=')[1] for r in ret]
-  file_name = FileName(*ret)
-  return file_name
+def load_latest_checkpoint(checkpoint=None):
+  if checkpoint is None:
+    print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
+    checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
+    if checkpoints:
+      # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
+      checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
+      checkpoint = checkpoint_files[-1]
+  print('found', checkpoint)
+  return checkpoint
 
 
 def setup_logging():
@@ -67,10 +67,7 @@ def train(args):
   else:
     experiment_id = setup_logging()
     player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=experiment_id)
-    latest_checkpoint = None
-    if args.load_latest:
-      latest_checkpoint = load_latest_checkpoint(experiment_id=experiment_id)
-      print(f"[MAIN] Found latest checkpoint, {latest_checkpoint}")
+    latest_checkpoint = load_latest_checkpoint(args.load_checkpoint)
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 
@@ -79,7 +76,7 @@ if __name__ == "__main__":
   parser.add_argument("--address", default="0.0.0.0:50052")
   parser.add_argument("--p1", default=None)
   parser.add_argument("--p2", default=None)
-  parser.add_argument("--load-latest", default=True)
+  parser.add_argument("--load_checkpoint", default=None)
   parser.add_argument("--comment", default=None)
   args = parser.parse_args()
   train(args)
