@@ -184,6 +184,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
+        self._sample_opponent()
         self.game_snapshot = self.stub.Reset(self.game_snapshot)
 
       observation = parse_game(self.game_snapshot)
