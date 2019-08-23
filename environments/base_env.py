@@ -105,6 +105,7 @@ class BaseEnv(gym.Env, ABC):
     del opponent.pi_optimizer
     del opponent.value_optimizer
     opponent_network.eval()
+    # TODO this pattern doesn't fit conv networks
     for network in (opponent_network.actor, opponent_network.critic):
       for param in network.parameters():
         param.requires_gradient = False

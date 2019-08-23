@@ -54,6 +54,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.eval_envs = None
     self.validation_envs = None
     self.enjoy_env = None
+    self.battle_env = None
 
     self.num_inputs = num_inputs
     self.num_actions = num_possible_actions
@@ -141,7 +142,6 @@ class PPOAgent(agents.base_agent.Agent):
     episode_rewards = collections.deque(maxlen=hs_config.PPOAgent.num_outcomes_for_early_exit)
     game_stats = collections.deque(maxlen=hs_config.PPOAgent.num_outcomes_for_early_exit)
 
-
     start = time.time()  # TODO: bugged
     total_num_steps = None
     ppo_update_num = None
@@ -182,6 +182,10 @@ class PPOAgent(agents.base_agent.Agent):
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
+
+          self.tensorboard.add_scalar('dashboard/league_mean', game_manager._game_score.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_var', game_manager._game_score.scores.var(), ppo_update_num)
+
           self.tensorboard.add_histogram('dashboard/league', game_manager._game_score.scores, ppo_update_num)
           performance = game_utils.to_prob(np.mean(_rewards))
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
@@ -300,10 +304,10 @@ class PPOAgent(agents.base_agent.Agent):
                         rewards=reward, not_dones=(1 - done), possible_actions=possible_actions)
       assert 'game_statistics' in specs.TERMINAL_GAME_INFO_KEYS
       if 'game_statistics' in infos:
-        assert all((not _done) or (_reward in (-1., 1)) for _done, _reward in zip(done, infos['game_statistics']['outcome']))
+        assert all((not _done) or (_reward['outcome'] in (-1., 1)) for _done, _reward in zip(done, infos['game_statistics']))
         for info in infos['game_statistics']:
           outcome = info['outcome']
-          game_stats.append(info['game_eval'])
+          # game_stats.append(info['game_eval'])
           if outcome != 0:
             assert isinstance(outcome, np.float32)
             rewards.append(outcome)
@@ -378,6 +382,36 @@ class PPOAgent(agents.base_agent.Agent):
     # checkpoints = sorted(checkpoints, key=lambda xi: ids[xi])
     # latest_checkpoint = checkpoints[-1]
     # return latest_checkpoint
+
+  def battle(self, game_manager: game_utils.GameManager, checkpoint_file, num_eval_games=10, n_envs=1):
+
+    rewards = []
+    opponent_dist = torch.ones(size=(len(game_manager.opponents),))
+    opponent_dist = opponent_dist/opponent_dist.sum()
+
+    if self.battle_env is None:
+      print("[BATTLE] Loading training environments")
+      self.battle_env = make_vec_envs('battle', game_manager, num_processes=n_envs, device=hs_config.device)
+    else:
+      self.get_last_env(self.battle_env).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist, deterministic=True)
+
+    if checkpoint_file:
+      self.load_checkpoint(checkpoint_file, self.battle_env)
+
+    def stop_eval(rews, step):
+      return len(rews) >= num_eval_games
+
+    opponents = []
+    game_stats = []
+    self.gather_rollouts(None, rewards, self.battle_env, exit_condition=stop_eval, opponents=opponents, deterministic=True,
+                         timeout=num_eval_games * 100, game_stats=game_stats)
+
+    scores = collections.defaultdict(list)
+    for k, r in zip(opponents, rewards):
+      scores[k].append(r)
+
+    return rewards, dict(scores)
+
 
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:
@@ -512,7 +546,7 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
         old_win_ratio = max(old_win_ratio, win_ratio)
 
-        game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
+        game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player or ask the agame manager a new set of players
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

@@ -191,7 +191,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
-        self.game_snapshot = self.stub.Reset(self.game_snapshot)
+        self.reset()
+        # self.game_snapshot = self.stub.Reset(self.game_snapshot)
 
       observation = parse_game(self.game_snapshot)
       info = {'possible_actions': self.gather_possible_actions(), }
@@ -206,14 +207,13 @@ class Sabberstone(environments.base_env.RenderableEnv):
       else:
         break
 
-    _game_stats = game_stats(self.game_snapshot)
-    self.turn_stats.append(_game_stats)
+    #_game_stats = game_stats(self.game_snapshot)
+    # self.turn_stats.append(_game_stats)
     terminal = any(rewards)
     if terminal:
       reward = [r for r in rewards if r != 0.][0]
       info['game_statistics'] = self.gather_game_statistics(reward)
       self.turn_stats = []
-      # self.game_matrix[self.current_k] += [max(0., -reward), 1]  # prob of p2 winning, number of matches
     else:
       reward = 0.
 
@@ -262,7 +262,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
       return
     p = self.opponent_dist
     p /= p.sum()
+
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
+
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
     self.opponent = self.opponents[k]
     self.current_k = k
@@ -272,7 +274,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     # _stats = C.GameStatistics(*zip(*self.turn_stats))
     return {
       # **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
-      'game_eval': C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
+      # 'game_eval': C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
       'outcome': reward,
       # 'life_adv': self.turn_stats[-1].life_adv,
       # 'mean_opponent': counts.mean(),

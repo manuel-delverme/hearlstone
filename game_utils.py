@@ -9,13 +9,13 @@ from shared.utils import load_latest_checkpoint
 
 
 class GameManager(object):
-  def __init__(self, seed=None, address=hs_config.Environment.address):
+  def __init__(self, seed=None, address=hs_config.Environment.address, max_opponents=hs_config.GameManager.max_opponents):
     self.seed = seed
     self._use_heuristic_opponent = True
 
     self.game_class = hs_config.Environment.get_game_mode(address)
-    self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
-    self._game_score = Elo()
+    self.opponents = collections.deque(['random'], maxlen=max_opponents)
+    self._game_score = Elo(max_opponents=max_opponents)
 
   def update_score(self, score):
     self._game_score.update(score)
@@ -49,42 +49,44 @@ class GameManager(object):
   def add_learned_opponent(self, checkpoint_file: Text):
     assert isinstance(checkpoint_file, str)
 
-    # refresh the queue looking at other files
-    if hs_config.Environment.arena:
-      for experiment_id in hs_config.Environment.opponent_keys:
-        ckpt = load_latest_checkpoint(experiment_id=experiment_id)
-        if ckpt is not None and ckpt not in self.opponents:
-          assert isinstance(ckpt, str)
-          self.opponents.append(ckpt)
-          self._game_score.set_from_player(len(self.opponents))
-
     # replace worst performer with the lastest copy
     worst_opponent_idx = self._game_score.scores[:len(self.opponents)].argmin().item()
     self.opponents.remove(self.opponents[worst_opponent_idx])
     self.opponents.append(checkpoint_file)
     self._game_score.set_from_player(worst_opponent_idx)
 
+  def reset(self):
+    self._game_score.reset()
+    self.opponents.clear()
+
 
 class Elo:
-  def __init__(self):
+  def __init__(self, max_opponents=hs_config.GameManager.max_opponents):
     # https://arxiv.org/pdf/1806.02643.pdf
 
-    max_opponents = hs_config.GameManager.max_opponents
     self.max_opponents = max_opponents
 
     self.games = torch.zeros(max_opponents)
-    self.scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
-    self.c = torch.rand(size=(max_opponents + 1, 2))
+    self.scores = torch.ones((max_opponents)) * hs_config.GameManager.elo_lr
+    self.c = torch.rand(size=(max_opponents, 2))  # TODO remember  + 1 here maybe
     self.alpha = hs_config.GameManager.elo_scale
     self.k = hs_config.GameManager.elo_lr
-    self._player_idx = -1  # last on the list
+    self.player_idx = -1  # last on the list
 
   def __getitem__(self, item: int) -> float:
     return self.scores[item]
 
+  def reset(self):
+    self.games = torch.zeros(self.max_opponents)
+    self.scores = torch.ones((self.max_opponents)) * hs_config.GameManager.elo_lr
+    self.c = torch.rand(size=(self.max_opponents, 2))  # TODO remember  + 1 here maybe
+
+  def set_player_index(self, idx):
+    self.player_idx = idx
+
   def set_from_player(self, idx):
-    self.scores[idx] = self.scores[self._player_idx]
-    self.c[idx] = self.c[self._player_idx]
+    self.scores[idx] = self.scores[self.player_idx]
+    self.c[idx] = self.c[self.player_idx]
 
   def update(self, scores: dict):
     for idx, score in scores.items():
@@ -96,12 +98,12 @@ class Elo:
 
   def _grad(self, delta: float, opponent_idx: int):
     r_update = (self.k * delta, - self.k * delta)
-    c_update = [[delta * self.c[opponent_idx, 1], - delta * self.c[self._player_idx, 1]],
-                [- delta * self.c[opponent_idx, 0], delta * self.c[self._player_idx, 0]]
+    c_update = [[delta * self.c[opponent_idx, 1], - delta * self.c[self.player_idx, 1]],
+                [- delta * self.c[opponent_idx, 0], delta * self.c[self.player_idx, 0]]
                 ]
 
-    self.scores[[self._player_idx, opponent_idx]] = self.scores[[self._player_idx, opponent_idx]] + torch.Tensor(r_update)
-    self.c[[self._player_idx, opponent_idx]] = self.c[[self._player_idx, opponent_idx]] + torch.Tensor(c_update)
+    self.scores[[self.player_idx, opponent_idx]] = self.scores[[self.player_idx, opponent_idx]] + torch.Tensor(r_update)
+    self.c[[self.player_idx, opponent_idx]] = self.c[[self.player_idx, opponent_idx]] + torch.Tensor(c_update)
 
   @property
   def games_count(self) -> torch.Tensor:
@@ -109,17 +111,17 @@ class Elo:
 
   @property
   def player_score(self) -> float:
-    return self.__getitem__(self._player_idx)
+    return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, opponents=None):
     if opponents is None:
       opponents = self.max_opponents
-    # return torch.softmax(self.scores[:opponents], dim=0).numpy()
-    p_ij = torch.Tensor([1 - self.__call__(idx) for idx in range(opponents)])
-    return (p_ij / p_ij.sum()).numpy()
+    return torch.softmax(self.scores[:opponents], dim=0).numpy()
+    # p_ij = torch.Tensor([1 - self.__call__(idx) for idx in range(opponents)])
+    # return (p_ij / p_ij.sum()).numpy()
 
   def _apply_rotation(self, opponent_idx: int) -> torch.Tensor:
-    z = (self.c[self._player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self._player_idx, 1])
+    z = (self.c[self.player_idx, 0] * self.c[opponent_idx, 1] - self.c[opponent_idx, 0] * self.c[self.player_idx, 1])
     return z
 
   def __call__(self, opponent_idx: int, beta: float = 1.) -> float:
