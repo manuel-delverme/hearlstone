@@ -289,7 +289,7 @@ class PPOAgent(agents.base_agent.Agent):
       if 'game_statistics' in infos:
         for info in infos['game_statistics']:
           outcome = info['outcome']
-          game_statistics['empowerment'].append(info['empowerment'])
+          game_statistics['empowerment'].append(info['episode_empowerment'])
           if outcome != 0:
             assert isinstance(outcome, np.float32)
             rewards.append(outcome)

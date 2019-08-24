@@ -122,6 +122,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
     self.turn_stats = {k: [] for k in C.GameStatistics._fields} # TODO: do this in game_stats initilaization everywhere
+    self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
 
   def connect(self, address, env_number):
@@ -200,7 +201,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
         v.clear()
     else:
       reward = 0.
-
 
     self.last_info = info
     self.last_observation = observation
