@@ -174,8 +174,8 @@ class PPOAgent(agents.base_agent.Agent):
           elo_score = game_manager.update_score(eval_scores)
           performance = game_utils.to_prob(np.mean(eval_rewards))
 
-          self.tensorboard.add_scalar('eval/elo_score', elo_score, ppo_update_num)
-          self.tensorboard.add_scalar('eval/eval_performance', performance, ppo_update_num)
+          self.tensorboard.add_scalar('train/elo_score', elo_score, ppo_update_num)
+          self.tensorboard.add_scalar('train/eval_performance', performance, ppo_update_num)
           for k, v in eval_game_stats.items():
             self.tensorboard.add_scalar(f'eval/{k}', np.mean(v), ppo_update_num)
 
