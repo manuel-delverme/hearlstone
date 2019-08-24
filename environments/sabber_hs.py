@@ -8,10 +8,11 @@ import environments.base_env
 import hs_config
 import pysabberstone.python.rpc.python_pb2 as sabberstone_protobuf
 import pysabberstone.python.rpc.python_pb2_grpc as sabberstone_grpc
-import shared.constants as C
 import shared.env_utils
 import shared.utils
-from shared.env_utils import parse_game, shape_reward, game_stats
+from shared import constants as C
+from shared.env_utils import parse_deck, pad, parse_card, parse_minion
+from shared.env_utils import shape_reward, game_stats
 
 
 class _GameRef:
@@ -287,3 +288,41 @@ def check_hand_size(hand_zone):
   else:
     count = len(hand_zone.entities)
   return count in (4, 5)
+
+
+def parse_game(game):
+  o = game.CurrentOpponent
+  p = game.CurrentPlayer
+
+  deck = parse_deck(p.deck_zone.entities)
+  assert len(deck) == 390
+
+  p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
+  assert len(p_hand) == 130
+  p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
+  assert len(p_board) == 84 == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+  o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
+  assert len(o_board) == 84
+
+  retr = np.array((
+    # player
+    p.remaining_mana,
+    p.hero.atk,
+    p.hero.base_health - p.hero.damage,
+    p.hero.exhausted,
+    p.hero.power.exhausted,
+    *p_hand,
+    *p_board,
+    *deck,
+
+    # opponent
+    o.remaining_mana,
+    o.hero.atk,
+    o.hero.base_health - o.hero.damage,
+    o.hero.exhausted,
+    o.hero.power.exhausted,
+    # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
+    *o_board,
+  ), dtype=np.int32)
+  assert retr.shape[0] == C.STATE_SPACE
+  return retr

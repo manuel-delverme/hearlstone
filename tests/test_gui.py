@@ -11,7 +11,7 @@ import torch
 def test_gui():
   import torch.distributions as dist
   env = Sabberstone('0.0.0.0:50052')
-  env.set_opponents(['random'])
+  env.set_opponents(['random'],,,
   s0, reward, terminal, info = env.reset()
   pi = dist.Categorical(probs= torch.tensor((1/C.ACTION_SPACE, ) * C.ACTION_SPACE))
   while not terminal:
