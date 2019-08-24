@@ -75,7 +75,7 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55
-  performance_to_early_eval = 0.35
+  performance_to_early_eval = 0.45
   num_outcomes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
@@ -98,7 +98,7 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  entropy_coeff = 0.043  # 1e-1  #  randomness, 1e-2 to 1e-4
+  entropy_coeff = 1e-1  # 0.043  #   #  randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped
