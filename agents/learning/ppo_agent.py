@@ -180,9 +180,8 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
 
-          self.tensorboard.add_scalar('dashboard/league_mean', game_manager.elo.mean.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_mean', game_manager.elo.scores.mean(), ppo_update_num)
           self.tensorboard.add_scalar('dashboard/league_var', game_manager.elo.scores.var(), ppo_update_num)
-
 
           self.tensorboard.add_scalar('eval/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_scalar('eval/eval_performance', performance, ppo_update_num)
@@ -211,9 +210,19 @@ class PPOAgent(agents.base_agent.Agent):
 
   def load_checkpoint(self, checkpoint_file, envs):
     checkpoint = torch.load(checkpoint_file)
-    self.actor_critic = checkpoint['network']
+    if isinstance(checkpoint, tuple): # for compatibility with previous versions....
+      self.actor_critic = checkpoint[0]
+      self.pi_optimizer = torch.optim.Adam(
+          self.actor_critic.actor.parameters(),
+          lr=hs_config.PPOAgent.actor_adam_lr,
+      )
+      self.value_optimizer = torch.optim.Adam(
+          self.actor_critic.critic.parameters(),
+          lr=hs_config.PPOAgent.critic_adam_lr, )
+    else:
+      self.actor_critic = checkpoint['network']
+      self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
     self.actor_critic.to(hs_config.device)
-    self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
 
   def setup_envs(self, game_manager: game_utils.GameManager):
 
