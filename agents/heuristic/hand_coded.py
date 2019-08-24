@@ -262,8 +262,7 @@ class SabberAgent(HeuristicAgent):
 
   def evaluate_spell(self, action, hand_zone, opponent_board, opponent_hero):
     card = hand_zone[action.source_position]
-    onehot = tuple(card)[3:]
-    card_id = C.REVERSE_SPELL_LOOKUP[onehot]
+    card_id = C.REVERSE_CARD_LOOKUP[card]
 
     if action.target_position < 8:
       return -1  # hitting your own minions as mage is not a good idea

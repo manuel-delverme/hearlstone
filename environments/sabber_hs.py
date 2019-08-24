@@ -121,7 +121,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
-    self.turn_stats = {k: [] for k in C.GameStatistics._fields} # TODO: do this in game_stats initilaization everywhere
+    self.turn_stats = {k: [] for k in C.GameStatistics._fields}  # TODO: do this in game_stats initilaization everywhere
     self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
 
@@ -308,9 +308,9 @@ def parse_game(game):
   p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
   assert len(p_hand) == 130
   p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(p_board) == 84 == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+  assert len(p_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
   o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(o_board) == 84
+  assert len(o_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
 
   retr = np.array((
     # player

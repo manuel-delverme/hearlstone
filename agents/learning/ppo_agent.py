@@ -186,7 +186,7 @@ class PPOAgent(agents.base_agent.Agent):
             break
 
     checkpoint_file = self.save_model(total_num_steps)
-    rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=1000)
+    rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=100)
 
     validation_performance = game_utils.to_prob(np.mean(rewards))
     return checkpoint_file, validation_performance, ppo_update_num + 1
