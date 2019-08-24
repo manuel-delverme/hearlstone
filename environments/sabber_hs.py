@@ -121,8 +121,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
-    self.turn_stats = []
-    self._game_matrix = {}
+    # self.turn_stats = {k: [] for k in C.GameStatistics._fields}
+    # self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
 
   def connect(self, address, env_number):
@@ -177,6 +177,30 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray):
+    assert_terminal, info, observation, rewards = self.resolve_action(action_id)
+
+    terminal = any(rewards)
+    assert not assert_terminal or terminal
+
+    if terminal:
+      reward = [r for r in rewards if r != 0.][0]
+      info['game_statistics'] = {
+        # **{k: sum(v) for k, v in self.turn_stats.items() if v},
+        'outcome': reward,
+        'opponent_nr': self.current_k,
+      }
+      # for v in self.turn_stats.values():
+      #   v.clear()
+    else:
+      reward = 0.
+
+    self.last_info = info
+    self.last_observation = observation
+
+    return observation, reward, terminal, info
+
+  def resolve_action(self, action_id):
+    assert_terminal = False
     rewards = []
     while True:
       self.game_snapshot = self.stub.Process(self.game_snapshot, self.action_int_to_obj(action_id))
@@ -184,11 +208,11 @@ class Sabberstone(environments.base_env.RenderableEnv):
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
-        self._sample_opponent()
-        self.game_snapshot = self.stub.Reset(self.game_snapshot)
-
-      observation = parse_game(self.game_snapshot)
-      info = {'possible_actions': self.gather_possible_actions(), }
+        observation, _, _, info = self.reset()
+        assert_terminal = True
+      else:
+        observation = parse_game(self.game_snapshot)
+        info = {'possible_actions': self.gather_possible_actions(), }
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
         action_id = self.opponent.choose(
@@ -199,19 +223,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
             }})
       else:
         break
-
-    terminal = any(rewards)
-    if terminal:
-      reward = [r for r in rewards if r != 0.][0]
-      info['game_statistics'] = self.gather_game_statistics(reward)
-    else:
-      reward = 0.
-
-    observation = parse_game(self.game_snapshot)
-    self.last_info = info
-    self.last_observation = observation
-
-    return observation, reward, terminal, info
+    return assert_terminal, info, observation, rewards
 
   def gather_possible_actions(self):
     possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
@@ -259,18 +271,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
     self.opponent = self.opponents[k]
     self.current_k = k
-
-  def gather_game_statistics(self, reward):
-    # self.game_matrix(self.current_k, reward)
-    # counts = np.array([v[1] for v in self._game_matrix.values()])
-    # _stats = C.GameStatistics(*zip(*self.turn_stats))
-    return {
-      # **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
-      'outcome': reward,
-      # 'life_adv': self.turn_stats[-1].life_adv,
-      # 'mean_opponent': counts.mean(),
-      'opponent_nr': self.current_k,
-    }
 
   def __str__(self):
     return f"Player: {self.game_snapshot.CurrentPlayer.id} - status: {self.game_snapshot.state} - turns: {self.game_snapshot.turn}"
