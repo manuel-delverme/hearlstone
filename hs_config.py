@@ -12,6 +12,7 @@ use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 comment = "DELETEME" if DEBUG else ""
 device = torch.device("cuda:0" if use_gpu else "cpu")
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
 print_every = 20
 log_to_stdout = DEBUG
@@ -27,21 +28,18 @@ class Environment:
   max_deck_size = 30
   max_mana = 10
 
-  newest_opponent_prob = 0.01
+  newest_opponent_prob = 1.
 
   max_cards_in_board = 7
   max_cards_in_deck = 30
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  connection = 'rpc'
+  connection = 'mmf'
   max_processes = 4 if connection == 'mmf' else 12
 
   max_actions_per_game = 100
   reward_type = C.RewardType.default
-
-  arena = False
-  opponent_keys = ['kl', 'boltzmann', 'arena', 'board_adv']
 
   @staticmethod
   def get_reward_shape(r, game):
@@ -71,17 +69,20 @@ class Environment:
 
 
 class GameManager:
-  max_opponents = 5
+  arena = False
+  num_battle_games = 10
+  selection_size = 3
+  league_size = 5
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
+  tau = 1.  # temperature
+  player_fname = os.path.join(log_dir, 'model', 'current_player.pt')
+  model_paths = log_dir + '/model/*.pt_*'
 
 
 class SelfPlay:
   num_opponent_updates = 9999999
-
-
-log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
 
 class PPOAgent:
@@ -106,7 +107,7 @@ class PPOAgent:
   if num_processes > 4 and Environment.connection == 'mmf':
     raise NotImplementedError(">4 processes seem to crash")
 
-  num_steps = 256 # 32
+  num_steps = 256  # 32
   ppo_epoch = 6  # times ppo goes over the data
 
   num_env_steps = int(1e10)
@@ -115,7 +116,7 @@ class PPOAgent:
 
   kl_coeff = 3.
 
-  entropy_coeff = 1e-1 #1e-1  # 0.043  # randomness, 1e-2 to 1e-4
+  entropy_coeff = 1e-1  # 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped

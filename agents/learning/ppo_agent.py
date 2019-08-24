@@ -37,7 +37,7 @@ def get_grad_norm(model):
 class PPOAgent(agents.base_agent.Agent):
   def _choose(self, observation, possible_actions):
     with torch.no_grad():
-      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=self.deterministic)
+      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
     return action
 
   def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
@@ -48,7 +48,6 @@ class PPOAgent(agents.base_agent.Agent):
     self.experiment_id = experiment_id
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
 
-    self.deterministic = False
     self.tensorboard = None
     self.envs = None
     self.eval_envs = None
@@ -175,18 +174,18 @@ class PPOAgent(agents.base_agent.Agent):
           pbar.set_description('eval_agent')
 
           _rewards, _scores = self.eval_agent(eval_envs)
-          elo_score, _ = game_manager.update_score(_scores)
-          self.actor_critic.score = elo_score
-          opponent_dist = game_manager.opponent_dist(hs_config.GameManager.max_opponents)
+          elo_score, games_count = game_manager.update_score(_scores)
+          opponent_dist = game_manager.opponent_dist()
           pbar.set_description('train')
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
+          self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
 
-          self.tensorboard.add_scalar('dashboard/league_mean', game_manager._game_score.scores.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('dashboard/league_var', game_manager._game_score.scores.var(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_mean', game_manager.elo.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_var', game_manager.elo.scores.var(), ppo_update_num)
 
-          self.tensorboard.add_histogram('dashboard/league', game_manager._game_score.scores, ppo_update_num)
+          self.tensorboard.add_histogram('dashboard/league', game_manager.elo.scores, ppo_update_num)
           performance = game_utils.to_prob(np.mean(_rewards))
           self.tensorboard.add_scalar('dashboard/eval_performance', performance, ppo_update_num)
           episode_rewards.clear()
@@ -231,7 +230,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist, deterministic=False)
+      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -239,7 +238,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist, deterministic=True)
+      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
@@ -325,9 +324,6 @@ class PPOAgent(agents.base_agent.Agent):
       self.tensorboard.add_scalar('zdebug/steps_per_second', fps, time_step)
       self.tensorboard.add_scalar('dashboard/mean_reward', game_utils.to_prob(np.mean(episode_rewards)), time_step)
 
-      avg_game_stats = {k: v for k, v in zip(C.GameStatistics._fields, np.mean(game_stats, axis=0))}
-      _ = [self.tensorboard.add_scalar(f'eval_game/{k}', v, time_step) for k, v in avg_game_stats.items()]
-
     self.tensorboard.add_scalar('train/kl', dist_kl, time_step)
     self.tensorboard.add_scalar('train/grad_value', grad_value, time_step)
 
@@ -346,7 +342,7 @@ class PPOAgent(agents.base_agent.Agent):
     self.tensorboard.add_scalar('zlosses/value_loss', value_loss * self.value_loss_coeff, time_step)
     self.tensorboard.add_scalar('zlosses/action_loss', action_loss, time_step)
 
-  def save_model(self, total_num_steps, score=None):
+  def save_model(self, total_num_steps):
     try:
       os.makedirs(hs_config.PPOAgent.save_dir)
     except OSError:
@@ -358,42 +354,23 @@ class PPOAgent(agents.base_agent.Agent):
       model = self.actor_critic
 
     save_model = (model,)
-    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt"  # int(actor_criti.score.item())
+    checkpoint_name = f"id={self.experiment_id}:steps={total_num_steps}.pt"
     checkpoint_file = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
     torch.save(save_model, checkpoint_file)
     return checkpoint_file
 
-  def get_latest_checkpoint_file(self):
-    raise NotImplementedError()
-    # checkpoint_name = "{}:{}.pt".format(self.experiment_id, "*")
-    # checkpoint_files = os.path.join(hs_config.PPOAgent.save_dir, checkpoint_name)
-    # checkpoints = glob.glob(checkpoint_files)
-    #
-    # if not checkpoints:
-    #   return None
-    #
-    # ids = {}
-    # for file_name in checkpoints:
-    #   x = file_name.replace(":", "-")
-    #   last_part = x.split("-")[-1]
-    #   num_iters = last_part[:-3]
-    #   ids[file_name] = int(num_iters)
-    #
-    # checkpoints = sorted(checkpoints, key=lambda xi: ids[xi])
-    # latest_checkpoint = checkpoints[-1]
-    # return latest_checkpoint
-
-  def battle(self, game_manager: game_utils.GameManager, checkpoint_file, num_eval_games=10, n_envs=1):
+  def battle(self, game_manager: game_utils.GameManager, checkpoint_file, num_eval_games=hs_config.GameManager.num_battle_games,
+      n_envs=hs_config.PPOAgent.num_processes):
 
     rewards = []
-    opponent_dist = torch.ones(size=(len(game_manager.opponents),))
-    opponent_dist = opponent_dist/opponent_dist.sum()
+    opponent_dist = game_manager.opponent_dist()
+    assert len(game_manager.opponents) == len(opponent_dist)
 
     if self.battle_env is None:
       print("[BATTLE] Loading training environments")
       self.battle_env = make_vec_envs('battle', game_manager, num_processes=n_envs, device=hs_config.device)
     else:
-      self.get_last_env(self.battle_env).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist, deterministic=True)
+      self.get_last_env(self.battle_env).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if checkpoint_file:
       self.load_checkpoint(checkpoint_file, self.battle_env)
@@ -411,7 +388,6 @@ class PPOAgent(agents.base_agent.Agent):
       scores[k].append(r)
 
     return rewards, dict(scores)
-
 
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:
@@ -532,7 +508,7 @@ class PPOAgent(agents.base_agent.Agent):
         print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
 
         checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
-        win_ratio = win_ratio / 2 + 0.5
+        win_ratio = game_utils.to_prob(win_ratio)
 
         assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
@@ -546,7 +522,11 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
         old_win_ratio = max(old_win_ratio, win_ratio)
 
-        game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player or ask the agame manager a new set of players
+        game_manager.add_learned_opponent(checkpoint_file)
+        if hs_config.GameManager.arena:
+          next_league_stats = game_manager.update_selection()
+          self.tensorboard.add_scalar('dashboard/next_league_mean', next_league_stats.mean(), self_play_iter)
+          self.tensorboard.add_scalar('dashboard/next_league_std', next_league_stats.std(), self_play_iter)
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

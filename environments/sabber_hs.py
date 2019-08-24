@@ -121,8 +121,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
-    self.turn_stats = []
-    self.game_matrix = None
     self.logger.info(f"Env with id {env_number} started.")
 
   def connect(self, address, env_number):
@@ -175,15 +173,28 @@ class Sabberstone(environments.base_env.RenderableEnv):
     else:
       return game._possible_options
 
-  # def update_stats(self):
-  #   if self.game_snapshot.CurrentPlayer.id == 1:
-  #     new_stats = game_stats(self.game_snapshot)
-  #     self.turn_stats.append(new_stats)
-
   @shared.env_utils.episodic_log
   @shape_reward
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray):
+    assert_terminal, info, observation, rewards = self.resolve_action(action_id)
+
+    terminal = any(rewards)
+    assert not assert_terminal or terminal
+
+    if terminal:
+      reward = [r for r in rewards if r != 0.][0]
+      info['game_statistics'] = {'outcome': reward, 'opponent_nr': self.current_k}
+    else:
+      reward = 0.
+
+    self.last_info = info
+    self.last_observation = observation
+
+    return observation, reward, terminal, info
+
+  def resolve_action(self, action_id):
+    assert_terminal = False
     rewards = []
     while True:
       self.game_snapshot = self.stub.Process(self.game_snapshot, self.action_int_to_obj(action_id))
@@ -191,11 +202,11 @@ class Sabberstone(environments.base_env.RenderableEnv):
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
-        self.reset()
-        # self.game_snapshot = self.stub.Reset(self.game_snapshot)
-
-      observation = parse_game(self.game_snapshot)
-      info = {'possible_actions': self.gather_possible_actions(), }
+        observation, _, _, info = self.reset()
+        assert_terminal = True
+      else:
+        observation = parse_game(self.game_snapshot)
+        info = {'possible_actions': self.gather_possible_actions(), }
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
         action_id = self.opponent.choose(
@@ -206,22 +217,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
             }})
       else:
         break
-
-    #_game_stats = game_stats(self.game_snapshot)
-    # self.turn_stats.append(_game_stats)
-    terminal = any(rewards)
-    if terminal:
-      reward = [r for r in rewards if r != 0.][0]
-      info['game_statistics'] = self.gather_game_statistics(reward)
-      self.turn_stats = []
-    else:
-      reward = 0.
-
-    observation = parse_game(self.game_snapshot)
-    self.last_info = info
-    self.last_observation = observation
-
-    return observation, reward, terminal, info
+    return assert_terminal, info, observation, rewards
 
   def gather_possible_actions(self):
     possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
@@ -251,15 +247,15 @@ class Sabberstone(environments.base_env.RenderableEnv):
           f'found {list(self.game_snapshot.CurrentPlayer.hand_zone)} as starting hand, not valid')
     return observation, 0, False, info
 
-  def set_opponents(self, opponents, opponent_dist, deterministic=False):
+  def set_opponents(self, opponents, opponent_dist):
     super(Sabberstone, self).set_opponents(opponents)
     self.opponent_dist = opponent_dist
-    for p in self.opponents:
-      p.deterministic = deterministic
 
   def _sample_opponent(self):
-    if hs_config.Environment.newest_opponent_prob > np.random.uniform() and self.opponent is not None:
+
+    if self.opponent is not None and hs_config.Environment.newest_opponent_prob > np.random.uniform():
       return
+
     p = self.opponent_dist
     p /= p.sum()
 
@@ -270,14 +266,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.current_k = k
 
   def gather_game_statistics(self, reward):
-    # counts = np.array([v[1] for v in self._game_matrix.values()])
-    # _stats = C.GameStatistics(*zip(*self.turn_stats))
     return {
-      # **{'mean_' + k: v for k, v in zip(C.GameStatistics._fields, np.mean(_stats, axis=1))},
-      # 'game_eval': C.GameStatistics(*np.array(self.turn_stats).mean(axis=0)),
       'outcome': reward,
-      # 'life_adv': self.turn_stats[-1].life_adv,
-      # 'mean_opponent': counts.mean(),
       'opponent_nr': self.current_k,
     }
 

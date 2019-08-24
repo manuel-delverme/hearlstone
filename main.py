@@ -17,7 +17,6 @@ def load_latest_checkpoint(checkpoint=None):
     print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
     checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
     if checkpoints:
-      # checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=:)", x).group(0)))
       checkpoint_files = sorted(checkpoints, key=lambda x: int(re.search(r"(?<=steps=)\w*(?=\.pt)", x).group(0)))
       checkpoint = checkpoint_files[-1]
   print('found', checkpoint)
@@ -36,22 +35,12 @@ def setup_logging():
     except tkinter.TclError as _:
       print("no-comment")
 
-  # hs_config.tensorboard_dir = os.path.join(hs_config.log_dir,
-  #                                          f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
-  # if "DELETEME" in hs_config.tensorboard_dir:
-  #   hs_config.tensorboard_dir = tempfile.mktemp()
   return hs_config.comment
 
 
 def train(args):
   game_manager = game_utils.GameManager(address=args.address)
-
-  if hs_config.Environment.arena is True:
-    for experiment_id in hs_config.Environment.opponent_keys:
-      ckpt = load_latest_checkpoint(experiment_id=experiment_id)
-      if ckpt is not None:
-        print(f"[ARENA] Loading ckpt {ckpt}")
-        game_manager.add_learned_opponent(ckpt)
+  game_manager.reset()
 
   if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
@@ -66,8 +55,20 @@ def train(args):
     player.enjoy(game_manager, checkpoint_file=args.p2)
   else:
     experiment_id = setup_logging()
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=experiment_id)
     latest_checkpoint = load_latest_checkpoint(args.load_checkpoint)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=experiment_id)
+    init_ckpt = player.save_model(0)
+
+    if hs_config.GameManager.arena:
+      game_manager.create_league(init_ckpt)
+      for idx, ckpt in enumerate(game_manager.model_list):
+        game_manager.elo.set_player_index(idx)
+        rewards, scores = player.battle(game_manager, checkpoint_file=ckpt)
+        game_manager.update_score(scores)
+      del player.battle_env
+      game_manager.set_selection()
+    else:
+      game_manager.add_learned_opponent(init_ckpt)
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
 

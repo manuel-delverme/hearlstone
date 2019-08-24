@@ -78,11 +78,11 @@ class SubprocVecEnv(VecEnv):
     self.viewer = None
     VecEnv.__init__(self, len(env_fns), observation_space, action_space)
 
-  def set_opponents(self, opponents, opponent_dist, deterministic=False):
+  def set_opponents(self, opponents, opponent_dist):
     assert self._assert_not_closed()
 
     for remote in self.remotes:
-      remote.send(('set_opponents', {'opponents': opponents, 'opponent_dist': opponent_dist, 'deterministic': deterministic}))
+      remote.send(('set_opponents', {'opponents': opponents, 'opponent_dist': opponent_dist}))
 
   def step_async(self, actions):
     assert self._assert_not_closed()

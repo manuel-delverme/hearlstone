@@ -36,7 +36,6 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         nn.Linear(hs_config.PPOAgent.hidden_size, 1),
     )
-    self.score = torch.tensor((10.,))
     self.reset_actor()
     self.reset_critic()
     self.train()
