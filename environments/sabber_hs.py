@@ -322,6 +322,7 @@ def parse_game(game):
     *p_hand,
     *p_board,
     *deck,
+    len(p.board_zone.minions),
 
     # opponent
     o.remaining_mana,
@@ -331,6 +332,7 @@ def parse_game(game):
     o.hero.power.exhausted,
     # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
     *o_board,
+    len(o.board_zone.minions),
   ), dtype=np.int32)
   assert retr.shape[0] == C.STATE_SPACE
   return retr

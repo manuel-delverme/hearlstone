@@ -107,7 +107,7 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249
-STATE_SPACE = 642
+STATE_SPACE = 644
 
 
 class Players(enum.Enum):
