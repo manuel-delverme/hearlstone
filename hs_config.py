@@ -70,9 +70,9 @@ class Environment:
 
 class GameManager:
   arena = True
-  num_battle_games = 10
-  selection_size = 3
-  league_size = 5
+  num_battle_games = 50
+  selection_size = 5
+  league_size = 10
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400

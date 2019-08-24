@@ -3,6 +3,7 @@ import glob
 import re
 
 import torch
+import tqdm
 
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
@@ -61,10 +62,13 @@ def train(args):
 
     if hs_config.GameManager.arena:
       game_manager.create_league(init_ckpt)
+      update_schedules = [1,]
+      pbar = tqdm.tqdm(total=sum(update_schedules), desc='self-play')
       for idx, ckpt in enumerate(game_manager.model_list):
         game_manager.elo.set_player_index(idx)
         rewards, scores = player.battle(game_manager, checkpoint_file=ckpt)
         game_manager.update_score(scores)
+        pbar.update(idx)
       del player.battle_env
       game_manager.set_selection()
     else:
