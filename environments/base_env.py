@@ -97,7 +97,8 @@ class BaseEnv(gym.Env, ABC):
     #   assert isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent)
     #   self.opponents = []
     #   self.use_heuristic_opponent = False
-    opponent_network, = torch.load(checkpoint_file)
+    checkpoint = torch.load(checkpoint_file)
+    opponent_network = checkpoint['network']
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
     opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu',
                                                   experiment_id=None)

@@ -6,6 +6,7 @@ from typing import Callable, Type
 import torch
 
 import agents.base_agent
+import shared.constants as C
 
 use_gpu = torch.cuda.is_available()
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
@@ -25,13 +26,16 @@ class Environment:
 
   newest_opponent_prob = 0.8
 
+  # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
   max_cards_in_deck = 30
+  max_hero_health_points = 30
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
   connection = 'mmf'
   max_processes = 4 if connection == 'mmf' else 12
+  reward_type = C.RewardType.empowerment
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
