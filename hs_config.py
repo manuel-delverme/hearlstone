@@ -34,7 +34,7 @@ class Environment:
 
   max_cards_in_hand = 10
   connection = 'mmf'
-  max_processes = 8 if connection == 'mmf' else 12
+  max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
   @staticmethod
