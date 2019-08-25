@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import time
+import warnings
 from typing import Text, Optional, Tuple, List, Callable
 
 import numpy as np
@@ -171,8 +172,17 @@ class PPOAgent(agents.base_agent.Agent):
           eval_rewards, eval_scores, eval_game_stats = self.eval_agent(eval_envs)
           pbar.set_description('train')
 
-          elo_score = game_manager.update_score(eval_scores)
+          elo_score, games_count = game_manager.update_score(eval_scores)
+          opponent_dist = game_manager.opponent_dist()
           performance = game_utils.to_prob(np.mean(eval_rewards))
+
+          self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
+
+          self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
+          self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
+
+          self.tensorboard.add_scalar('dashboard/league_mean', game_manager.elo.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_var', game_manager.elo.scores.var(), ppo_update_num)
 
           self.tensorboard.add_scalar('eval/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_scalar('eval/eval_performance', performance, ppo_update_num)
@@ -201,11 +211,25 @@ class PPOAgent(agents.base_agent.Agent):
 
   def load_checkpoint(self, checkpoint_file, envs):
     checkpoint = torch.load(checkpoint_file)
-    self.actor_critic = checkpoint['network']
+    warnings.warn("Compatible loading for older checkpoint. Remove me in a day.")
+    if isinstance(checkpoint, tuple):
+      self.actor_critic = checkpoint[0]
+      self.pi_optimizer = torch.optim.Adam(
+          self.actor_critic.actor.parameters(),
+          lr=hs_config.PPOAgent.actor_adam_lr,
+      )
+      self.value_optimizer = torch.optim.Adam(
+          self.actor_critic.critic.parameters(),
+          lr=hs_config.PPOAgent.critic_adam_lr, )
+    else:
+      self.actor_critic = checkpoint['network']
+      self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
     self.actor_critic.to(hs_config.device)
-    self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
 
   def setup_envs(self, game_manager: game_utils.GameManager):
+
+    opponent_dist = game_manager.opponent_dist()
+
     if self.envs is None:
       print("[Train] Loading training environments")
       # TODO @d3sm0 clean this up
@@ -213,7 +237,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents)
+      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -221,7 +245,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents)
+      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")

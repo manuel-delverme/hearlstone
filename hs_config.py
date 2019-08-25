@@ -24,7 +24,7 @@ class Environment:
   single_process = DEBUG
   address = "0.0.0.0:50052"
 
-  newest_opponent_prob = 0.8
+  newest_opponent_prob = 0.5
 
   # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
@@ -59,6 +59,7 @@ class Environment:
 
 
 class GameManager:
+  tau = 1.  # boltzmann temperature
   max_opponents = 5
   elo_lr = 16
   base_rating = 1000
