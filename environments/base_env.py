@@ -1,6 +1,7 @@
 import collections
 import math
 import time
+import warnings
 from abc import ABC, abstractmethod
 from enum import IntEnum
 
@@ -74,7 +75,7 @@ class BaseEnv(gym.Env, ABC):
   def agent_game_vale(self):
     raise NotImplemented
 
-  def set_opponents(self, opponents, opponent_dist=None, *args, **kwargs):
+  def set_opponents(self, opponents, opponent_dist):
     _opponents = []
     for player_hash in opponents:
       if player_hash not in self.opponents_lookup:
@@ -97,15 +98,20 @@ class BaseEnv(gym.Env, ABC):
     #   assert isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent)
     #   self.opponents = []
     #   self.use_heuristic_opponent = False
-    opponent_network, = torch.load(checkpoint_file)
+    checkpoint = torch.load(checkpoint_file)
+    warnings.warn("Compatibility. Remove me soon")
+    if isinstance(checkpoint, tuple):
+      opponent_network, = torch.load(checkpoint_file)
+    else:
+      opponent_network = checkpoint['network']
+
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
-    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu', experiment_id=None)
-    print(f"[ENV] Created opponent from ckpt {checkpoint_file}")
+    opponent = agents.learning.ppo_agent.PPOAgent(opponent_network.num_inputs, opponent_network.num_possible_actions, device='cpu',
+                                                  experiment_id=None)
 
     del opponent.pi_optimizer
     del opponent.value_optimizer
     opponent_network.eval()
-    # TODO this pattern doesn't fit conv networks
     for network in (opponent_network.actor, opponent_network.critic):
       for param in network.parameters():
         param.requires_gradient = False

@@ -1,6 +1,7 @@
 import collections
-import os
 import functools
+import math
+import os
 import pprint
 from collections import defaultdict
 from typing import Callable, Optional, List, Text
@@ -246,40 +247,10 @@ def parse_deck(entities):
 
     old_id = card_encoding_pos
   return deck
-def game_stats(game):
-  player = game.CurrentPlayer
-  opponent = game.CurrentOpponent
-
-  mana_adv = get_mana_efficiency(player)
-  hand_adv = get_hand_adv(player, opponent)
-  life_adv = get_life_adv(player, opponent)
-  n_remaining_turns = get_turns_to_letal(player, opponent)
-  board_adv = get_board_adv(player, opponent)
-
-  return C.GameStatistics(mana_adv, hand_adv, life_adv, n_remaining_turns, board_adv)
 
 
-def get_extra_reward(game, reward_type=None):
-  if reward_type == C.RewardType.default:
-    return 0.
-
-  player = game.CurrentPlayer
-  opponent = game.CurrentOpponent
-
-  if reward_type == C.RewardType.mana_efficency:
-    reward = get_mana_efficiency(player)
-  elif reward_type == C.RewardType.hand_adv:
-    reward = get_hand_adv(player, opponent)
-  elif reward_type == C.RewardType.life_adv:
-    reward = get_life_adv(player, opponent)
-  elif reward_type == C.RewardType.board_adv:
-    reward = get_board_adv(player, opponent)
-  elif reward_type == C.RewardType.time_left:
-    reward = get_turns_to_letal(player, opponent)
-  else:
-    raise NameError("Misspecified reward type")
-
-  return reward
+def get_empowerment(game):
+  return 0.02 * math.log(len(game._options))  # this was 1+log actually
 
 
 def get_turns_to_letal(player, opponent):
@@ -292,24 +263,29 @@ def get_turns_to_letal(player, opponent):
   return reward
 
 
-def get_board_adv(player, opponent):
-  power, value = board_power(player)
-  defense = sum([minion.base_health - minion.damage for minion in opponent.board_zone.minions])
-  reward = (value - defense) / max(1,max(value, defense))
+def get_board_adv(game):
+  player_power = sum(minion.atk for minion in game.CurrentPlayer.board_zone.minions)
+  opponent_power = sum(minion.atk for minion in game.CurrentOpponent.board_zone.minions)
+
+  player_power /= game.CurrentPlayer.base_mana
+  opponent_power /= game.CurrentPlayer.base_mana  # both by the player's mana
+
+  reward = math.log(1 + player_power) - math.log(1 + opponent_power)
+  reward *= 0.05
   return reward
 
 
 def get_life_adv(player, opponent):
   hero_life, opponent_life = players_life(opponent, player)
   life_adv = opponent_life - hero_life
-  reward = life_adv / hs_config.Environment.max_life
+  reward = life_adv / hs_config.Environment.max_hero_health_points
   return reward
 
 
 def get_hand_adv(player, opponent):
   hand_adv = (len(player.hand_zone.entities) - len(opponent.hand_zone.entities))
   draw_adv = (len(player.deck_zone.entities) - len(opponent.deck_zone.entities))  # number of remaining cards
-  reward = (hand_adv + draw_adv) / hs_config.Environment.max_deck_size
+  reward = (hand_adv + draw_adv) / hs_config.Environment.max_cards_in_deck
   return reward
 
 
@@ -325,20 +301,40 @@ def players_life(opponent, player):
   return hero_life, opponent_life
 
 
-def board_power(player):
-  power = [(minion.atk, minion.base_health - minion.damage) for minion in player.board_zone.minions]
-  if len(power):
-    power, value = np.sum(power, axis=0)
+# def board_power(player):
+#   return power, value
+
+
+def update_reward(reward, game):
+  reward_type = hs_config.Environment.reward_type
+
+  player = game.CurrentPlayer
+  opponent = game.CurrentOpponent
+
+  if reward_type == C.RewardType.default:
+    extra_reward = 0.
+  elif reward_type == C.RewardType.mana_efficency:
+    extra_reward = get_mana_efficiency(player)
+  elif reward_type == C.RewardType.hand_adv:
+    extra_reward = get_hand_adv(player, opponent)
+  elif reward_type == C.RewardType.life_adv:
+    extra_reward = get_life_adv(player, opponent)
+  elif reward_type == C.RewardType.board_adv:
+    extra_reward = get_board_adv(player, opponent)
+  elif reward_type == C.RewardType.time_left:
+    extra_reward = get_turns_to_letal(player, opponent)
+  elif reward_type == C.RewardType.empowerment:
+    extra_reward = get_empowerment(game)
   else:
-    power = 0
-    value = 0
-  return power, value
+    raise NameError("Misspecified reward type")
+  return reward + extra_reward
 
 
-def shape_reward(f, _lambda=hs_config.Environment.get_reward_shape):
+def shape_reward(f):
   @functools.wraps(f)
   def wrapped(self, *f_args, **f_kwargs):
     s, r, d, info = f(self, *f_args, **f_kwargs)
-    return s, _lambda(r, self.game_snapshot), d, info
+    r = update_reward(r, self.game_snapshot)
+    return s, r, d, info
 
   return wrapped

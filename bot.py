@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os
-import glob
 import datetime
-import hs_config
+import glob
+import os
 import shutil
+
+import hs_config
+
 
 def save_and_commit():
   link = "https://github.com/d3sm0/hrl_logs/tree/master/debug"
   try:
-    ckpt = sorted(glob.glob(os.path.join(hs_config.PPOAgent.save_dir,  '*[Ss]abberstone*')), key=os.path.getctime)[-1]
+    ckpt = sorted(glob.glob(os.path.join(hs_config.PPOAgent.save_dir, '*[Ss]abberstone*')), key=os.path.getctime)[-1]
     print(ckpt)
     shutil.copy(ckpt, os.path.join(os.path.dirname(ckpt), 'latest.pt'))
   except IndexError:

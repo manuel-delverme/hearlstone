@@ -24,28 +24,19 @@ class Environment:
   ENV_DEBUG_METRICS = False
   single_process = DEBUG
   address = "0.0.0.0:50052"
-  max_life = 30
-  max_deck_size = 30
-  max_mana = 10
 
   newest_opponent_prob = 0.5
 
+  # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
   max_cards_in_deck = 30
+  max_hero_health_points = 30
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
   connection = 'rpc'
   max_processes = 4 if connection == 'mmf' else 12
-
-  max_actions_per_game = 100
   reward_type = C.RewardType.default
-
-  @staticmethod
-  def get_reward_shape(r, game):
-    from shared.env_utils import get_extra_reward
-    _r = get_extra_reward(game, reward_type=Environment.reward_type)
-    return r + _r / Environment.max_actions_per_game
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
@@ -92,7 +83,7 @@ class PPOAgent:
   num_outcomes_for_early_exit = 50
   min_iter_between_evals = 10
 
-  num_eval_games = 10 if DEBUG else 1000
+  num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50
@@ -115,7 +106,6 @@ class PPOAgent:
   tau = 0.95  # gae parameter
 
   kl_coeff = 3.
-
   entropy_coeff = 1e-1  # 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
   value_loss_coeff = 0.5
 

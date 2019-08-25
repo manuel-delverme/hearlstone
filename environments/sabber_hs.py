@@ -12,7 +12,6 @@ import shared.env_utils
 import shared.utils
 from shared import constants as C
 from shared.env_utils import parse_deck, pad, parse_card, parse_minion
-from shared.env_utils import shape_reward, game_stats
 
 
 class _GameRef:
@@ -122,6 +121,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
+    self.turn_stats = {k: [] for k in C.GameStatistics._fields} # TODO: do this in game_stats initilaization everywhere
+    self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
 
   def connect(self, address, env_number):
@@ -175,17 +176,29 @@ class Sabberstone(environments.base_env.RenderableEnv):
       return game._possible_options
 
   @shared.env_utils.episodic_log
-  @shape_reward
+  @shared.env_utils.shape_reward
   @shared.env_utils.episodic_log
   def step(self, action_id: np.ndarray):
     assert_terminal, info, observation, rewards = self.resolve_action(action_id)
 
+    self.turn_stats['empowerment'].append(shared.env_utils.get_empowerment(self.game_snapshot))
+    # self.turn_stats['mana_adv'].append(shared.env_utils.get_mana_efficiency(self.game_snapshot))
+    # self.turn_stats['hand_adv'].append(shared.env_utils.get_hand_adv(self.game_snapshot))
+    # self.turn_stats['life_adv'].append(shared.env_utils.get_life_adv(self.game_snapshot))
+    # self.turn_stats['n_remaining_turns'].append(shared.env_utils.get_turns_to_letal(self.game_snapshot))
+    # self.turn_stats['board_adv'].append(shared.env_utils.get_board_adv(self.game_snapshot)
+
     terminal = any(rewards)
     assert not assert_terminal or terminal
-
     if terminal:
       reward = [r for r in rewards if r != 0.][0]
-      info['game_statistics'] = {'outcome': reward, 'opponent_nr': self.current_k}
+      info['game_statistics'] = {
+        **{f"episode_{k}": sum(v) for k, v in self.turn_stats.items() if v},
+        'outcome': reward,
+        'opponent_nr': self.current_k,
+      }
+      for v in self.turn_stats.values():
+        v.clear()
     else:
       reward = 0.
 
@@ -249,7 +262,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     return observation, 0, False, info
 
   def set_opponents(self, opponents, opponent_dist):
-    super(Sabberstone, self).set_opponents(opponents)
+    super(Sabberstone, self).set_opponents(opponents, opponent_dist)
     self.opponent_dist = opponent_dist
 
   def _sample_opponent(self):
@@ -261,16 +274,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
     p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
-
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
     self.opponent = self.opponents[k]
     self.current_k = k
-
-  def gather_game_statistics(self, reward):
-    return {
-      'outcome': reward,
-      'opponent_nr': self.current_k,
-    }
 
   def __str__(self):
     return f"Player: {self.game_snapshot.CurrentPlayer.id} - status: {self.game_snapshot.state} - turns: {self.game_snapshot.turn}"
@@ -300,9 +306,9 @@ def parse_game(game):
   p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
   assert len(p_hand) == 130
   p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(p_board) == 84 == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+  assert len(p_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
   o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(o_board) == 84
+  assert len(o_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
 
   retr = np.array((
     # player
