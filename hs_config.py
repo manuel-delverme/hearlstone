@@ -24,7 +24,7 @@ class Environment:
   single_process = DEBUG
   address = "0.0.0.0:50052"
 
-  newest_opponent_prob = 0.5
+  newest_opponent_prob = 0.8
 
   # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
@@ -59,7 +59,6 @@ class Environment:
 
 
 class GameManager:
-  tau = 1.  # boltzmann temperature
   max_opponents = 5
   elo_lr = 16
   base_rating = 1000
@@ -78,7 +77,6 @@ class PPOAgent:
   performance_to_early_exit = 0.55
   performance_to_early_eval = 0.40
   num_outcomes_for_early_exit = 50
-  min_iter_between_evals = 10
 
   num_eval_games = 10 if DEBUG else 100
   clip_value_loss = True
@@ -92,8 +90,6 @@ class PPOAgent:
   critic_adam_lr = 1e-5
 
   num_processes = 1 if DEBUG else Environment.max_processes  # number of CPU processes
-  if num_processes > 4 and Environment.connection == 'mmf':
-    raise NotImplementedError(">4 processes seem to crash")
 
   num_steps = 256
   ppo_epoch = 6  # times ppo goes over the data
@@ -102,7 +98,7 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
+  entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped

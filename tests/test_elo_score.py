@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from game_utils import GameManager, Elo
-from agents.heuristic.random_agent import RandomAgent
 import hs_config
+from agents.heuristic.random_agent import RandomAgent
+from game_utils import GameManager, Ladder
 
-elo = Elo()
+elo = Ladder()
 manager = GameManager(hs_config.Environment.address)
 manager.use_heuristic_opponent = True
 env = manager()

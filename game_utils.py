@@ -2,8 +2,8 @@
 import collections
 from typing import Text
 
-import torch
 import numpy as np
+import torch
 
 import hs_config
 
@@ -15,14 +15,14 @@ class GameManager(object):
 
     self.game_class = hs_config.Environment.get_game_mode(address)
     self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
-    self.elo = Elo()
+    self.ladder = Ladder()
 
   def update_score(self, score):
-    self.elo.update(score)
-    return self.elo.player_score, self.elo.games_count
+    self.ladder.update(score)
+    return self.ladder.player_score, self.ladder.games_count
 
   def opponent_dist(self):
-    opponent_dist = self.elo.opponent_distribution(number_of_active_opponents=len(self.opponents))
+    opponent_dist = self.ladder.opponent_distribution(number_of_active_opponents=len(self.opponents))
     return opponent_dist
 
   @property
@@ -38,7 +38,7 @@ class GameManager(object):
     initial_dist = self.opponent_dist()
     if self.use_heuristic_opponent:
 
-      initial_dist = torch.ones(size=(1, )).numpy()
+      initial_dist = torch.ones(size=(1,)).numpy()
 
       hs_game.set_opponents(opponents=['default'], opponent_dist=initial_dist)
     else:
@@ -48,11 +48,13 @@ class GameManager(object):
 
   def add_learned_opponent(self, checkpoint_file: Text):
     assert isinstance(checkpoint_file, str)
-    self.elo.set_score_from_player(len(self.opponents))
+    last_opponent = len(self.opponents)
+    self.ladder.set_score_from_player(last_opponent)
+
     self.opponents.append(checkpoint_file)
 
 
-class Elo:
+class Ladder:
   def __init__(self):
     # https://arxiv.org/pdf/1806.02643.pdf
 
@@ -84,7 +86,6 @@ class Elo:
 
     self.scores[[self.player_idx, opponent_idx]] = self.scores[[self.player_idx, opponent_idx]] + torch.Tensor(r_update)
     self._c[[self.player_idx, opponent_idx]] = self._c[[self.player_idx, opponent_idx]] + torch.Tensor(c_update)
-
 
   def set_score_from_player(self, idx):
     self._scores[idx] = self._scores[self.player_idx]

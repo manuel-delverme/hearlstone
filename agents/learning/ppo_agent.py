@@ -181,8 +181,8 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
 
-          self.tensorboard.add_scalar('dashboard/league_mean', game_manager.elo.scores.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('dashboard/league_var', game_manager.elo.scores.var(), ppo_update_num)
+          self.tensorboard.add_scalar('arena/league_mean', game_manager.ladder.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('arena/league_var', game_manager.ladder.scores.var(), ppo_update_num)
 
           self.tensorboard.add_scalar('eval/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_scalar('eval/eval_performance', performance, ppo_update_num)
@@ -232,7 +232,6 @@ class PPOAgent(agents.base_agent.Agent):
 
     if self.envs is None:
       print("[Train] Loading training environments")
-      # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:

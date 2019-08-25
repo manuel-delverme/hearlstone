@@ -261,12 +261,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
           f'found {list(self.game_snapshot.CurrentPlayer.hand_zone)} as starting hand, not valid')
     return observation, 0, False, info
 
-  def set_opponents(self, opponents, opponent_dist):
-    super(Sabberstone, self).set_opponents(opponents, opponent_dist)
-    self.opponent_dist = opponent_dist
-
   def _sample_opponent(self):
-
     if self.opponent is not None and hs_config.Environment.newest_opponent_prob > np.random.uniform():
       return
 
