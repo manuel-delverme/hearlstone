@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import time
+import warnings
 from typing import Text, Optional, Tuple, List, Callable
 
 import numpy as np
@@ -210,7 +211,8 @@ class PPOAgent(agents.base_agent.Agent):
 
   def load_checkpoint(self, checkpoint_file, envs):
     checkpoint = torch.load(checkpoint_file)
-    if isinstance(checkpoint, tuple): # for compatibility with previous versions....
+    warnings.warn("Compatible loading for older checkpoint. Remove me in a day.")
+    if isinstance(checkpoint, tuple):
       self.actor_critic = checkpoint[0]
       self.pi_optimizer = torch.optim.Adam(
           self.actor_critic.actor.parameters(),

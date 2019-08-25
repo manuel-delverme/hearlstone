@@ -99,7 +99,7 @@ class Elo:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    return normalized_boltzmann(scores=self.scores[:number_of_active_opponents], tau=self.tau).numpy()
+    return boltzmann(scores=self.scores[:number_of_active_opponents], tau=self.tau).numpy()
 
   @property
   def scores(self) -> torch.Tensor:
@@ -122,7 +122,6 @@ def to_prob(r):
   return r / 2 + 0.5
 
 
-def normalized_boltzmann(scores, tau=1.):
+def boltzmann(scores, tau=1.):
   assert isinstance(scores, torch.Tensor)
-  p = (scores - scores.mean()) / scores.norm()
-  return torch.softmax(tau * p, dim=0)
+  return torch.softmax(tau * scores, dim=0)
