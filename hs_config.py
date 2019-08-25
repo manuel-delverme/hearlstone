@@ -28,7 +28,7 @@ class Environment:
   max_deck_size = 30
   max_mana = 10
 
-  newest_opponent_prob = 0.1
+  newest_opponent_prob = 0.5
 
   max_cards_in_board = 7
   max_cards_in_deck = 30
@@ -70,9 +70,9 @@ class Environment:
 
 class GameManager:
   arena = True
-  num_battle_games = 50
+  num_battle_games = 5 if DEBUG else 50
   selection_size = 5
-  league_size = 10
+  league_size = 5 if DEBUG else 10
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400

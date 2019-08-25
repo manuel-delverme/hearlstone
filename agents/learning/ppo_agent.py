@@ -176,14 +176,20 @@ class PPOAgent(agents.base_agent.Agent):
           _rewards, _scores = self.eval_agent(eval_envs)
           elo_score, games_count = game_manager.update_score(_scores)
           opponent_dist = game_manager.opponent_dist()
+          player_strength = game_manager.elo.player_strength()
           pbar.set_description('train')
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
 
-          self.tensorboard.add_scalar('dashboard/league_mean', game_manager.elo.scores.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('dashboard/league_var', game_manager.elo.scores.var(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_scores_mean', game_manager.elo.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_scores_var', game_manager.elo.scores.var(), ppo_update_num)
+
+          self.tensorboard.add_scalar('dashboard/player_strength', player_strength[-1], ppo_update_num)
+
+          self.tensorboard.add_scalar('dashboard/player_strength_mean', player_strength.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/player_strength_var', player_strength.var(), ppo_update_num)
 
           self.tensorboard.add_histogram('dashboard/league', game_manager.elo.scores, ppo_update_num)
           performance = game_utils.to_prob(np.mean(_rewards))
@@ -369,8 +375,6 @@ class PPOAgent(agents.base_agent.Agent):
     if self.battle_env is None:
       print("[BATTLE] Loading training environments")
       self.battle_env = make_vec_envs('battle', game_manager, num_processes=n_envs, device=hs_config.device)
-    else:
-      self.get_last_env(self.battle_env).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if checkpoint_file:
       self.load_checkpoint(checkpoint_file, self.battle_env)
@@ -526,7 +530,7 @@ class PPOAgent(agents.base_agent.Agent):
         if hs_config.GameManager.arena:
           next_league_stats = game_manager.update_selection()
           self.tensorboard.add_scalar('dashboard/next_league_mean', next_league_stats.mean(), self_play_iter)
-          self.tensorboard.add_scalar('dashboard/next_league_std', next_league_stats.std(), self_play_iter)
+          self.tensorboard.add_scalar('dashboard/next_league_var', next_league_stats.var(), self_play_iter)
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

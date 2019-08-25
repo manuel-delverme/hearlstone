@@ -1,14 +1,14 @@
 # import baselines.common.running_mean_std
 import collections
-from typing import Text
+import glob
+import os
+import shutil
+from typing import Optional, Text
 
+import numpy as np
 import torch
 
 import hs_config
-import numpy as np
-import shutil
-import glob
-import os
 
 
 class GameManager(object):
@@ -62,7 +62,7 @@ class GameManager(object):
     model_list = list(glob.glob(hs_config.GameManager.model_paths))
 
     if len(model_list) == 0:
-      print("[GAME MANAGER] Found 0 opponents. Setting all at random")
+      print("[GAME MANAGER] Found 0 opponents. Crushing...")
       raise FileNotFoundError
     else:
       model_list = model_list[:hs_config.GameManager.league_size]
@@ -75,18 +75,18 @@ class GameManager(object):
     self.use_heuristic_opponent = False
 
   def set_selection(self):
-    self.ranking = collections.OrderedDict({ckpt: score for ckpt, score in zip(self.model_list, self.elo.scores.numpy())})
+    self.ranking = collections.OrderedDict({ckpt: score for ckpt, score in zip(self.model_list, self.elo.player_strength().numpy())})
     self.reset(max_opponents=hs_config.GameManager.selection_size)
     self.update_selection()
 
   def update_selection(self, player_score=None):
     assert self.elo.player_idx in (self.max_opponents, -1)
     if player_score is None:
-      self.ranking[hs_config.GameManager.player_fname] = self.elo.player_score  # this one update the player checkpotin
+      self.ranking[hs_config.GameManager.player_fname] = self.elo.player_strength().numpy()[-1]  # this one update the player checkpotin
     else:
       player_score = self.ranking[hs_config.GameManager.player_fname]
 
-    p = normalized_boltzmann(scores=torch.Tensor(list(self.ranking.values())), tau=hs_config.GameManager.tau).numpy()
+    p = boltzmann(scores=torch.Tensor(list(self.ranking.values())), tau=hs_config.GameManager.tau).numpy()
     idxs = np.random.choice(np.arange(0, len(self.ranking.values())), p=p, replace=False, size=hs_config.GameManager.selection_size)
     assert self.model_list == list(self.ranking.keys())
     new_league = [self.model_list[idx] for idx in idxs]
@@ -107,7 +107,7 @@ class GameManager(object):
       new_ckpt = os.path.join(os.path.dirname(checkpoint_file), hs_config.GameManager.player_fname)
       shutil.copyfile(checkpoint_file, new_ckpt)
       self.model_list.append(checkpoint_file)
-      self.ranking[checkpoint_file] = self.elo.player_score
+      self.ranking[checkpoint_file] = self.elo.player_strength().numpy()[-1]
       print(f'[GAME MANAGER] Added learning opponent. Current score {self.elo.player_score}')
 
   def reset(self, max_opponents=hs_config.GameManager.league_size):
@@ -120,7 +120,7 @@ class GameManager(object):
 
 
 class Elo:
-  def __init__(self, max_opponents=hs_config.GameManager.selection_size):
+  def __init__(self, max_opponents: int = hs_config.GameManager.selection_size):
     # https://arxiv.org/pdf/1806.02643.pdf
 
     self.max_opponents = None
@@ -136,18 +136,18 @@ class Elo:
   def __getitem__(self, item: int) -> float:
     return self._scores[item]
 
-  def reset(self, max_opponents=None):
+  def reset(self, max_opponents: Optional[int] = None):
     self.max_opponents = max_opponents
     self.games = torch.zeros(max_opponents)
     self._scores = torch.ones((max_opponents + 1)) * hs_config.GameManager.elo_lr
     self._c = torch.rand(size=(max_opponents + 1, 2))  # + 1 for the player in self play mode
     self.player_idx = -1
 
-  def set_player_index(self, idx):
+  def set_player_index(self, idx: int):
     assert idx < self.max_opponents + 1
     self.player_idx = idx
 
-  def set_score_from_player(self, idx):
+  def set_score_from_player(self, idx: int):
     self._scores[idx] = self._scores[self.player_idx]
     self._c[idx] = self._c[self.player_idx]
 
@@ -172,12 +172,20 @@ class Elo:
   def games_count(self) -> torch.Tensor:
     return self.games
 
+  def player_strength(self):
+    # the probability of winning against any player in the league
+    p = torch.Tensor([self.__call__(idx) for idx in range(self.max_opponents)])
+    avg = p.mean()[None]  # the avberage of this is his strength
+    return torch.cat([p, avg], dim=0)
+
   @property
   def player_score(self) -> float:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    return normalized_boltzmann(scores=self.scores[:number_of_active_opponents], tau=self.tau).numpy()
+    # self.scores[:number_of_active_opponents]
+    scores = self.player_strength()[:number_of_active_opponents]
+    return boltzmann(scores=scores, tau=self.tau).numpy()
 
   @property
   def scores(self) -> torch.Tensor:
@@ -200,7 +208,6 @@ def to_prob(r):
   return r / 2 + 0.5
 
 
-def normalized_boltzmann(scores, tau=1.):
-  assert isinstance(scores, torch.Tensor)
-  p = (scores - scores.mean()) / scores.norm()
-  return torch.softmax(tau * p, dim=0)
+def boltzmann(scores, tau=1.):
+  assert isinstance(scores, torch.Tensor)  # softmax is location invariant but not scale invariant
+  return torch.softmax(tau * scores, dim=0)
