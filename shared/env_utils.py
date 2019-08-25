@@ -251,7 +251,7 @@ def parse_card(card):
       # card.ghostly,
       # card.card_id,
       card.card_id == C.SPELLS.Polymorph,
-      card.card_id == C.SPELLS.ArcaneMissels,
+      card.card_id == C.MINIONS.DoomSayer,
       card.card_id == C.SPELLS.MirrorImage,
       card.card_id == C.SPELLS.TheCoin,
       card.card_id == C.MINIONS.WaterElemental,

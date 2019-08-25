@@ -59,6 +59,7 @@ class Environment:
 
 
 class GameManager:
+  tau = 1.
   max_opponents = 5
   elo_lr = 16
   base_rating = 1000

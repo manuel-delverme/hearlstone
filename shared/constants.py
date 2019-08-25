@@ -42,6 +42,7 @@ class MINIONS(enum.IntEnum):
   KoboldGeomancer = 672
   AcidSwampOoze = 906
   Archmage = 525
+  DoomSayer = -1
   MirrorImageToken = 968
   PolymorphToken = 796
 
@@ -107,8 +108,7 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249
-# STATE_SPACE = 635
-STATE_SPACE = 712
+STATE_SPACE = 644
 
 
 class Players(enum.Enum):
