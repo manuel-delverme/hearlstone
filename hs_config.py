@@ -33,7 +33,7 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  connection = 'mmf'
+  connection = 'rpc'
   max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
@@ -59,6 +59,7 @@ class Environment:
 
 
 class GameManager:
+  tau =1.
   max_opponents = 5
   elo_lr = 16
   base_rating = 1000
@@ -79,6 +80,7 @@ class PPOAgent:
   num_outcomes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
+  num_valid_games = 10 if DEBUG else 1000
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50
