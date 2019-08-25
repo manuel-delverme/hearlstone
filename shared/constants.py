@@ -27,7 +27,7 @@ class SPELLS(enum.IntEnum):
   ArcaneExplosion = 447  # 1 damage all
   ArcaneIntellect = 555  # 2 cards
   FrostNova = 587  # freeze all
-  ArcaneMissels = 564  # 3 random damage
+  # ArcaneMissels = 564  # 3 random damage
   Frostbolt = 662  # 3 damage  + freze
   Flamestrike = 1004  # 4 damage all minions
   MirrorImage = 1084  # summon two minions
@@ -35,6 +35,7 @@ class SPELLS(enum.IntEnum):
 
 
 class MINIONS(enum.IntEnum):
+  DoomSayer = 138
   NoviceEngineer = 284
   WaterElemental = 395
   GurubashiBerserker = 768
@@ -46,7 +47,10 @@ class MINIONS(enum.IntEnum):
   PolymorphToken = 796
 
 
-DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+# DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+# AAECAR8CWpYNDu0GigfYAeMF0AfZCoEKqAKBAuAEoQLrB9oK8AMA
+# DECK1 = (r"AAECAf0EAr8D7AcOvAiKB4oBlgWgBZwCqwTLBLsC4wdNiwOABo0EAA==", r"AAECAR8CWpYNDu0GigfYAeMF0AfZCoEKqAKBAuAEoQLrB9oK8AMA")
+DECK1 = r"AAECAf0EAr8D7AcOvAiKB4oBlgWgBZwCqwTLBLsC4wdNiwOABo0EAA=="
 DECK2 = DECK1
 
 AGENT_ID = 1
@@ -107,7 +111,8 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249
-STATE_SPACE = 644
+# STATE_SPACE = 635
+STATE_SPACE = 712
 
 
 class Players(enum.Enum):
