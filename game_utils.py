@@ -86,8 +86,11 @@ class GameManager(object):
     else:
       player_score = self.ranking[hs_config.GameManager.player_fname]
 
-    p = boltzmann(scores=torch.Tensor(list(self.ranking.values())), tau=hs_config.GameManager.tau).numpy()
-    idxs = np.random.choice(np.arange(0, len(self.ranking.values())), p=p, replace=False, size=hs_config.GameManager.selection_size)
+    ranking_values = list(self.ranking.values())
+    sample_size = min(hs_config.GameManager.selection_size, len(ranking_values))
+
+    p = boltzmann(scores=torch.Tensor(ranking_values), tau=hs_config.GameManager.tau).numpy()
+    idxs = np.random.choice(np.arange(0, len(ranking_values)), p=p, replace=False, size=sample_size)
     assert self.model_list == list(self.ranking.keys())
     new_league = [self.model_list[idx] for idx in idxs]
     league_stats = np.array([self.ranking[player] for player in new_league])
@@ -183,9 +186,12 @@ class Elo:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    # self.scores[:number_of_active_opponents]
-    scores = self.player_strength()[:number_of_active_opponents]
-    return boltzmann(scores=scores, tau=self.tau).numpy()
+    # TODO try to rewrite this cenetering at 45
+    score = self.player_strength()[:number_of_active_opponents]
+    prob_losing = 1. - score
+    prob_losing[prob_losing > hs_config.GameManager.strength_th] = -1
+    prob_losing[prob_losing < (1 - hs_config.GameManager.strength_th)] = -1
+    return boltzmann(scores=prob_losing, tau=self.tau).numpy()
 
   @property
   def scores(self) -> torch.Tensor:

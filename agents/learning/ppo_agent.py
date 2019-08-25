@@ -181,27 +181,23 @@ class PPOAgent(agents.base_agent.Agent):
 
           performance = game_utils.to_prob(np.mean(eval_rewards))
 
-          self.tensorboard.add_scalar('eval/elo_score', elo_score, ppo_update_num)
-          self.tensorboard.add_histogram('eval/opponent_dist', opponent_dist, ppo_update_num)
-          self.tensorboard.add_histogram('eval/games_count', games_count, ppo_update_num)
+          self.tensorboard.add_scalar('league/elo_score', elo_score, ppo_update_num)
+          self.tensorboard.add_histogram('league/opponent_dist', opponent_dist, ppo_update_num)
+          self.tensorboard.add_histogram('league/games_count', games_count, ppo_update_num)
 
-          self.tensorboard.add_histogram('eval/league', game_manager.elo.scores, ppo_update_num)
-          self.tensorboard.add_scalar('eval/league_scores_mean', game_manager.elo.scores.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('eval/league_scores_var', game_manager.elo.scores.var(), ppo_update_num)
+          self.tensorboard.add_histogram('league/scores', game_manager.elo.scores, ppo_update_num)
+          self.tensorboard.add_scalar('league/scores_mean', game_manager.elo.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('league/scores_var', game_manager.elo.scores.var(), ppo_update_num)
 
-          self.tensorboard.add_scalar('eval/player_strength', player_strength[-1], ppo_update_num)
-          self.tensorboard.add_scalar('eval/player_strength_mean', player_strength.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('eval/player_strength_var', player_strength.var(), ppo_update_num)
+          self.tensorboard.add_scalar('league/player_strength', player_strength[-1], ppo_update_num)
+          self.tensorboard.add_scalar('league/player_strength_mean', player_strength.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('league/player_strength_var', player_strength.var(), ppo_update_num)
 
-          self.tensorboard.add_scalar('eval/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_scalar('eval/eval_performance', performance, ppo_update_num)
           for k, v in eval_game_stats.items():
             self.tensorboard.add_scalar(f'eval/{k}', np.mean(v), ppo_update_num)
 
           episode_rewards.clear()
-
-          for k, v in eval_game_stats.items():
-            self.tensorboard.add_scalar(f'eval/{k}', np.mean(v), ppo_update_num)
 
           if performance > hs_config.PPOAgent.performance_to_early_exit:
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)

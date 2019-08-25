@@ -60,6 +60,7 @@ class Environment:
 
 
 class GameManager:
+  strength_th = 0.7
   arena = True
   num_battle_games = 5 if DEBUG else 50
   selection_size = 5
