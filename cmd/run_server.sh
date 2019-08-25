@@ -11,4 +11,4 @@
 
 set -x
 module load dotNET-SDK/2.2.6-foss-2017a
-dotnet run -p sb_env/SabberStone_gRPC rpc $1
+dotnet run -p pysabberstone/dotnet_core rpc $1

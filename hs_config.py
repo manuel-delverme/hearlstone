@@ -99,6 +99,7 @@ class PPOAgent:
   tau = 0.95  # gae parameter
 
   entropy_coeff = 1e-1  # 0.043  #   #  randomness, 1e-2 to 1e-4
+  entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped

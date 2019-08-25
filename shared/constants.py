@@ -35,7 +35,6 @@ class SPELLS(enum.IntEnum):
 
 
 class MINIONS(enum.IntEnum):
-  DoomSayer = 138
   NoviceEngineer = 284
   WaterElemental = 395
   GurubashiBerserker = 768
@@ -47,10 +46,7 @@ class MINIONS(enum.IntEnum):
   PolymorphToken = 796
 
 
-# DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
-# AAECAR8CWpYNDu0GigfYAeMF0AfZCoEKqAKBAuAEoQLrB9oK8AMA
-# DECK1 = (r"AAECAf0EAr8D7AcOvAiKB4oBlgWgBZwCqwTLBLsC4wdNiwOABo0EAA==", r"AAECAR8CWpYNDu0GigfYAeMF0AfZCoEKqAKBAuAEoQLrB9oK8AMA")
-DECK1 = r"AAECAf0EAr8D7AcOvAiKB4oBlgWgBZwCqwTLBLsC4wdNiwOABo0EAA=="
+DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
 DECK2 = DECK1
 
 AGENT_ID = 1

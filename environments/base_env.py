@@ -67,6 +67,7 @@ class BaseEnv(gym.Env, ABC):
 
   def __init__(self):
     self.opponent = None
+    self.opponent_dist = None
     self.opponents = [None, ]
     self.opponents_lookup = {}
 
@@ -74,7 +75,7 @@ class BaseEnv(gym.Env, ABC):
   def agent_game_vale(self):
     raise NotImplemented
 
-  def set_opponents(self, opponents):
+  def set_opponents(self, opponents, opponent_dist):
     _opponents = []
     for player_hash in opponents:
       if player_hash not in self.opponents_lookup:
@@ -83,6 +84,7 @@ class BaseEnv(gym.Env, ABC):
       _opponents.append(self.opponents_lookup[player_hash])
 
     self.opponents = _opponents
+    self.opponent_dist = opponent_dist
 
   def load_opponent(self, checkpoint_file):
     if checkpoint_file == 'default':
