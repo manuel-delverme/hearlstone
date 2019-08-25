@@ -7,6 +7,7 @@ import torch
 
 import agents.base_agent
 import agents.heuristic.random_agent
+import environments.sabber_hs
 import hs_config
 import shared.constants as C
 import shared.env_utils
@@ -113,7 +114,8 @@ def parse_game(info):
 class SabberAgent(HeuristicAgent):
   def _choose(self, observation: np.ndarray, encoded_info: specs.Info):
     possible_actions = encoded_info['original_info']['game_options']
-    player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
+    player_hero, opponent_hero, hand_zone, player_board, opponent_board = environments.sabber_hs.Sabberstone.parse_game(
+        encoded_info['original_info'])
     if hs_config.Environment.ENV_DEBUG_HEURISTIC:
       desk = {}
 
