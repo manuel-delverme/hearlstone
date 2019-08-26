@@ -30,7 +30,7 @@ class GameManager(object):
     if self.ranking is not None:
       new_scores = self.ladder.player_strength()[:-1]
       for ckpt, score in zip(self.opponents, new_scores):
-        self.ranking[ckpt] = (1 - score) # p2 winning
+        self.ranking[ckpt] = (1 - score)  # p2 winning
 
     return self.ladder.player_score, self.ladder.games_count
 
@@ -59,7 +59,7 @@ class GameManager(object):
 
     return hs_game
 
-  def create_league(self, player_ckpt):
+  def load_league(self, player_ckpt):
     new_ckpt = os.path.join(os.path.dirname(player_ckpt), hs_config.GameManager.player_fname)
 
     player_ckpt = shutil.copyfile(player_ckpt, new_ckpt)
@@ -74,7 +74,12 @@ class GameManager(object):
       print(f"[GAME MANAGER] Found {len(model_list)} opponents")
 
     model_list += [player_ckpt]
+
+    return model_list
+
+  def create_league(self, model_list):
     self.model_list = model_list
+
     self.reset(max_opponents=len(model_list))
     self.opponents.extend(model_list)
     self.use_heuristic_opponent = False
@@ -100,7 +105,7 @@ class GameManager(object):
     # assert self.ranking == list(self.ranking.keys())
 
     new_league, league_stats = list(
-      zip(*[(ckpt, values) for idx, (ckpt, values) in enumerate(self.ranking.items()) if idx in selected_league]))
+        zip(*[(ckpt, values) for idx, (ckpt, values) in enumerate(self.ranking.items()) if idx in selected_league]))
 
     league_stats = np.array(league_stats)
 

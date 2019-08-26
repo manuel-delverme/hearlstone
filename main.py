@@ -61,21 +61,20 @@ def train(args):
     init_ckpt = player.save_model(0)
 
     if hs_config.GameManager.arena:
-      game_manager.create_league(init_ckpt)
+      model_list = game_manager.load_league(init_ckpt)
 
       new_model_list = []
 
-      for ckpt in game_manager.model_list:
+      for ckpt in model_list:
         try:
           player.load_checkpoint(ckpt, None)
 
-          if player.actor_critic.actor[0].in_features != player.num_inputs:
-            continue
+          if player.actor_critic.actor[0].in_features == C.STATE_SPACE:
+            new_model_list.append(ckpt)
         except Exception as e:
-          continue
-        new_model_list.append(ckpt)
+          pass
 
-      game_manager.model_list = new_model_list
+      game_manager.create_league(new_model_list)
 
       for idx, ckpt in tqdm.tqdm(enumerate(game_manager.model_list), desc='battle-mode'):
         game_manager.ladder.set_player_index(idx)
