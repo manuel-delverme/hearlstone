@@ -64,6 +64,7 @@ class GameManager:
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
+  cyclic_weight = 1.
 
 
 class SelfPlay:
