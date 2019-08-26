@@ -21,16 +21,21 @@ class GameManager(object):
     self.game_class = hs_config.Environment.get_game_mode(address)
 
     self.opponents = None
-    self.elo = None
+    self.ladder = None
     self.ranking = None
-    self.model_list = None
 
   def update_score(self, score):
-    self.elo.update(score)
-    return self.elo.player_score, self.elo.games_count
+    self.ladder.update(score)
+
+    if self.ranking is not None:
+      new_scores = self.ladder.player_strength()[:-1]
+      for ckpt, score in zip(self.opponents, new_scores):
+        self.ranking[ckpt] = (1 - score) # p2 winning
+
+    return self.ladder.player_score, self.ladder.games_count
 
   def opponent_dist(self):
-    opponent_dist = self.elo.opponent_distribution(number_of_active_opponents=len(self.opponents))
+    opponent_dist = self.ladder.opponent_distribution(number_of_active_opponents=len(self.opponents))
     return opponent_dist
 
   @property
@@ -46,7 +51,7 @@ class GameManager(object):
     initial_dist = self.opponent_dist()
     if self.use_heuristic_opponent:
 
-      initial_dist = np.ones(shape=(1,))  # sample heuristic with prob 1
+      initial_dist = torch.ones(size=(1,)).numpy()
 
       hs_game.set_opponents(opponents=['default'], opponent_dist=initial_dist)
     else:
@@ -75,14 +80,14 @@ class GameManager(object):
     self.use_heuristic_opponent = False
 
   def set_selection(self):
-    self.ranking = collections.OrderedDict({ckpt: score for ckpt, score in zip(self.model_list, self.elo.player_strength().numpy())})
+    self.ranking = collections.OrderedDict({ckpt: score for ckpt, score in zip(self.model_list, self.ladder.player_strength())})
     self.reset(max_opponents=hs_config.GameManager.selection_size)
     self.update_selection()
 
   def update_selection(self, player_score=None):
-    assert self.elo.player_idx in (self.max_opponents, -1)
+    assert self.ladder.player_idx in (self.max_opponents, -1)
     if player_score is None:
-      self.ranking[hs_config.GameManager.player_fname] = self.elo.player_strength().numpy()[-1]  # this one update the player checkpotin
+      self.ranking[hs_config.GameManager.player_fname] = self.ladder.player_strength()[-1]  # this one update the player checkpotin
     else:
       player_score = self.ranking[hs_config.GameManager.player_fname]
 
@@ -90,39 +95,65 @@ class GameManager(object):
     sample_size = min(hs_config.GameManager.selection_size, len(ranking_values))
 
     p = boltzmann(scores=torch.Tensor(ranking_values), tau=hs_config.GameManager.tau).numpy()
-    idxs = np.random.choice(np.arange(0, len(ranking_values)), p=p, replace=False, size=sample_size)
-    assert self.model_list == list(self.ranking.keys())
-    new_league = [self.model_list[idx] for idx in idxs]
-    league_stats = np.array([self.ranking[player] for player in new_league])
+    selected_league = np.random.choice(np.arange(0, len(ranking_values)), p=p, replace=False, size=sample_size)
+
+    # assert self.ranking == list(self.ranking.keys())
+
+    new_league, league_stats = list(
+      zip(*[(ckpt, values) for idx, (ckpt, values) in enumerate(self.ranking.items()) if idx in selected_league]))
+
+    league_stats = np.array(league_stats)
 
     assert self.opponents.maxlen == len(new_league)
     print(f'[GAME MANAGER] New league avg score, {league_stats.mean()}, with std {league_stats.std()}, current_player {player_score}')
     self.opponents.extend(new_league)
+
+    # update ranking
     return league_stats
 
   def add_learned_opponent(self, checkpoint_file: Text):
     assert isinstance(checkpoint_file, str)
-
-    if self.model_list is None:
-      self.elo.set_score_from_player(len(self.opponents))
+    if self.ranking is None:
+      last_opponent = len(self.opponents)
+      self.ladder.set_score_from_player(last_opponent)
       self.opponents.append(checkpoint_file)
     else:
+      self.clean_ranking()
       new_ckpt = os.path.join(os.path.dirname(checkpoint_file), hs_config.GameManager.player_fname)
       shutil.copyfile(checkpoint_file, new_ckpt)
-      self.model_list.append(checkpoint_file)
-      self.ranking[checkpoint_file] = self.elo.player_strength().numpy()[-1]
-      print(f'[GAME MANAGER] Added learning opponent. Current score {self.elo.player_score}')
+      self.ranking[checkpoint_file] = self.ladder.player_strength()[-1]
+      print(f'[GAME MANAGER] Added learning opponent. Current score {self.ladder.player_score}')
+
+  def clean_ranking(self):
+    league_size = self.league_size()
+    can_remove = league_size > hs_config.GameManager.selection_size
+    if not can_remove:
+      print(f"[Game Manager], League size is too small {league_size}.")
+      return
+
+    new_ranking = {}
+    for ckpt, p1_winning_prob in self.ranking.items():
+      p2_winning = (1 - p1_winning_prob)
+      if ckpt == hs_config.GameManager.player_fname:
+        new_ranking[ckpt] = p1_winning_prob
+        # the prob if p2 beating p1 is more than 0.3 than get in the new league
+      elif p2_winning > hs_config.GameManager.lower_bound:
+        new_ranking[ckpt] = p1_winning_prob
+    self.ranking = new_ranking
+
+  def league_size(self):
+    return len(self.ranking.values())
 
   def reset(self, max_opponents=hs_config.GameManager.league_size):
-    if self.elo is None:
-      self.elo = Elo(max_opponents=max_opponents)
+    if self.ladder is None:
+      self.ladder = Ladder(max_opponents=max_opponents)
     else:
-      self.elo.reset(max_opponents=max_opponents)
+      self.ladder.reset(max_opponents=max_opponents)
     self.opponents = collections.deque(maxlen=max_opponents)
     self.use_heuristic_opponent = True
 
 
-class Elo:
+class Ladder:
   def __init__(self, max_opponents: int = hs_config.GameManager.selection_size):
     # https://arxiv.org/pdf/1806.02643.pdf
 
@@ -136,7 +167,7 @@ class Elo:
     self.tau = hs_config.GameManager.tau
     self.reset(max_opponents=max_opponents)
 
-  def __getitem__(self, item: int) -> float:
+  def __getitem__(self, item: int) -> torch.Tensor:
     return self._scores[item]
 
   def reset(self, max_opponents: Optional[int] = None):
@@ -182,15 +213,14 @@ class Elo:
     return torch.cat([p, avg], dim=0)
 
   @property
-  def player_score(self) -> float:
+  def player_score(self) -> torch.Tensor:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    # TODO try to rewrite this cenetering at 45
     score = self.player_strength()[:number_of_active_opponents]
     prob_losing = 1. - score
-    prob_losing[prob_losing > hs_config.GameManager.strength_th] = -1
-    prob_losing[prob_losing < (1 - hs_config.GameManager.strength_th)] = -1
+    prob_losing[prob_losing > hs_config.GameManager.upper_bound] = -1
+    prob_losing[prob_losing < hs_config.GameManager.lower_bound] = -1
     return boltzmann(scores=prob_losing, tau=self.tau).numpy()
 
   @property
@@ -201,7 +231,7 @@ class Elo:
     z = (self._c[self.player_idx, 0] * self._c[opponent_idx, 1] - self._c[opponent_idx, 0] * self._c[self.player_idx, 1])
     return z
 
-  def __call__(self, opponent_idx: int, beta: float = 1.) -> float:
+  def __call__(self, opponent_idx: int, beta: float = 1.) -> torch.Tensor:
     z = self._apply_rotation(opponent_idx)
     x = self.player_score - self.__getitem__(opponent_idx) + beta * z
     x = self.alpha * x
@@ -215,5 +245,5 @@ def to_prob(r):
 
 
 def boltzmann(scores, tau=1.):
-  assert isinstance(scores, torch.Tensor)  # softmax is location invariant but not scale invariant
+  assert isinstance(scores, torch.Tensor)
   return torch.softmax(tau * scores, dim=0)

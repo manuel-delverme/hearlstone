@@ -166,17 +166,19 @@ class PPOAgent(agents.base_agent.Agent):
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
                        grad_pi=grad_pi, grad_value=grad_value, game_stats=game_statistics, dist_kl=dist_kl)
 
-      if ppo_update_num > 0:
+      if True:  # ppo_jupdate_num > 0:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(total_num_steps)
 
-        if self.should_eval(ppo_update_num, episode_rewards):
+        if True:  # self.should_eval(ppo_update_num, episode_rewards):
           pbar.set_description('eval_agent')
 
           eval_rewards, eval_scores, eval_game_stats = self.eval_agent(eval_envs)
+          pbar.set_description('train')
+
           elo_score, games_count = game_manager.update_score(eval_scores)
           opponent_dist = game_manager.opponent_dist()
-          player_strength = game_manager.elo.player_strength()
+          player_strength = game_manager.ladder.player_strength()
           pbar.set_description('train')
 
           performance = game_utils.to_prob(np.mean(eval_rewards))
@@ -185,9 +187,9 @@ class PPOAgent(agents.base_agent.Agent):
           self.tensorboard.add_histogram('league/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('league/games_count', games_count, ppo_update_num)
 
-          self.tensorboard.add_histogram('league/scores', game_manager.elo.scores, ppo_update_num)
-          self.tensorboard.add_scalar('league/scores_mean', game_manager.elo.scores.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('league/scores_var', game_manager.elo.scores.var(), ppo_update_num)
+          self.tensorboard.add_histogram('league/scores', game_manager.ladder.scores, ppo_update_num)
+          self.tensorboard.add_scalar('league/scores_mean', game_manager.ladder.scores.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('league/scores_var', game_manager.ladder.scores.var(), ppo_update_num)
 
           self.tensorboard.add_scalar('league/player_strength', player_strength[-1], ppo_update_num)
           self.tensorboard.add_scalar('league/player_strength_mean', player_strength.mean(), ppo_update_num)
@@ -202,9 +204,10 @@ class PPOAgent(agents.base_agent.Agent):
           if performance > hs_config.PPOAgent.performance_to_early_exit:
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
+      break
 
     checkpoint_file = self.save_model(total_num_steps)
-    rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=1000)
+    rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=hs_config.PPOAgent.num_valid_games)
 
     validation_performance = game_utils.to_prob(np.mean(rewards))
     return checkpoint_file, validation_performance, ppo_update_num + 1
@@ -240,7 +243,6 @@ class PPOAgent(agents.base_agent.Agent):
 
     if self.envs is None:
       print("[Train] Loading training environments")
-      # TODO @d3sm0 clean this up
       game_manager.use_heuristic_opponent = False
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
@@ -428,7 +430,6 @@ class PPOAgent(agents.base_agent.Agent):
 
     return rewards, dict(scores)
 
-
   def enjoy(self, game_manager: game_utils.GameManager, checkpoint_file):
     if self.enjoy_env is None:
       print("[Train] Loading training environments")
@@ -568,6 +569,7 @@ class PPOAgent(agents.base_agent.Agent):
           next_league_stats = game_manager.update_selection()
           self.tensorboard.add_scalar('dashboard/next_league_mean', next_league_stats.mean(), self_play_iter)
           self.tensorboard.add_scalar('dashboard/next_league_var', next_league_stats.var(), self_play_iter)
+        self.tensorboard.add_scalar('dashboard/league_size', game_manager.league_size(), self_play_iter)
         # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
         # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
         pbar.update(num_updates)

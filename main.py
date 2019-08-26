@@ -62,8 +62,9 @@ def train(args):
 
     if hs_config.GameManager.arena:
       game_manager.create_league(init_ckpt)
+
       for idx, ckpt in tqdm.tqdm(enumerate(game_manager.model_list), desc='battle-mode'):
-        game_manager.elo.set_player_index(idx)
+        game_manager.ladder.set_player_index(idx)
         rewards, scores = player.battle(game_manager, checkpoint_file=ckpt)
         game_manager.update_score(scores)
       del player.battle_env

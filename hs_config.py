@@ -36,7 +36,7 @@ class Environment:
   max_cards_in_hand = 10
   connection = 'rpc'
   max_processes = 4 if connection == 'mmf' else 12
-  reward_type = C.RewardType.default
+  reward_type = C.RewardType.empowerment
 
   @staticmethod
   def get_game_mode(address: str) -> Callable[[], Callable]:
@@ -60,11 +60,12 @@ class Environment:
 
 
 class GameManager:
-  strength_th = 0.7
+  upper_bound = 0.9
+  lower_bound = 0.3
   arena = True
   num_battle_games = 5 if DEBUG else 50
   selection_size = 5
-  league_size = 5 if DEBUG else 10
+  league_size = 5 if DEBUG else 20
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
@@ -79,12 +80,12 @@ class SelfPlay:
 
 class PPOAgent:
   BIG_NUMBER = 9999999999999
-  performance_to_early_exit = 0.55
-  performance_to_early_eval = 0.40
+  performance_to_early_exit = 0.60
+  performance_to_early_eval = 0.55
   num_outcomes_for_early_exit = 50
-  min_iter_between_evals = 10
 
   num_eval_games = 10 if DEBUG else 100
+  num_valid_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50
@@ -96,8 +97,6 @@ class PPOAgent:
   critic_adam_lr = 1e-5
 
   num_processes = 1 if DEBUG else Environment.max_processes  # number of CPU processes
-  if num_processes > 4 and Environment.connection == 'mmf':
-    raise NotImplementedError(">4 processes seem to crash")
 
   num_steps = 256  # 32
   ppo_epoch = 6  # times ppo goes over the data
