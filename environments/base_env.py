@@ -164,6 +164,7 @@ class RenderableEnv(BaseEnv):
       pi = np.argwhere(info['possible_actions']).flatten()
       pretty_actions = []
       options, _ = self.parse_options(self.game_snapshot, return_options=True)
+      self.pretty_options(options)
 
       logit = {}
       for possible_idx in pi:

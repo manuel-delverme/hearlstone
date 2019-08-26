@@ -121,7 +121,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
     self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
-    self.turn_stats = {k: [] for k in C.GameStatistics._fields} # TODO: do this in game_stats initilaization everywhere
+    self.turn_stats = {k: [] for k in C.GameStatistics._fields}  # TODO: do this in game_stats initilaization everywhere
     self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
 
@@ -174,6 +174,52 @@ class Sabberstone(environments.base_env.RenderableEnv):
       return game._possible_options, game._options
     else:
       return game._possible_options
+
+  def pretty_options(self, possible_options):
+    assert isinstance(possible_options, dict)
+
+    o = self.game_snapshot.CurrentOpponent
+    p = self.game_snapshot.CurrentPlayer
+
+    for k, v in possible_options.items():
+
+      task_type = v.type
+      if task_type == C.PlayerTaskType.END_TURN:
+        v.print = "END_TURN"
+        continue
+      source_position = v.source_position
+      target_position = v.target_position
+
+      # hero is (0,8)
+      if task_type == C.PlayerTaskType.PLAY_CARD:
+        source_id = p.hand_zone.entities[source_position].card_id
+        source_name = self.stub.GetCard(source_id).name
+        task_name = "PLAY_CARD"
+
+      elif task_type == C.PlayerTaskType.MINION_ATTACK:
+        source_id = p.board_zone.minions[source_position -1].card_id
+        source_name = self.stub.GetCard(source_id).name
+        task_name = "MINION_ATTACK"
+      elif task_type == C.PlayerTaskType.HERO_POWER:
+        source_name = "P1"
+        task_name = "HERO_POWER"
+      else:
+        source_name = ""
+
+      if target_position == 0:
+        target_name = "P1"
+      elif target_position == 8:
+        target_name = "P2"
+      elif 0 < target_position < 8 and task_type in (C.PlayerTaskType.MINION_ATTACK, C.PlayerTaskType.HERO_POWER):
+        target_position = p.board_zone.minions[target_position - 1].card_id
+        target_name = self.stub.GetCard(target_position).name
+      elif target_position > 8:
+        target_position = o.board_zone.minions[target_position - 9].card_id
+        target_name = self.stub.GetCard(target_position).name
+      else:
+        target_name = ""
+
+      v.print = f"{task_name}: ({source_name},{source_position}) => ({target_name}, {target_position})"
 
   @shared.env_utils.episodic_log
   @shared.env_utils.shape_reward
