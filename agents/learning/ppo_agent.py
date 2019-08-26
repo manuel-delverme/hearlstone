@@ -176,6 +176,7 @@ class PPOAgent(agents.base_agent.Agent):
           opponent_dist = game_manager.opponent_dist()
           performance = game_utils.to_prob(np.mean(eval_rewards))
 
+                                   ]
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
 
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
@@ -196,6 +197,7 @@ class PPOAgent(agents.base_agent.Agent):
             break
 
     checkpoint_file = self.save_model(total_num_steps)
+
     rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=hs_config.PPOAgent.num_valid_games)
 
     validation_performance = game_utils.to_prob(np.mean(rewards))
