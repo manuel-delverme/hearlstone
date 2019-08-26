@@ -35,6 +35,7 @@ class SPELLS(enum.IntEnum):
 
 
 class MINIONS(enum.IntEnum):
+  DoomSayer = 138
   NoviceEngineer = 284
   WaterElemental = 395
   GurubashiBerserker = 768
@@ -42,12 +43,13 @@ class MINIONS(enum.IntEnum):
   KoboldGeomancer = 672
   AcidSwampOoze = 906
   Archmage = 525
-  DoomSayer = -1
   MirrorImageToken = 968
   PolymorphToken = 796
 
 
-DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+# DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+# AAECAR8CWpYNDu0GigfYAeMF0AfZCoEKqAKBAuAEoQLrB9oK8AMA
+DECK1 = r"AAECAf0EAr8D7AcOvAiKB4oBlgWgBZwCqwTLBLsC4wdNiwOABo0EAA=="
 DECK2 = DECK1
 
 AGENT_ID = 1
@@ -108,7 +110,7 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249
-STATE_SPACE = 644
+STATE_SPACE = 658
 
 
 class Players(enum.Enum):
@@ -127,6 +129,7 @@ Minion = collections.namedtuple('minion', [
   'exhausted',
   'taunt',
   'frozen',
+  'is_doom_sayer',
   'is_water_elemental',
   'is_gurubashi_berserker',
   'one_spellpower',

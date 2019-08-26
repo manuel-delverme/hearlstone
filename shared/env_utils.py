@@ -232,7 +232,7 @@ def parse_card(card):
     elif card.card_id == C.SPELLS.ArcaneIntellect:
       card_draw = 2
 
-    spell_dmg = -1
+    spell_dmg = 0
     if card.card_id == C.SPELLS.Fireball:
       spell_dmg = 6
     elif card.card_id == C.SPELLS.ArcaneExplosion:
@@ -283,6 +283,7 @@ def parse_minion(card):
     # card.divine_shield,
     # card.elusive,
     card.frozen,
+    card.card_id == C.MINIONS.DoomSayer,
     card.card_id == C.MINIONS.WaterElemental,
     card.card_id == C.MINIONS.GurubashiBerserker,
     card.card_id in (C.MINIONS.OgreMagi, C.MINIONS.KoboldGeomancer, C.MINIONS.Archmage),  # +1 spell damage
