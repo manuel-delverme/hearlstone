@@ -265,8 +265,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
         observation, _, _, info = self.reset()
         assert_terminal = True
       else:
-        observation, possible_actions = self.
-        ()
+        observation, possible_actions = self.parse_game()
         info = {'possible_actions': possible_actions, }
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:

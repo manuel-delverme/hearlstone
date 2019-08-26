@@ -71,7 +71,7 @@ class GameManager:
 
 class SelfPlay:
   num_opponent_updates = 9999999
-
+  num_validation_games = 1000
 
 log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
