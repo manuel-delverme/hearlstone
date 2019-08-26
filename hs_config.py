@@ -1,4 +1,5 @@
 import functools
+import getpass
 import os
 import sys
 from typing import Callable, Type
@@ -33,7 +34,8 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  connection = 'mmf'
+  connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
+
   max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
@@ -77,10 +79,11 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55
-  performance_to_early_eval = 0.45
+  performance_to_early_eval = 0.40
   num_outcomes_for_early_exit = 50
 
   num_eval_games = 10 if DEBUG else 100
+  num_valid_games = 10 if DEBUG else 1000
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50
@@ -100,7 +103,6 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  entropy_coeff = 1e-1  # 0.043  #   #  randomness, 1e-2 to 1e-4
   entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
 
