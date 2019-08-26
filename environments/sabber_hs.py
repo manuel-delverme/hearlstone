@@ -175,6 +175,52 @@ class Sabberstone(environments.base_env.RenderableEnv):
     else:
       return game._possible_options
 
+  def pretty_options(self, possible_options):
+    assert isinstance(possible_options, dict)
+
+    o = self.game_snapshot.CurrentOpponent
+    p = self.game_snapshot.CurrentPlayer
+
+    for k, v in possible_options.items():
+
+      task_type = v.type
+      if task_type == C.PlayerTaskType.END_TURN:
+        v.print = "END_TURN"
+        continue
+      source_position = v.source_position
+      target_position = v.target_position
+
+      # hero is (0,8)
+      if task_type == C.PlayerTaskType.PLAY_CARD:
+        source_id = p.hand_zone.entities[source_position].card_id
+        source_name = self.stub.GetCard(source_id).name
+        task_name = "PLAY_CARD"
+
+      elif task_type == C.PlayerTaskType.MINION_ATTACK:
+        source_id = p.board_zone.minions[source_position -1].card_id
+        source_name = self.stub.GetCard(source_id).name
+        task_name = "MINION_ATTACK"
+      elif task_type == C.PlayerTaskType.HERO_POWER:
+        source_name = "P1"
+        task_name = "HERO_POWER"
+      else:
+        source_name = ""
+
+      if target_position == 0:
+        target_name = "P1"
+      elif target_position == 8:
+        target_name = "P2"
+      elif 0 < target_position < 8 and task_type == C.PlayerTaskType.MINION_ATTACK:
+        target_position = p.board_zone.minions[target_position - 1].card_id
+        target_name = self.stub.GetCard(target_position).name
+      elif target_position > 8:
+        target_position = o.board_zone.minions[target_position - 9].card_id
+        target_name = self.stub.GetCard(target_position).name
+      else:
+        target_name = ""
+
+      v.print = f"{task_name}: ({source_name},{source_position}) => ({target_name}, {target_position})"
+
   @shared.env_utils.episodic_log
   @shared.env_utils.shape_reward
   @shared.env_utils.episodic_log
@@ -219,7 +265,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
         observation, _, _, info = self.reset()
         assert_terminal = True
       else:
-        observation, possible_actions = self.parse_game()
+        observation, possible_actions = self.
+        ()
         info = {'possible_actions': possible_actions, }
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
@@ -260,18 +307,11 @@ class Sabberstone(environments.base_env.RenderableEnv):
     return observation, 0, False, info
 
   def _sample_opponent(self):
-    if np.random.uniform() > hs_config.Environment.newest_opponent_prob and self.opponent is not None:
+    if self.opponent is not None and hs_config.Environment.newest_opponent_prob > np.random.uniform():
       return
 
-    p = np.ones(shape=(len(self.opponents)))
-
-    if len(self.opponents) > 1:
-      if len(self._game_matrix.values()) > 1:
-        counts = [v[0] for v in self._game_matrix.values()]
-        idxs = list(self._game_matrix.keys())
-        counts = 1 / np.array(counts)
-        p[idxs] = counts
-      p /= p.sum()
+    p = self.opponent_dist
+    p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
     self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
