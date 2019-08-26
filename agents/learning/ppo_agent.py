@@ -166,11 +166,11 @@ class PPOAgent(agents.base_agent.Agent):
       self.print_stats(action_loss, dist_entropy, episode_rewards, total_num_steps, start, value_loss, policy_ratio, mean_value,
                        grad_pi=grad_pi, grad_value=grad_value, game_stats=game_statistics, dist_kl=dist_kl)
 
-      if True:  # ppo_jupdate_num > 0:
+      if ppo_update_num > 0:
         if self.model_dir and (ppo_update_num % self.save_every == 0):
           self.save_model(total_num_steps)
 
-        if True:  # self.should_eval(ppo_update_num, episode_rewards):
+        if self.should_eval(ppo_update_num, episode_rewards):
           pbar.set_description('eval_agent')
 
           eval_rewards, eval_scores, eval_game_stats = self.eval_agent(eval_envs)
@@ -204,7 +204,6 @@ class PPOAgent(agents.base_agent.Agent):
           if performance > hs_config.PPOAgent.performance_to_early_exit:
             print("[Train] early stopping at iteration", ppo_update_num, 'steps:', total_num_steps, performance)
             break
-      break
 
     checkpoint_file = self.save_model(total_num_steps)
     rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=hs_config.PPOAgent.num_valid_games)

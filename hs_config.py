@@ -65,13 +65,13 @@ class GameManager:
   arena = True
   num_battle_games = 5 if DEBUG else 50
   selection_size = 5
-  league_size = 5 if DEBUG else 20
+  league_size = 5 if DEBUG else 50
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
   tau = 1.  # temperature
-  player_fname = os.path.join(log_dir, 'model', 'current_player.pt')
-  model_paths = log_dir + '/model/*.pt_*'
+  player_fname = os.path.join(log_dir, 'sub_model', 'current_player.pt')
+  model_paths = log_dir + '/sub_model/*.pt_*'
 
 
 class SelfPlay:

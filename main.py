@@ -63,6 +63,20 @@ def train(args):
     if hs_config.GameManager.arena:
       game_manager.create_league(init_ckpt)
 
+      new_model_list = []
+
+      for ckpt in game_manager.model_list:
+        try:
+          player.load_checkpoint(ckpt, None)
+
+          if player.actor_critic.actor[0].in_features != player.num_inputs:
+            continue
+        except Exception as e:
+          continue
+        new_model_list.append(ckpt)
+
+      game_manager.model_list = new_model_list
+
       for idx, ckpt in tqdm.tqdm(enumerate(game_manager.model_list), desc='battle-mode'):
         game_manager.ladder.set_player_index(idx)
         rewards, scores = player.battle(game_manager, checkpoint_file=ckpt)
