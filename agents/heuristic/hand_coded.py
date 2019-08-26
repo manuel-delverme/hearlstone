@@ -95,7 +95,7 @@ class HeuristicAgent(agents.base_agent.Bot):
       raise Exception
 
 
-def parse_game(info):
+def decode_game(info):
   game_snapshot = info['game_snapshot']
 
   player_hero = C.Hero(*parse_hero(game_snapshot.CurrentPlayer.hero))
@@ -113,7 +113,8 @@ def parse_game(info):
 class SabberAgent(HeuristicAgent):
   def _choose(self, observation: np.ndarray, encoded_info: specs.Info):
     possible_actions = encoded_info['original_info']['game_options']
-    player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
+    player_hero, opponent_hero, hand_zone, player_board, opponent_board = decode_game(
+        encoded_info['original_info'])
     if hs_config.Environment.ENV_DEBUG_HEURISTIC:
       desk = {}
 
