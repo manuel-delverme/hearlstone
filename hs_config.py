@@ -25,7 +25,6 @@ class Environment:
   single_process = DEBUG
   address = "0.0.0.0:50052"
 
-  newest_opponent_prob = 0.8
 
   # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
@@ -67,23 +66,26 @@ class GameManager:
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
   cyclic_weight = 1.
+  newest_opponent_prob = 0.5  # define the probability of switching opponent after each game
 
 
 class SelfPlay:
   num_opponent_updates = 9999999
-  num_validation_games = 1000
 
 log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 
 class PPOAgent:
   BIG_NUMBER = 9999999999999
-  performance_to_early_exit = 0.55
-  performance_to_early_eval = 0.45
+  performance_to_early_exit = 0.55  # <- 0.55
+  performance_to_early_eval = 0.55  # <- 0.45
   num_outcomes_for_early_exit = 50
 
+  deterministic_training = False  # Set opponent as deterministic during {training, eval}
+  deterministic_eval = True
+
   num_eval_games = 10 if DEBUG else 100
-  num_valid_games = 10 if DEBUG else 1000
+  num_valid_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50
