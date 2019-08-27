@@ -137,13 +137,12 @@ class GameManager(object):
       return
 
     new_ranking = {}
-    for ckpt, p1_winning_prob in self.ranking.items():
-      p2_winning = (1 - p1_winning_prob)
+    for ckpt, p2_winning in self.ranking.items():
       if ckpt == hs_config.GameManager.player_fname:
-        new_ranking[ckpt] = p1_winning_prob
+        new_ranking[ckpt] = p2_winning
         # the prob if p2 beating p1 is more than 0.3 than get in the new league
       elif p2_winning > hs_config.GameManager.lower_bound:
-        new_ranking[ckpt] = p1_winning_prob
+        new_ranking[ckpt] = p2_winning
     self.ranking = new_ranking
 
   def league_size(self):
@@ -224,8 +223,8 @@ class Ladder:
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
     score = self.player_strength()[:number_of_active_opponents]
     prob_losing = 1. - score
-    prob_losing[prob_losing > hs_config.GameManager.upper_bound] = -1
-    prob_losing[prob_losing < hs_config.GameManager.lower_bound] = -1
+    # prob_losing[prob_losing > hs_config.GameManager.upper_bound] = -1
+    # prob_losing[prob_losing < hs_config.GameManager.lower_bound] = -1
     return boltzmann(scores=prob_losing, tau=self.tau).numpy()
 
   @property
