@@ -95,6 +95,12 @@ class Ladder:
   def games_count(self) -> torch.Tensor:
     return self.games
 
+  def player_strength(self):
+    # the probability of winning against any player in the league
+    p = torch.Tensor([self.__call__(idx) for idx in range(self.max_opponents)])
+    avg = p.mean()[None]  # the avberage of this is his strength
+    return torch.cat([p, avg], dim=0)
+
   @property
   def player_score(self) -> torch.Tensor:
     return self.__getitem__(self.player_idx)
