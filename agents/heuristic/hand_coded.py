@@ -95,7 +95,7 @@ class HeuristicAgent(agents.base_agent.Bot):
       raise Exception
 
 
-def parse_game(info):
+def decode_game(info):
   game_snapshot = info['game_snapshot']
 
   player_hero = C.Hero(*parse_hero(game_snapshot.CurrentPlayer.hero))
@@ -113,7 +113,8 @@ def parse_game(info):
 class SabberAgent(HeuristicAgent):
   def _choose(self, observation: np.ndarray, encoded_info: specs.Info):
     possible_actions = encoded_info['original_info']['game_options']
-    player_hero, opponent_hero, hand_zone, player_board, opponent_board = parse_game(encoded_info['original_info'])
+    player_hero, opponent_hero, hand_zone, player_board, opponent_board = decode_game(
+        encoded_info['original_info'])
     if hs_config.Environment.ENV_DEBUG_HEURISTIC:
       desk = {}
 
@@ -262,8 +263,7 @@ class SabberAgent(HeuristicAgent):
 
   def evaluate_spell(self, action, hand_zone, opponent_board, opponent_hero):
     card = hand_zone[action.source_position]
-    onehot = tuple(card)[3:]
-    card_id = C.REVERSE_SPELL_LOOKUP[onehot]
+    card_id = C.REVERSE_CARD_LOOKUP[card]
 
     if action.target_position < 8:
       return -1  # hitting your own minions as mage is not a good idea
@@ -309,13 +309,6 @@ class SabberAgent(HeuristicAgent):
       if len(opponent_board) > 2:
         for target_minion in opponent_board:
           value += 0.2 * minion_value(target_minion)
-    elif card_id == C.SPELLS.ArcaneMissels:
-      if opponent_hero.health < 2:
-        value = float('inf')
-      else:
-        for target_minion in opponent_board:
-          if target_minion.health == 1:  # slow down big minions
-            value += 3. / len(opponent_board)
     elif card_id == C.SPELLS.Flamestrike:
       for target_minion in opponent_board:
         if target_minion.health <= 4:  # slow down big minions

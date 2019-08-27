@@ -265,8 +265,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
         observation, _, _, info = self.reset()
         assert_terminal = True
       else:
-        observation = parse_game(self.game_snapshot)
-        info = {'possible_actions': self.gather_possible_actions(), }
+        observation, possible_actions = self.parse_game()
+        info = {'possible_actions': possible_actions, }
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
         action_id = self.opponent.choose(
@@ -295,9 +295,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self._sample_opponent()
     self.game_snapshot = self.stub.Reset(self.game_snapshot)
 
-    observation = parse_game(self.game_snapshot)
-    possible_actions = np.zeros(C.ACTION_SPACE, dtype=np.float32)
-    possible_actions[list(self.parse_options(self.game_snapshot).keys())] = 1
+    observation, possible_actions = self.parse_game()
     info = {'possible_actions': possible_actions, }
     self.last_info = info
     self.last_observation = observation
@@ -328,6 +326,51 @@ class Sabberstone(environments.base_env.RenderableEnv):
   def __del__(self):
     del self.gui
 
+  def parse_game(self):
+    p, o, p_hand, p_board, o_board, deck = self.gather_zones(self.game_snapshot)
+    obs = np.array((
+      # player
+      p.remaining_mana,
+      p.hero.atk,
+      p.hero.base_health - p.hero.damage,
+      p.hero.exhausted,
+      p.hero.power.exhausted,
+      *p_hand,
+      *p_board,
+      *deck,
+      len(p.board_zone.minions),
+
+      # opponent
+      o.remaining_mana,
+      o.hero.atk,
+      o.hero.base_health - o.hero.damage,
+      o.hero.exhausted,
+      o.hero.power.exhausted,
+      # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
+      *o_board,
+      len(o.board_zone.minions),
+    ), dtype=np.int32)
+    pa = self.gather_possible_actions()
+    assert obs.shape[0] == C.STATE_SPACE
+    assert pa.shape[0] == C.ACTION_SPACE
+    return obs, pa
+
+  @staticmethod
+  def gather_zones(game_snapshot):
+    p = game_snapshot.CurrentPlayer
+    o = game_snapshot.CurrentOpponent
+
+    deck = parse_deck(p.deck_zone.entities)
+    assert len(deck) == 390
+    p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
+    assert len(p_hand) == 130
+    p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
+    assert len(p_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+    o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
+    assert len(o_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
+
+    return p, o, p_hand, p_board, o_board, deck
+
 
 def check_hand_size(hand_zone):
   if hasattr(hand_zone, 'count'):
@@ -335,41 +378,3 @@ def check_hand_size(hand_zone):
   else:
     count = len(hand_zone.entities)
   return count in (4, 5)
-
-
-def parse_game(game):
-  o = game.CurrentOpponent
-  p = game.CurrentPlayer
-
-  deck = parse_deck(p.deck_zone.entities)
-  assert len(deck) == 390
-
-  p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
-  assert len(p_hand) == 130
-  p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(p_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
-  o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
-  assert len(o_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
-
-  retr = np.array((
-    # player
-    p.remaining_mana,
-    p.hero.atk,
-    p.hero.base_health - p.hero.damage,
-    p.hero.exhausted,
-    p.hero.power.exhausted,
-    *p_hand,
-    *p_board,
-    *deck,
-
-    # opponent
-    o.remaining_mana,
-    o.hero.atk,
-    o.hero.base_health - o.hero.damage,
-    o.hero.exhausted,
-    o.hero.power.exhausted,
-    # *pad(o.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
-    *o_board,
-  ), dtype=np.int32)
-  assert retr.shape[0] == C.STATE_SPACE
-  return retr

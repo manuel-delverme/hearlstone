@@ -1,4 +1,5 @@
 import functools
+import getpass
 import os
 import sys
 from typing import Callable, Type
@@ -34,7 +35,8 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  connection = 'rpc'
+  connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
+
   max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
@@ -66,12 +68,14 @@ class GameManager:
   num_battle_games = 5 if DEBUG else 50
   selection_size = 5
   league_size = 5 if DEBUG else 50
+  tau = 1.
+  max_opponents = 5
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
-  tau = 1.  # temperature
   player_fname = os.path.join(log_dir, 'sub_model', 'current_player.pt')
   model_paths = log_dir + '/sub_model/*.pt_*'
+  cyclic_weight = 1.
 
 
 class SelfPlay:

@@ -195,24 +195,101 @@ def dump_log(self):
         fout.write('\n')
 
 
-def parse_player(player):
-  raise NotImplementedError
-  return (
-    player.hero.atk,
-    player.hero.base_health - player.hero.damage,
-    player.hero.exhausted,
-    player.hero.power.exhausted,
-    *pad(player.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * 4, parse=parse_card),
-    *pad(player.board_zone.minions, length=hs_config.Environment.max_cards_in_board * 3, parse=parse_minion),
-  )
+def game_stats(game):
+  player = game.CurrentPlayer
+  opponent = game.CurrentOpponent
+
+  power = [(minion.atk, minion.base_health) for minion in player.board_zone.minions]
+  if len(power):
+    power, value = np.sum(power, axis=0)
+  else:
+    power = 0
+    value = 0
+
+  defense = sum([minion.base_health for minion in opponent.board_zone.minions])
+
+  opponent_life = opponent.hero.base_health - opponent.hero.damage
+  hero_life = player.hero.base_health - player.hero.damage
+
+  n_remaining_turns = power / opponent_life
+
+  mana_adv = (player.base_mana - player.remaining_mana)
+  hand_adv = (len(player.hand_zone.entities) - len(opponent.hand_zone.entities))
+  draw_adv = (len(player.deck_zone.entities) - len(opponent.deck_zone.entities))  # number of remaining cards
+  life_adv = opponent_life - hero_life
+  minion_adv = value - defense
+
+  return C.GameStatistics(mana_adv, hand_adv, draw_adv, life_adv, n_remaining_turns, minion_adv)
+  # return {'mana_adv': mana_adv, 'hand_adv': hand_adv, 'draw_adv': draw_adv, 'life_adv': life_dav,
+  #         'n_turns_left': n_remaining_turns, 'minion_adv': minion_adv}
 
 
 def parse_card(card):
-  return (card.atk, card.base_health, card.cost) + C.INACTIVE_CARDS_ONE_HOT[card.card_id]
+  if card.card_id not in C.CARD_LOOKUP:
+    card_draw = 0
+    if card.card_id == C.MINIONS.NoviceEngineer:
+      card_draw = 1
+    elif card.card_id == C.SPELLS.ArcaneIntellect:
+      card_draw = 2
+
+    spell_dmg = 0
+    if card.card_id == C.SPELLS.Fireball:
+      spell_dmg = 6
+    elif card.card_id == C.SPELLS.ArcaneExplosion:
+      spell_dmg = 1
+    elif card.card_id == C.SPELLS.Frostbolt:
+      spell_dmg = 3
+    elif card.card_id == C.SPELLS.Flamestrike:
+      spell_dmg = 4
+
+    card_vec = (
+      card.atk,
+      card.cost,
+      card.base_health,
+      spell_dmg,
+      card_draw,
+      # card.ghostly,
+      # card.card_id,
+      card.card_id == C.SPELLS.Polymorph,
+      card.card_id == C.MINIONS.DoomSayer,
+      card.card_id == C.SPELLS.MirrorImage,
+      card.card_id == C.SPELLS.TheCoin,
+      card.card_id == C.MINIONS.WaterElemental,
+      card.card_id == C.MINIONS.GurubashiBerserker,
+      card.card_id in (C.SPELLS.Frostbolt, C.SPELLS.FrostNova),  # Freeze
+      card.card_id in (C.SPELLS.FrostNova, C.SPELLS.ArcaneExplosion, C.SPELLS.Flamestrike),  # AOE
+    )
+    C.CARD_LOOKUP[card.card_id] = card_vec
+    C.REVERSE_CARD_LOOKUP[card_vec] = card.card_id
+  return C.CARD_LOOKUP[card.card_id]
 
 
 def parse_minion(card):
-  return (card.atk, card.base_health - card.damage, card.exhausted, *C.ACTIVE_CARDS_ONE_HOT[card.card_id])
+  return (
+    # self.card_id,
+    card.atk,
+    card.base_health - card.damage,
+    # card.num_attacks_this_turn,
+    # card.zone_position,
+    # card.order_of_play,
+    card.exhausted,
+    # card.stealth,
+    # card.immune,
+    # card.charge,
+    # card.attackable_by_rush,
+    # card.windfury,
+    # card.lifesteal,
+    card.taunt,
+    # card.divine_shield,
+    # card.elusive,
+    card.frozen,
+    card.card_id == C.MINIONS.DoomSayer,
+    card.card_id == C.MINIONS.WaterElemental,
+    card.card_id == C.MINIONS.GurubashiBerserker,
+    card.card_id in (C.MINIONS.OgreMagi, C.MINIONS.KoboldGeomancer, C.MINIONS.Archmage),  # +1 spell damage
+    # card.deathrattle,
+    # card.silenced
+  )
 
 
 def pad(x: List, length: int, parse: Optional[Callable]):

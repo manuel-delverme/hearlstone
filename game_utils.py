@@ -236,9 +236,9 @@ class Ladder:
     z = (self._c[self.player_idx, 0] * self._c[opponent_idx, 1] - self._c[opponent_idx, 0] * self._c[self.player_idx, 1])
     return z
 
-  def __call__(self, opponent_idx: int, beta: float = 1.) -> torch.Tensor:
+  def __call__(self, opponent_idx: int, cyclic_weight: float = hs_config.GameManager.cyclic_weight) -> float:
     z = self._apply_rotation(opponent_idx)
-    x = self.player_score - self.__getitem__(opponent_idx) + beta * z
+    x = self.player_score - self.__getitem__(opponent_idx) + cyclic_weight * z
     x = self.alpha * x
     p_hat = torch.nn.Sigmoid()(x)
     assert 0. < p_hat < 1.

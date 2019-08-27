@@ -27,7 +27,7 @@ class SPELLS(enum.IntEnum):
   ArcaneExplosion = 447  # 1 damage all
   ArcaneIntellect = 555  # 2 cards
   FrostNova = 587  # freeze all
-  ArcaneMissels = 564  # 3 random damage
+  # ArcaneMissels = 564  # 3 random damage
   Frostbolt = 662  # 3 damage  + freze
   Flamestrike = 1004  # 4 damage all minions
   MirrorImage = 1084  # summon two minions
@@ -35,6 +35,7 @@ class SPELLS(enum.IntEnum):
 
 
 class MINIONS(enum.IntEnum):
+  DoomSayer = 138
   NoviceEngineer = 284
   WaterElemental = 395
   GurubashiBerserker = 768
@@ -46,7 +47,9 @@ class MINIONS(enum.IntEnum):
   PolymorphToken = 796
 
 
-DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+# DECK1 = r"AAECAf0EAr8D7AcOTZwCuwKLA40EqwS0BMsElgWgBYAGigfjB7wIAA=="
+# AAECAR8CWpYNDu0GigfYAeMF0AfZCoEKqAKBAuAEoQLrB9oK8AMA
+DECK1 = r"AAECAf0EAr8D7AcOvAiKB4oBlgWgBZwCqwTLBLsC4wdNiwOABo0EAA=="
 DECK2 = DECK1
 
 AGENT_ID = 1
@@ -107,8 +110,7 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249
-# STATE_SPACE = 635
-STATE_SPACE = 698
+STATE_SPACE = 658
 
 
 class Players(enum.Enum):
@@ -121,56 +123,43 @@ GUI_CARD_WIDTH = 1  # width of box to draw card in
 GUI_CARD_HEIGHT = 3
 
 deck = hearthstone.deckstrings.Deck().from_deckstring(DECK1)
-# extra_spells = [SPELLS.TheCoin]
-# extra_minions = [MINIONS.MirrorImageToken, MINIONS.PolymorphToken]
+Minion = collections.namedtuple('minion', [
+  'atk',
+  'health',
+  'exhausted',
+  'taunt',
+  'frozen',
+  'is_doom_sayer',
+  'is_water_elemental',
+  'is_gurubashi_berserker',
+  'one_spellpower',
+])
 
-# SPELL_IDS = set(SPELLS)
-# MINION_IDS = set(MINIONS)
-_ONE_HOT_LENGTH = max(len(MINIONS), len(SPELLS))  # largest set of different cards
+Card = collections.namedtuple('card', [
+  'atk',
+  'cost',
+  'health',
+  'spell_dmg',
+  'card_draw',
+  'is_sheep',
+  'is_arcane_missels',
+  'is_mirror_image',
+  'is_the_coin',
+  'is_water_elemental',
+  'is_gurubashi_berserker',
+  'freeze',
+  'aoe',
+])
 
-# minion_onehots = []
-# minion_name = str(MINIONS(idx)).split('.')[1]
-# cards_onehots = minion_onehots
-# spell_name = str(SPELLS(idx)).split('.')[1]
-
-cards_onehots = [str(c).split('.')[1] for c in MINIONS]
-Minion = collections.namedtuple('minion', ['atk', 'health', 'exhausted'] + cards_onehots.copy())
-
-for order_idx, spell in enumerate(SPELLS):
-  spell = str(spell).split('.')[1]
-
-  if order_idx < len(cards_onehots):
-    cards_onehots[order_idx] += f"_{spell}"
-  else:
-    cards_onehots.append(spell)
-
-Card = collections.namedtuple('card', ['atk', 'health', 'cost', ] + cards_onehots.copy())
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
-
-# assert all(card_id in set(MINIONS) or card_id in set(SPELLS) for card_id, count in deck.cards)
-# assert deck.heroes == [637, ]
-
-# SPELL_IDS.update(extra_spells)
-# MINION_IDS.update(extra_minions)
-
-# assert not {card_id for card_id, count in deck.cards} - {*MINION_IDS, *SPELL_IDS}, str(
-#     {card_id for card_id, count in deck.cards} - {*MINION_IDS, *SPELL_IDS}) + ' was not handled'
 
 # 3 is the hand crafted features (atk, health, cost) plus the ~one hot encodings
 INACTIVE_CARD_ENCODING_SIZE = len(Card._fields)
 ACTIVE_CARD_ENCODING_SIZE = len(Minion._fields)
 HERO_ENCODING_SIZE = len(Hero._fields)
 
-INACTIVE_CARDS_ONE_HOT = {k: idx_to_one_hot(idx, _ONE_HOT_LENGTH) for idx, k in enumerate(MINIONS)}
-INACTIVE_CARDS_ONE_HOT.update({k: idx_to_one_hot(idx, _ONE_HOT_LENGTH) for idx, k in enumerate(SPELLS)})
-
-ACTIVE_CARDS_ONE_HOT = {k: idx_to_one_hot(idx, len(MINIONS)) for idx, k in enumerate(MINIONS)}
-
-# DECK_POSITION_LOOKUP = {k: idx for idx, k in enumerate((*MINIONS, *SPELLS))}
-# MINIONS_ORDER = [MINIONS(card_id) for card_id, count in deck.cards if card_id in MINION_IDS]
-# SPELLS_ORDER = [SPELLS(card_id) for card_id, count in deck.cards if card_id in SPELL_IDS]
 DECK_IDS = [card_id for card_id, count in deck.cards for _ in range(count)]
 DECK_ID_TO_POSITION = {k: v for (v, k), in reversed(list(zip(enumerate(DECK_IDS))))}
 
-REVERSE_SPELL_LOOKUP = {idx_to_one_hot(idx, _ONE_HOT_LENGTH): k for idx, k in enumerate(SPELLS)}
-REVERSE_MINION_LOOKUP = {idx_to_one_hot(idx, _ONE_HOT_LENGTH): k for idx, k in enumerate(MINIONS)}
+CARD_LOOKUP = {}
+REVERSE_CARD_LOOKUP = {}
