@@ -35,9 +35,9 @@ def get_grad_norm(model):
 
 
 class PPOAgent(agents.base_agent.Agent):
-  def _choose(self, observation, possible_actions):
+  def _choose(self, observation, possible_actions, deterministic=True):
     with torch.no_grad():
-      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=True)
+      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=deterministic)
     return action
 
   def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
@@ -199,7 +199,7 @@ class PPOAgent(agents.base_agent.Agent):
             break
 
     checkpoint_file = self.save_model(total_num_steps)
-    rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=hs_config.SelfPlay.num_validation_games)
+    rewards, outcomes, game_statistics = self.eval_agent(valid_envs, num_eval_games=hs_config.PPOAgent.num_valid_games)
 
     validation_performance = game_utils.to_prob(np.mean(rewards))
     return checkpoint_file, validation_performance, ppo_update_num + 1
