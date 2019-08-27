@@ -134,54 +134,6 @@ class RenderableEnv(BaseEnv):
     self.values = collections.deque(maxlen=100)
     self.health = collections.deque(maxlen=100)
 
-  def maybe_add_print(self, possible_options):
-    assert isinstance(possible_options, dict)
-
-    o = self.game_snapshot.CurrentOpponent
-    p = self.game_snapshot.CurrentPlayer
-
-    for k, v in possible_options.items():
-      if hasattr(v, 'print'):
-        continue
-
-      task_type = v.type
-      if task_type == C.PlayerTaskType.END_TURN:
-        v.print = "END_TURN"
-        continue
-      source_position = v.source_position
-      target_position = v.target_position
-
-      # hero is (0,8)
-      if task_type == C.PlayerTaskType.PLAY_CARD:
-        source_id = p.hand_zone.entities[source_position].card_id
-        source_name = self.stub.GetCard(source_id).name
-        task_name = "PLAY_CARD"
-
-      elif task_type == C.PlayerTaskType.MINION_ATTACK:
-        source_id = p.board_zone.minions[source_position - 1].card_id
-        source_name = self.stub.GetCard(source_id).name
-        task_name = "MINION_ATTACK"
-      elif task_type == C.PlayerTaskType.HERO_POWER:
-        source_name = "P1"
-        task_name = "HERO_POWER"
-      else:
-        source_name = ""
-
-      if target_position == 0:
-        target_name = "P1"
-      elif target_position == 8:
-        target_name = "P2"
-      elif 0 < target_position < 8 and task_type == C.PlayerTaskType.MINION_ATTACK:
-        target_position = p.board_zone.minions[target_position - 1].card_id
-        target_name = self.stub.GetCard(target_position).name
-      elif target_position > 8:
-        target_position = o.board_zone.minions[target_position - 9].card_id
-        target_name = self.stub.GetCard(target_position).name
-      else:
-        target_name = ""
-
-      v.print = f"{task_name}: ({source_name},{source_position}) => ({target_name}, {target_position})"
-
   def render(self, mode='human', choice=None, action_distribution=None, value=None, reward=None):
     if self.gui is None:
       import gui
@@ -206,7 +158,6 @@ class RenderableEnv(BaseEnv):
       pi = np.argwhere(info['possible_actions']).flatten()
       pretty_actions = []
       options, _ = self.parse_options(self.game_snapshot, return_options=True)
-      self.maybe_add_print(options)
 
       logit = {}
       for possible_idx in pi:
