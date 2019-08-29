@@ -212,7 +212,15 @@ class PPOAgent(agents.base_agent.Agent):
     checkpoint = torch.load(checkpoint_file)
     self.actor_critic = checkpoint['network']
     self.actor_critic.to(hs_config.device)
-    self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
+    #self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
+
+    self.pi_optimizer = torch.optim.Adam(
+        self.actor_critic.actor.parameters(),
+        lr=hs_config.PPOAgent.actor_adam_lr,
+    )
+    self.value_optimizer = torch.optim.Adam(
+        self.actor_critic.critic.parameters(),
+        lr=hs_config.PPOAgent.critic_adam_lr, )
 
   def setup_envs(self, game_manager: game_utils.GameManager):
     if self.envs is None:
