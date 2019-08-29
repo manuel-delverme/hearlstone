@@ -1,4 +1,5 @@
 import functools
+import getpass
 import os
 import sys
 from typing import Callable, Type
@@ -33,7 +34,8 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  connection = 'mmf'
+  connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
+
   max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
@@ -59,10 +61,12 @@ class Environment:
 
 
 class GameManager:
+  tau = 1.
   max_opponents = 5
   elo_lr = 16
   base_rating = 1000
   elo_scale = torch.log(torch.Tensor([10.])) / 400
+  cyclic_weight = 1.
 
 
 class SelfPlay:
@@ -80,6 +84,7 @@ class PPOAgent:
   min_iter_between_evals = 10
 
   num_eval_games = 10 if DEBUG else 100
+  num_valid_games = 10 if DEBUG else 1000
   clip_value_loss = True
   hidden_size = 256
   eval_interval = 50
@@ -91,8 +96,6 @@ class PPOAgent:
   critic_adam_lr = 1e-5
 
   num_processes = 1 if DEBUG else Environment.max_processes  # number of CPU processes
-  if num_processes > 4 and Environment.connection == 'mmf':
-    raise NotImplementedError(">4 processes seem to crash")
 
   num_steps = 256
   ppo_epoch = 6  # times ppo goes over the data
@@ -101,7 +104,8 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-  entropy_coeff = 1e-1  # 0.043  # randomness, 1e-2 to 1e-4
+
+  entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
 
   max_grad_norm = 0.5  # any bigger gradient is clipped
