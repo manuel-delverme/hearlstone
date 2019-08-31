@@ -21,7 +21,6 @@ import specs
 from agents.learning.models.randomized_policy import ActorCritic
 from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
-from shared.utils import HSLogger
 
 
 def get_grad_norm(model):
@@ -42,7 +41,6 @@ class PPOAgent:
   def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
     assert isinstance(__class__.__name__, str)
     self.device = device
-    self.timer = HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
 
     self.experiment_id = experiment_id
     assert specs.check_positive_type(num_possible_actions - 1, int), 'the agent can only pass'
@@ -238,7 +236,7 @@ class PPOAgent:
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
+      self.get_last_env(self.envs).set_opponents(opponents_id=game_manager.opponents, opponent_distribution=opponent_dist)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -246,7 +244,7 @@ class PPOAgent:
       self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
+      self.get_last_env(self.eval_envs).set_opponents(opponents_id=game_manager.opponents, opponent_distribution=opponent_dist)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")

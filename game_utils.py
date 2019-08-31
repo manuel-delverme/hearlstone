@@ -1,19 +1,38 @@
-# import baselines.common.running_mean_std
 import collections
-from typing import Text
+import functools
+from typing import Text, Callable, Type
 
 import numpy as np
 import torch
 
+import environments.sabber_hs
 import hs_config
 
 
+def get_game_mode(address: str) -> Callable[[], Callable]:
+  if hs_config.Environment.connection == 'rpc':
+    from environments.sabber_hs import Sabberstone as _Sabberstone
+    print("Running as rpc")
+  else:
+    from environments.sabber2_hs import Sabberstone2 as _Sabberstone
+    print("Running as mmf")
+
+  out = functools.partial(
+      _Sabberstone,
+      address=address,
+  )
+  return out
+
+
 class GameManager(object):
+  game_class: Type[environments.sabber_hs.Sabberstone]
+
   def __init__(self, seed=None, address=hs_config.Environment.address):
     self.seed = seed
     self._use_heuristic_opponent = True
 
     self.game_class = hs_config.Environment.get_game_mode(address)
+
     self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
     self.ladder = Ladder()
 
@@ -33,16 +52,14 @@ class GameManager(object):
   def use_heuristic_opponent(self, value):
     self._use_heuristic_opponent = value
 
-  def __call__(self, env_number):
-    hs_game = self.game_class(env_number=env_number)
+  def __call__(self, env_id: str):
+    hs_game: environments.sabber_hs.Sabberstone = self.game_class(env_number=env_id)
     initial_dist = self.opponent_dist()
     if self.use_heuristic_opponent:
-
       initial_dist = torch.ones(size=(1,)).numpy()
-
-      hs_game.set_opponents(opponents=['default'], opponent_dist=initial_dist)
+      hs_game.set_opponents(['default'], initial_dist)
     else:
-      hs_game.set_opponents(opponents=self.opponents, opponent_dist=initial_dist)
+      hs_game.set_opponents(self.opponents, initial_dist)
 
     return hs_game
 

@@ -1,8 +1,6 @@
-import functools
 import getpass
 import os
 import sys
-from typing import Callable
 
 import torch
 
@@ -36,21 +34,6 @@ class Environment:
 
   max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
-
-  @staticmethod
-  def get_game_mode(address: str) -> Callable[[], Callable]:
-    if Environment.connection == 'rpc':
-      from environments.sabber_hs import Sabberstone as _Sabberstone
-      print("Running as rpc")
-    else:
-      from environments.sabber2_hs import Sabberstone2 as _Sabberstone
-      print("Running as mmf")
-
-    out = functools.partial(
-        _Sabberstone,
-        address=address,
-    )
-    return out
 
   @staticmethod
   def get_opponent():

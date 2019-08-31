@@ -111,7 +111,6 @@ class Sabberstone(environments.base_env.RenderableEnv):
     assert address is not None or env_number is not None
     super().__init__()
     self.gui = None
-    self.logger = shared.utils.HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
 
     if seed is not None:
       warnings.warn("Setting the seed is not implemented")
@@ -123,13 +122,12 @@ class Sabberstone(environments.base_env.RenderableEnv):
     self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
     self.turn_stats = {k: [] for k in C.GameStatistics._fields}  # TODO: do this in game_stats initilaization everywhere
     self._game_matrix = {}
-    self.logger.info(f"Env with id {env_number} started.")
 
   def connect(self, address, env_number):
     self.channel = grpc.insecure_channel(address)
     self.stub = Stub(sabberstone_grpc.SabberStonePythonStub(self.channel))
 
-  def agent_game_vale(self):
+  def game_value_for_player(self):
     player = self.game_snapshot.CurrentPlayer
     if player.play_state == sabberstone_protobuf.Controller.WON:  # maybe PlayState
       reward = 1
@@ -212,7 +210,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     rewards = []
     while True:
       self.game_snapshot = self.stub.Process(self.game_snapshot, self.action_int_to_obj(action_id))
-      rewards.append(self.agent_game_vale())
+      rewards.append(self.game_value_for_player())
       _terminal = self.game_snapshot.state == sabberstone_protobuf.Game.COMPLETE
 
       if _terminal:
@@ -224,7 +222,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
         action_id = self.opponent.choose(
-            deterministic=self.deterministic_opponent,
+            deterministic=self.current_opponent_is_deterministic,
             observation=observation,
             info={**info, 'original_info': {
               "game_snapshot": self.game_snapshot,
@@ -264,7 +262,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     if self.opponent is not None and hs_config.GameManager.newest_opponent_prob > np.random.uniform():
       return
 
-    p = self.opponent_dist
+    p = self.opponent_distribution
     p /= p.sum()
 
     k = np.random.choice(np.arange(0, len(self.opponents)), p=p)

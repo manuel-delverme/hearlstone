@@ -1,6 +1,6 @@
 import collections
 import time
-from abc import ABC, abstractmethod
+from abc import ABC
 from enum import IntEnum
 
 import gym
@@ -16,27 +16,23 @@ class BaseEnv(gym.Env, ABC):
     PASS_TURN = 0
 
   def __init__(self):
-    self.opponent = None
-    self.deterministic_opponent = None
-    self.opponent_dist = None
+    self.current_opponent = None
+    self.current_opponent_is_deterministic = None
+    self.opponent_distribution = None
     self.opponents = [None, ]
-    self.opponents_lookup = {}
+    self.opponent_to_opponent_id = {}
 
-  @abstractmethod
-  def agent_game_vale(self):
-    raise NotImplemented
+  def set_opponents(self, opponents_id, opponent_distribution, deterministic_opponent=True):
+    new_opponents = []
+    for opponent_id in opponents_id:
+      if opponent_id not in self.opponent_to_opponent_id:
+        self.opponent_to_opponent_id[opponent_id] = self.load_opponent(opponent_id)
 
-  def set_opponents(self, opponents, opponent_dist, deterministic_opponent=True):
-    _opponents = []
-    for player_hash in opponents:
-      if player_hash not in self.opponents_lookup:
-        self.opponents_lookup[player_hash] = self.load_opponent(player_hash)
+      new_opponents.append(self.opponent_to_opponent_id[opponent_id])
 
-      _opponents.append(self.opponents_lookup[player_hash])
-
-    self.opponents = _opponents
-    self.opponent_dist = opponent_dist
-    self.deterministic_opponent = deterministic_opponent
+    self.opponents = new_opponents
+    self.opponent_distribution = opponent_distribution
+    self.current_opponent_is_deterministic = deterministic_opponent
 
   def load_opponent(self, checkpoint_file):
     if checkpoint_file == 'default':
@@ -47,10 +43,6 @@ class BaseEnv(gym.Env, ABC):
 
     import agents.learning.ppo_agent
 
-    # if self.use_heuristic_opponent:
-    #   assert isinstance(self.opponents[0], agents.heuristic.random_agent.RandomAgent)
-    #   self.opponents = []
-    #   self.use_heuristic_opponent = False
     checkpoint = torch.load(checkpoint_file)
     opponent_network = checkpoint['network']
     assert isinstance(opponent_network, agents.learning.models.randomized_policy.ActorCritic), opponent_network
