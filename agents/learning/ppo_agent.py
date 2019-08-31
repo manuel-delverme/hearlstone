@@ -23,7 +23,7 @@ from agents.learning.shared.storage import RolloutStorage
 from shared.env_utils import make_vec_envs
 
 
-def get_grad_norm(model):
+def get_grad_norm(model: torch.nn.Module):
   total_norm = 0
   for p in model.parameters():
     param_norm = p.grad.data.norm(2)
@@ -33,6 +33,8 @@ def get_grad_norm(model):
 
 
 class PPOAgent:
+  actor_critic: ActorCritic
+
   def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
     assert isinstance(__class__.__name__, str)
     self.device = device
@@ -49,9 +51,7 @@ class PPOAgent:
     self.num_inputs = num_inputs
     self.num_actions = num_possible_actions
 
-    actor_critic_network = ActorCritic(self.num_inputs, self.num_actions)
-    actor_critic_network.to(self.device)
-    self.actor_critic = actor_critic_network
+    self.actor_critic = ActorCritic(self.num_inputs, self.num_actions, device=self.device)
 
     self.clip_param = hs_config.PPOAgent.clip_epsilon
     assert specs.check_positive_type(self.clip_param, float)
@@ -82,7 +82,7 @@ class PPOAgent:
 
     self.save_every = hs_config.PPOAgent.save_interval
     assert specs.check_positive_type(self.save_every, int)
-    self.num_updates = hs_config.PPOAgent.num_updates
+    self.num_updates = hs_config.PPOAgent.max_rollouts_per_opponent
     assert specs.check_positive_type(self.num_updates, int)
     self.eval_every = hs_config.PPOAgent.eval_interval
     assert specs.check_positive_type(self.eval_every, int)
@@ -95,6 +95,11 @@ class PPOAgent:
         self.actor_critic.critic.parameters(),
         lr=hs_config.PPOAgent.critic_adam_lr,
     )
+    tensorboard_dir = os.path.join(f"logs/tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
+    if "DELETEME" in tensorboard_dir or experiment_id is None:
+      tensorboard_dir = tempfile.mktemp("PPOAgent_fake_tensorboard")
+
+    self.tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
 
   def choose_greedy(self, observation, info):
     return self.__choose(observation, info, True)
@@ -111,19 +116,9 @@ class PPOAgent:
       _, action, _ = self.actor_critic(observation, info['possible_actions'], deterministic)
     return action
 
-  def update_experiment_logging(self):
-    tensorboard_dir = os.path.join(f"logs/tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
+  def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text], max_rollouts_per_opponent: int,
+      updates_offset: int = 0) -> Tuple[Text, float, int]:
 
-    if "DELETEME" in tensorboard_dir:
-      tensorboard_dir = tempfile.mktemp()
-
-    if self.tensorboard is not None:
-      self.tensorboard.close()
-
-    self.tensorboard = tensorboardX.SummaryWriter(tensorboard_dir, flush_secs=2)
-
-  def train(self, game_manager: game_utils.GameManager, checkpoint_file: Optional[Text],
-      num_updates: int = hs_config.PPOAgent.num_updates, updates_offset: int = 0) -> Tuple[Text, float, int]:
     assert updates_offset >= 0
 
     envs, eval_envs, valid_envs = self.setup_envs(game_manager)
@@ -131,7 +126,7 @@ class PPOAgent:
     if checkpoint_file:
       print(f"[Train] Loading ckpt {checkpoint_file}")
       self.load_checkpoint(checkpoint_file, envs)
-      assert game_manager.use_heuristic_opponent is False or num_updates == 1
+      assert game_manager.use_heuristic_opponent is False or max_rollouts_per_opponent == 1
 
     assert envs.observation_space.shape == (self.num_inputs,)
     assert envs.action_space.n == self.num_actions
@@ -146,9 +141,9 @@ class PPOAgent:
     start = time.time()  # TODO: bugged
     total_num_steps = None
     ppo_update_num = None
-    pbar = tqdm.tqdm(position=1, desc='train', total=num_updates)
+    pbar = tqdm.tqdm(position=1, desc='train', total=max_rollouts_per_opponent)
 
-    for ppo_update_num in range(updates_offset, updates_offset + num_updates):
+    for ppo_update_num in range(updates_offset, updates_offset + max_rollouts_per_opponent):
       pbar.update(1)
 
       def stop_gathering(_, step):
@@ -425,7 +420,7 @@ class PPOAgent:
       if done:
         self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value, reward=reward)
 
-  def update(self, rollouts: RolloutStorage):
+  def update(self, rollouts: RolloutStorage, slow_stats=False):
     advantages = rollouts.get_advantages()
     advantages -= advantages.mean()
     advantages /= advantages.std() + 1e-5
@@ -465,7 +460,7 @@ class PPOAgent:
 
         self.pi_optimizer.zero_grad()
         (action_loss - dist_entropy * self.entropy_coeff).backward()
-        grad_norm_pi = get_grad_norm(self.actor_critic.actor)  # SUPER SLOW
+        grad_norm_pi = None if slow_stats else get_grad_norm(self.actor_critic.actor)
         self.pi_optimizer.step()
 
         # torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
@@ -473,8 +468,7 @@ class PPOAgent:
         self.value_optimizer.zero_grad()
         (value_loss * self.value_loss_coeff).backward()
 
-        grad_norm_critic = get_grad_norm(self.actor_critic.critic)  # SUPER SLOW
-        # torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
+        grad_norm_critic = None if slow_stats else get_grad_norm(self.actor_critic.critic)
 
         self.value_optimizer.step()
         grad_norm_pi_epoch += grad_norm_pi
@@ -500,43 +494,39 @@ class PPOAgent:
 
     return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, ratio_epoch, value_mean, grad_norm_pi_epoch, grad_norm_value_epoch
 
-  def self_play(self, game_manager: game_utils.GameManager, checkpoint_file):
-    self.update_experiment_logging()
+  def self_play(self, game_manager: game_utils.GameManager, checkpoint_file: str):
     updates_so_far = 0
-    updates_schedule = [1, ]
-    updates_schedule.extend([hs_config.PPOAgent.num_updates, ] * hs_config.SelfPlay.num_opponent_updates)
     old_win_ratio = -1  # TODO: this assumes the checkpoint has worse performance than the 1iteration ppo update
-    pbar = tqdm.tqdm(total=sum(updates_schedule), desc='self-play')
-    try:
-      for self_play_iter, num_updates in enumerate(updates_schedule):
-        print("Iter", self_play_iter, 'old_win_ratio', old_win_ratio, 'updates_so_far', updates_so_far)
+    self_play_iter = 0
+    pbar = tqdm.tqdm(total=hs_config.PPOAgent.max_rollouts_per_opponent * hs_config.SelfPlay.num_opponent_updates, desc='self-play')
+    for num_updates in range(hs_config.SelfPlay.num_opponent_updates):
+      pbar.write(f"Iter {self_play_iter} old_win_ratio {old_win_ratio}, updates_so_far {updates_so_far})")
 
-        checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, num_updates, updates_so_far)
-        assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
+      checkpoint_file, win_ratio, updates_so_far = self.train(game_manager, checkpoint_file, hs_config.PPOAgent.max_rollouts_per_opponent,
+                                                              updates_so_far)
+      assert game_manager.use_heuristic_opponent is False or self_play_iter == 0
 
-        self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
-        self.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter,
-                                    (updates_so_far * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps))
+      self.tensorboard.add_scalar('dashboard/heuristic_latest', win_ratio, self_play_iter)
+      self.tensorboard.add_scalar('dashboard/self_play_iter', self_play_iter,
+                                  (updates_so_far * hs_config.PPOAgent.num_processes * hs_config.PPOAgent.num_steps))
 
-        if win_ratio >= old_win_ratio:
-          print('updating checkpoint')
-          shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
-          self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
-        old_win_ratio = max(old_win_ratio, win_ratio)
-        game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
-        # self.pi_optimizer.state = collections.defaultdict(dict)  # Reset state
-        # self.value_optimizer.state = collections.defaultdict(dict)  # Reset state
-        pbar.update(num_updates)
+      if win_ratio >= old_win_ratio:
+        print('updating checkpoint')
+      shutil.copyfile(checkpoint_file, checkpoint_file + "_iter_" + str(self_play_iter))
+      self.tensorboard.add_scalar('winning_ratios/heuristic_best', win_ratio, self_play_iter)
+      old_win_ratio = max(old_win_ratio, win_ratio)
+      game_manager.add_learned_opponent(checkpoint_file)  # TODO: avoid adding the same player
+      pbar.update(num_updates)
 
-    except KeyboardInterrupt:
-      print("Captured KeyboardInterrupt from user, quitting")
-      if self.eval_envs:
-        self.eval_envs.close()
-      if self.envs:
-        self.envs.close()
-      if self.validation_envs:
-        self.validation_envs.close()
-      self.tensorboard.close()
-
-  def __exit__(self, exc_type, exc_val, exc_tb):
+  def close(self):
+    if self.eval_envs:
+      self.eval_envs.close()
+    if self.envs:
+      self.envs.close()
+    if self.validation_envs:
+      self.validation_envs.close()
     self.tensorboard.close()
+
+
+def __exit__(self, exc_type, exc_val, exc_tb):
+  self.tensorboard.close()

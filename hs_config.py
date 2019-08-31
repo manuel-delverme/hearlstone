@@ -22,7 +22,6 @@ class Environment:
   single_process = DEBUG
   address = "0.0.0.0:50052"
 
-
   # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
   max_cards_in_deck = 30
@@ -53,6 +52,7 @@ class GameManager:
 
 class SelfPlay:
   num_opponent_updates = 9999999
+
 
 log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
@@ -87,7 +87,6 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-
   entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
 
@@ -95,8 +94,8 @@ class PPOAgent:
   num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
 
-  num_updates = 50 if DEBUG else num_env_steps // num_steps // num_processes
-  assert num_updates
+  max_rollouts_per_opponent = 50 if DEBUG else num_env_steps // num_steps // num_processes
+  assert max_rollouts_per_opponent
 
 
 if any((DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environment.ENV_DEBUG_METRICS,

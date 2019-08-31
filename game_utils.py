@@ -1,39 +1,37 @@
 import collections
 import functools
-from typing import Text, Callable, Type
+from typing import Text, Callable, Type, List
 
 import numpy as np
 import torch
 
+import agents.base_agent
 import environments.base_env
 import hs_config
+from environments.base_env import MultiOpponentEnv
 
 
-def get_game_mode(address: str) -> Callable[[], Callable]:
+def get_game_mode(address: str) -> Callable[[], MultiOpponentEnv]:
   if hs_config.Environment.connection == 'rpc':
     from environments.sabber_hs import Sabberstone as _Sabberstone
+    _Sabberstone = functools.partial(_Sabberstone, address=address, )
     print("Running as rpc")
   else:
     from environments.sabber2_hs import Sabberstone2 as _Sabberstone
     print("Running as mmf")
 
-  out = functools.partial(
-      _Sabberstone,
-      address=address,
-  )
-  return out
+  return _Sabberstone
 
 
-class GameManager(object):
-  game_class: Type[environments.base_env.MultiOpponentEnv]
+class GameManager:
+  env_class: Type[environments.base_env.MultiOpponentEnv]
 
-  def __init__(self, seed=None, address=hs_config.Environment.address):
-    self.seed = seed
-    self._use_heuristic_opponent = True
+  def __init__(self, address: Text, opponents: List[agents.base_agent.Bot]):
+    if len(opponents) > hs_config.GameManager.max_opponents:
+      raise ValueError(f"Too many opponents, the game manager can handle at most {hs_config.GameManager.max_opponents} opponents")
 
-    self.game_class = get_game_mode(address)
-
-    self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
+    self.env_class = get_game_mode(address)
+    self.opponents = collections.deque(opponents, maxlen=hs_config.GameManager.max_opponents)
     self.ladder = Ladder()
 
   def update_score(self, score):
@@ -41,7 +39,7 @@ class GameManager(object):
     return self.ladder.player_score, self.ladder.games_count
 
   def opponent_dist(self):
-    opponent_dist = self.ladder.opponent_distribution(number_of_active_opponents=len(self.opponents))
+    opponent_dist = self.ladder.opponent_distribution(len(self.opponents))
     return opponent_dist
 
   @property
@@ -53,7 +51,7 @@ class GameManager(object):
     self._use_heuristic_opponent = value
 
   def instantiate_environment(self, env_id: str):
-    hs_game: environments.sabber_hs.Sabberstone = self.game_class(env_number=env_id)
+    hs_game: environments.sabber_hs.Sabberstone = self.env_class(env_number=env_id)
     initial_dist = self.opponent_dist()
     if self.use_heuristic_opponent:
       initial_dist = torch.ones(size=(1,)).numpy()
@@ -74,7 +72,6 @@ class GameManager(object):
 class Ladder:
   def __init__(self):
     # https://arxiv.org/pdf/1806.02643.pdf
-
     self.max_opponents = hs_config.GameManager.max_opponents
 
     self.games = torch.zeros(self.max_opponents)

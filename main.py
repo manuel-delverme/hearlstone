@@ -2,8 +2,6 @@ import argparse
 import glob
 import re
 
-import torch
-
 import agents.heuristic.hand_coded
 import agents.heuristic.random_agent
 import agents.learning.ppo_agent
@@ -12,7 +10,7 @@ import hs_config
 import shared.constants as C
 
 
-def load_latest_checkpoint(checkpoint=None):
+def load_latest_checkpoint(checkpoint):
   if checkpoint is None:
     print('loading checkpoints', hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
     checkpoints = glob.glob(hs_config.PPOAgent.save_dir + f'/*{hs_config.comment}*')
@@ -44,23 +42,26 @@ def setup_logging():
 
 
 def train(args):
-  game_manager = game_utils.GameManager(address=args.address)
-  if args.p1 is not None and args.p2 is None:
-    hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None)
+  try:
+    if args.p1:
+      player = agents.learning.ppo_agent.PPOAgent(
+          num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None, device='cpu')
+      game_manager = game_utils.GameManager(args.address, [args.p2 or 'heuristic', ])
+      player.enjoy(game_manager, checkpoint_file=args.p1)
 
-    player.enjoy(game_manager, checkpoint_file=args.p1)
+    else:
+      if args.p2:
+        raise ValueError
+      latest_checkpoint = load_latest_checkpoint(args.load_checkpoint)
+      player = agents.learning.ppo_agent.PPOAgent(
+          num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=setup_logging())
+      game_manager = game_utils.GameManager(args.address, [latest_checkpoint or 'random', ])
+      player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
-  elif args.p1 is not None and args.p2 is not None:
-    hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
-    game_manager.add_learned_opponent(args.p2)
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None)
-    player.enjoy(game_manager, checkpoint_file=args.p1)
-  else:
-    experiment_id = setup_logging()
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=experiment_id)
-    latest_checkpoint = load_latest_checkpoint(args.load_checkpoint)
-    player.self_play(game_manager, checkpoint_file=latest_checkpoint)
+  except KeyboardInterrupt:
+    print("Captured KeyboardInterrupt from user, quitting")
+  finally:
+    player.close()
 
 
 if __name__ == "__main__":
