@@ -137,8 +137,6 @@ def episodic_log(func):
     self.__episodic_log_log_call_depth += 1
     try:
       retr = func(*args, **kwargs)
-    except environments.base_env.BaseEnv.GameOver as e:
-      raise e
     except Exception as e:
       raise e
 

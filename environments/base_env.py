@@ -15,9 +15,6 @@ class BaseEnv(gym.Env, ABC):
   class GameActions(IntEnum):
     PASS_TURN = 0
 
-  class GameOver(Exception):
-    pass
-
   def __init__(self):
     self.opponent = None
     self.deterministic_opponent = None
