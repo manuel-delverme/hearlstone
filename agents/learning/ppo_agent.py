@@ -15,7 +15,6 @@ import tensorboardX
 import torch
 import tqdm
 
-import agents.base_agent
 import game_utils
 import hs_config
 import specs
@@ -34,7 +33,7 @@ def get_grad_norm(model):
   return total_norm
 
 
-class PPOAgent(agents.base_agent.Agent):
+class PPOAgent:
   def _choose(self, observation, possible_actions, deterministic=True):
     with torch.no_grad():
       value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=deterministic)

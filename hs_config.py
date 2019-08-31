@@ -2,11 +2,10 @@ import functools
 import getpass
 import os
 import sys
-from typing import Callable, Type
+from typing import Callable
 
 import torch
 
-import agents.base_agent
 import shared.constants as C
 
 use_gpu = torch.cuda.is_available()
@@ -54,7 +53,7 @@ class Environment:
     return out
 
   @staticmethod
-  def get_opponent() -> Type[agents.base_agent.Agent]:
+  def get_opponent():
     import agents.heuristic.hand_coded
     return agents.heuristic.hand_coded.SabberAgent
 
