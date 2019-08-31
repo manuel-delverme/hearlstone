@@ -60,6 +60,7 @@ class Environment:
 
 
 class GameManager:
+  support = C.DistSupport.player_strength
   tau = 1.
   max_opponents = 5
   elo_lr = 16
@@ -78,13 +79,13 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 class PPOAgent:
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55
-  performance_to_early_eval = 0.55  # <- 0.45
+  performance_to_early_eval = 0.25  # current best...
   num_outcomes_for_early_exit = 50
 
   deterministic_training = False  # Set opponent as deterministic during {training, eval}
   deterministic_eval = True
 
-  num_eval_games = 10 if DEBUG else 100
+  num_eval_games = 10 if DEBUG else 1000 # DO NOT MAKE ME SMALLER...
   num_valid_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256
