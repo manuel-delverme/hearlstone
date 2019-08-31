@@ -1,5 +1,4 @@
 import collections
-import math
 import time
 from abc import ABC, abstractmethod
 from enum import IntEnum
@@ -10,52 +9,6 @@ import torch
 
 import hs_config
 import shared.constants as C
-
-
-def plot(series):
-  # source: https://github.com/kroitor/asciichart/blob/master/asciichartpy/__init__.py
-  minimum = min(series)
-  maximum = max(series)
-
-  interval = abs(float(maximum) - float(minimum))
-  interval = interval or 1.0  # avoid division by 0
-  offset = 3
-  height = interval
-  ratio = height / interval
-  min2 = math.floor(float(minimum) * ratio)
-  max2 = math.ceil(float(maximum) * ratio)
-
-  intmin2 = int(min2)
-  intmax2 = int(max2)
-
-  rows = abs(intmax2 - intmin2) or 1
-  width = len(series) + offset
-
-  result = [[' '] * width for i in range(rows + 1)]
-
-  # Axis and labels.
-  for y in range(intmin2, intmax2 + 1):
-    label = '{:8.2f}'.format(float(maximum) - ((y - intmin2) * interval / rows))
-    result[y - intmin2][max(offset - len(label), 0)] = label
-    result[y - intmin2][offset - 1] = '┼' if y == 0 else '┤'
-
-  y0 = int(series[0] * ratio - min2)
-  result[rows - y0][offset - 1] = '┼'  # first value
-
-  for x in range(0, len(series) - 1):  # plot the line
-    y0 = int(round(series[x + 0] * ratio) - intmin2)
-    y1 = int(round(series[x + 1] * ratio) - intmin2)
-    if y0 == y1:
-      result[rows - y0][x + offset] = '─'
-    else:
-      result[rows - y1][x + offset] = '╰' if y0 > y1 else '╭'
-      result[rows - y0][x + offset] = '╮' if y0 > y1 else '╯'
-      start = min(y0, y1) + 1
-      end = max(y0, y1)
-      for y in range(start, end):
-        result[rows - y][x + offset] = '│'
-
-  return '\n'.join([''.join(row) for row in result])
 
 
 class BaseEnv(gym.Env, ABC):
@@ -186,9 +139,6 @@ class RenderableEnv(BaseEnv):
       self.gui.log(f"value: {float(value)}, choice: {int(choice)}", row=row_number, multiline=False)
       row_number += 1
 
-      row_number = self.log_plot(row_number, self.values)
-      # row_number = self.log_plot(row_number, self.health)
-
       first_row_number = row_number
       max_rows = self.gui.game_height - first_row_number - 6 - 16
       if len(pretty_actions) > max_rows:
@@ -227,12 +177,6 @@ class RenderableEnv(BaseEnv):
       return self.gui.screen.getch()
     else:
       raise NotImplementedError
-
-  def log_plot(self, row_number, values):
-    figure = plot(list(values)[::-1])
-    self.gui.log(figure[1:], row=row_number, multiline=True)
-    row_number += figure.count('\n') + 2
-    return row_number
 
   def render_player(self, obs, offset=0, show_hand=True):
     mana = obs[offset]
