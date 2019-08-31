@@ -75,11 +75,11 @@ class Ladder:
   def __init__(self):
     # https://arxiv.org/pdf/1806.02643.pdf
 
-    max_opponents = hs_config.GameManager.max_opponents
+    self.max_opponents = hs_config.GameManager.max_opponents
 
-    self.games = torch.zeros(max_opponents)
-    self._scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
-    self._c = torch.rand(size=(max_opponents + 1, 2))
+    self.games = torch.zeros(self.max_opponents)
+    self._scores = torch.ones((self.max_opponents + 1,)) * hs_config.GameManager.elo_lr
+    self._c = torch.rand(size=(self.max_opponents + 1, 2))
     self.alpha = hs_config.GameManager.elo_scale
     self.k = hs_config.GameManager.elo_lr
     self.player_idx = -1  # last on the list
