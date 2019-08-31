@@ -224,6 +224,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
         action_id = self.opponent.choose(
+            deterministic=self.deterministic_opponent,
             observation=observation,
             info={**info, 'original_info': {
               "game_snapshot": self.game_snapshot,
@@ -260,7 +261,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
     return observation, 0, False, info
 
   def _sample_opponent(self):
-    if self.opponent is not None and hs_config.Environment.newest_opponent_prob > np.random.uniform():
+    if self.opponent is not None and hs_config.GameManager.newest_opponent_prob > np.random.uniform():
       return
 
     p = self.opponent_dist

@@ -8,13 +8,13 @@ import specs
 
 class Agent(ABC):
   @abstractmethod
-  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
+  def _choose(self, observation: np.ndarray, info: Dict[Text, Any], deterministic: bool):
     raise NotImplemented
 
-  def choose(self, observation: np.ndarray, info: specs.Info):
+  def choose(self, observation: np.ndarray, info: specs.Info, deterministic: bool):
     assert specs.check_info_spec(info)
     # assert specs.check_observation(C._STATE_SPACE, observation)
-    return self._choose(observation, info['possible_actions'])
+    return self._choose(observation, info['possible_actions'], deterministic)
 
   def load_model(self, model_path=None):
     raise NotImplemented
@@ -31,7 +31,7 @@ class Bot(ABC):
   def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
     raise NotImplemented
 
-  def choose(self, observation: np.ndarray, info: specs.Info):
+  def choose(self, observation: np.ndarray, info: specs.Info, *args, **kwargs):
     assert specs.check_info_spec(info)
     assert len(info['possible_actions'].shape) == 1
     return self._choose(observation, info)

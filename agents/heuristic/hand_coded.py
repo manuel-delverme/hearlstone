@@ -22,7 +22,7 @@ def parse_hero(hero):
   return hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted
 
 
-class PassingAgent(agents.base_agent.Agent):
+class PassingAgent(agents.base_agent.Bot):
   def __init__(self):
     super().__init__()
 
