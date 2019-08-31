@@ -174,9 +174,12 @@ class PPOAgent(agents.base_agent.Agent):
 
           elo_score, games_count = game_manager.update_score(eval_scores)
           opponent_dist = game_manager.opponent_dist()
+          player_strength = game_manager.ladder.player_strength()
           performance = game_utils.to_prob(np.mean(eval_rewards))
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/player_strength', player_strength.mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_strength', (1-player_strength).mean(), ppo_update_num)
 
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
