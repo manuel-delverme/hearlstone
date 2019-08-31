@@ -1,6 +1,6 @@
 import collections
 import random
-from typing import Dict, Text, Any, List
+from typing import List
 
 import numpy as np
 import torch
@@ -22,25 +22,15 @@ def parse_hero(hero):
   return hero.atk, hero.base_health - hero.damage, hero.exhausted, hero.power.exhausted
 
 
-class PassingAgent(agents.base_agent.Bot):
-  def __init__(self):
-    super().__init__()
-
-  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
-    return 0
-
-
 class HeuristicAgent(agents.base_agent.Bot):
   def __init__(self):
-    self.logger = shared.utils.HSLogger(__name__, log_to_stdout=hs_config.log_to_stdout)
     super().__init__()
     self.random_agent = agents.heuristic.random_agent.RandomAgent()
-    self.passing_agent = PassingAgent()
 
-  def _choose(self, observation: np.ndarray, encoded_info: specs.Info):
-    encoded_info['possible_actions'] = torch.FloatTensor(encoded_info['possible_actions']).unsqueeze(0)
-    possible_actions = encoded_info['original_info']['possible_actions']
-    assert encoded_info['possible_actions'].size(0) == 1
+  def _choose(self, observation: np.ndarray, info: specs.Info):
+    info['possible_actions'] = torch.FloatTensor(info['possible_actions']).unsqueeze(0)
+    possible_actions = info['original_info']['possible_actions']
+    assert info['possible_actions'].size(0) == 1
 
     if len(possible_actions) == 1:
       selected_action = possible_actions[0]
@@ -87,8 +77,8 @@ class HeuristicAgent(agents.base_agent.Bot):
       else:
         selected_action = actions[0]
 
-    for enc_action, action_obj in zip(torch.nonzero(encoded_info['possible_actions']),
-                                      encoded_info['original_info']['possible_actions']):
+    for enc_action, action_obj in zip(torch.nonzero(info['possible_actions']),
+                                      info['original_info']['possible_actions']):
       if action_obj == selected_action:
         return enc_action[1]
     else:
@@ -111,10 +101,10 @@ def decode_game(info):
 
 
 class SabberAgent(HeuristicAgent):
-  def _choose(self, observation: np.ndarray, encoded_info: specs.Info):
-    possible_actions = encoded_info['original_info']['game_options']
+  def choose_greedy(self, observation: np.ndarray, info: specs.Info):
+    possible_actions = info['original_info']['game_options']
     player_hero, opponent_hero, hand_zone, player_board, opponent_board = decode_game(
-        encoded_info['original_info'])
+        info['original_info'])
     if hs_config.Environment.ENV_DEBUG_HEURISTIC:
       desk = {}
 
@@ -182,7 +172,6 @@ class SabberAgent(HeuristicAgent):
     return selected_action
 
   def action_is_play_minion(self, action, hand_zone: List[C.Card]):
-
     return action.type == C.PlayerTaskType.PLAY_CARD and not action.is_spell
 
   def action_is_trade(self, action, hand_zone):

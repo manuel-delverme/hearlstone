@@ -49,17 +49,21 @@ def check_info_spec(info: Info):
   return True
 
 
-def check_observation(num_inputs, observation):
+def check_observation(num_inputs, observation, check_batch=True):
   if isinstance(observation, torch.Tensor):
     if observation.dtype not in (torch.float32,):
+      raise TypeError("{} is not correct".format(observation.dtype))
+  elif isinstance(observation, np.ndarray):
+    if observation.dtype not in (np.int32,):
       raise TypeError("{} is not correct".format(observation.dtype))
   else:
     raise TypeError
 
-  if len(observation.shape) != 2:  # batch_size, num_inputs
-    raise TypeError
-  if observation.shape[1] != num_inputs:
-    raise TypeError
+  if check_batch:
+    if len(observation.shape) != 2:  # batch_size, num_inputs
+      raise TypeError
+    if observation.shape[1] != num_inputs:
+      raise TypeError
   return True
 
 

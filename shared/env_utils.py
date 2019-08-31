@@ -10,6 +10,7 @@ import numpy as np
 import torch
 
 import environments.base_env
+import game_utils
 import hs_config
 import specs
 from baselines_repo.baselines.common import vec_env
@@ -76,9 +77,9 @@ class PyTorchCompatibilityWrapper(VecEnvWrapper):
     return obs, rewards, dones, dict(new_infos)
 
 
-def _make_env(load_env: Callable[[], environments.base_env.BaseEnv], env_number: int) -> Callable[[], environments.base_env.BaseEnv]:
+def _make_env(game_manager: game_utils.GameManager, env_id: str) -> Callable[[], environments.base_env.MultiOpponentEnv]:
   def _thunk():
-    return load_env(env_number=env_number)
+    return game_manager.instantiate_environment(env_id=env_id)
 
   return _thunk
 

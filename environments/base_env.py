@@ -1,6 +1,6 @@
 import collections
 import time
-from abc import ABC
+from abc import ABC, ABCMeta, abstractmethod
 from enum import IntEnum
 
 import gym
@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 import hs_config
-import shared.constants as C
+from shared import constants as C
 
 
 class BaseEnv(gym.Env, ABC):
@@ -210,3 +210,48 @@ class RenderableEnv(BaseEnv):
 
   def parse_options(self, game_snapshot, return_options):
     raise NotImplementedError
+
+
+class MultiOpponentEnv(RenderableEnv, metaclass=ABCMeta):
+  @abstractmethod
+  def connect(self, address, env_number):
+    pass
+
+  @abstractmethod
+  def game_value_for_player(self):
+    pass
+
+  @abstractmethod
+  def step(self, action_id):
+    pass
+
+  @abstractmethod
+  def reset(self):
+    pass
+
+  def _sample_opponent(self):
+    if self.current_opponent is not None and hs_config.GameManager.newest_opponent_prob > np.random.uniform():
+      return
+
+    p = self.opponent_distribution
+    p /= p.sum()
+
+    k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
+    self.current_opponent = self.opponents[k]
+    self.current_k = k
+
+  @abstractmethod
+  def __str__(self):
+    pass
+
+  @abstractmethod
+  def close(self):
+    pass
+
+  @abstractmethod
+  def __del__(self):
+    pass
+
+  @abstractmethod
+  def parse_game(self):
+    pass

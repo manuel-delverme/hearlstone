@@ -33,11 +33,6 @@ def get_grad_norm(model):
 
 
 class PPOAgent:
-  def _choose(self, observation, possible_actions, deterministic=True):
-    with torch.no_grad():
-      value, action, action_log_prob = self.actor_critic(observation, possible_actions, deterministic=deterministic)
-    return action
-
   def __init__(self, num_inputs: int, num_possible_actions: int, experiment_id: Optional[Text], device=hs_config.device) -> None:
     assert isinstance(__class__.__name__, str)
     self.device = device
@@ -100,6 +95,21 @@ class PPOAgent:
         self.actor_critic.critic.parameters(),
         lr=hs_config.PPOAgent.critic_adam_lr,
     )
+
+  def choose_greedy(self, observation, info):
+    return self.__choose(observation, info, True)
+
+  def choose_explore(self, observation, info):
+    return self.__choose(observation, info, False)
+
+  def __choose(self, observation, info, deterministic):
+    assert specs.check_observation(self.num_inputs, observation, check_batch=False)
+    assert len(observation.shape) == 1
+    assert specs.check_info_spec(info)
+
+    with torch.no_grad():
+      _, action, _ = self.actor_critic(observation, info['possible_actions'], deterministic)
+    return action
 
   def update_experiment_logging(self):
     tensorboard_dir = os.path.join(f"logs/tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{self.experiment_id}.pt")
@@ -176,7 +186,7 @@ class PPOAgent:
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_scalar('dashboard/player_strength', player_strength.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('dashboard/league_strength', (1-player_strength).mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_strength', (1 - player_strength).mean(), ppo_update_num)
 
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
@@ -282,8 +292,7 @@ class PPOAgent:
     return rewards, dict(scores), game_stats
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], game_statistics,
-      deterministic: bool = False,
-      opponents: list = None, timeout=10000):
+      deterministic: bool = False, opponents: list = None, timeout=10000):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']

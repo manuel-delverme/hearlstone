@@ -32,7 +32,7 @@ class Environment:
   max_cards_in_hand = 10
   connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
 
-  max_processes = 4 if connection == 'mmf' else 12
+  max_processes = 1 if DEBUG else (4 if connection == 'mmf' else 12)
   reward_type = C.RewardType.empowerment
 
   @staticmethod

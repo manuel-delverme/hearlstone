@@ -7,7 +7,7 @@ import agents.base_agent
 
 
 class RandomAgent(agents.base_agent.Bot):
-  def _choose(self, observation: np.ndarray, info: Dict[Text, Any]):
+  def choose_greedy(self, observation: np.ndarray, info: Dict[Text, Any]):
     pa = info['possible_actions']
     pa = np.argwhere(pa)  # row is always 0
     return random.choice(pa)

@@ -4,12 +4,12 @@ import grpc
 import gym
 import numpy as np
 
-import environments.base_env
 import hs_config
 import pysabberstone.python.rpc.python_pb2 as sabberstone_protobuf
 import pysabberstone.python.rpc.python_pb2_grpc as sabberstone_grpc
 import shared.env_utils
 import shared.utils
+from environments.base_env import MultiOpponentEnv
 from shared import constants as C
 from shared.env_utils import parse_deck, pad, parse_card, parse_minion
 
@@ -103,7 +103,7 @@ def enumerate_actions():
   return action_to_id_dict
 
 
-class Sabberstone(environments.base_env.RenderableEnv):
+class Sabberstone(MultiOpponentEnv):
   action_to_id = enumerate_actions()
   board_to_board = {C.PlayerTaskType.MINION_ATTACK, C.PlayerTaskType.HERO_ATTACK, C.PlayerTaskType.HERO_POWER}
 
@@ -221,8 +221,7 @@ class Sabberstone(environments.base_env.RenderableEnv):
         info = {'possible_actions': possible_actions, }
 
       if self.game_snapshot.CurrentPlayer.id == C.OPPONENT_ID:
-        action_id = self.opponent.choose(
-            deterministic=self.current_opponent_is_deterministic,
+        action_id = self.current_opponent.choose_greedy(
             observation=observation,
             info={**info, 'original_info': {
               "game_snapshot": self.game_snapshot,
@@ -258,23 +257,8 @@ class Sabberstone(environments.base_env.RenderableEnv):
           f'found {list(self.game_snapshot.CurrentPlayer.hand_zone)} as starting hand, not valid')
     return observation, 0, False, info
 
-  def _sample_opponent(self):
-    if self.opponent is not None and hs_config.GameManager.newest_opponent_prob > np.random.uniform():
-      return
-
-    p = self.opponent_distribution
-    p /= p.sum()
-
-    k = np.random.choice(np.arange(0, len(self.opponents)), p=p)
-    self.logger.info(f"Sampled new opponent with id {k} and prob {p[k]}")
-    self.opponent = self.opponents[k]
-    self.current_k = k
-
   def __str__(self):
     return f"Player: {self.game_snapshot.CurrentPlayer.id} - status: {self.game_snapshot.state} - turns: {self.game_snapshot.turn}"
-
-  def close(self):
-    self.logger.warning("Not closing cleanly, restart the server")
 
   def __del__(self):
     del self.gui
