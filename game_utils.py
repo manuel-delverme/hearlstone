@@ -60,7 +60,7 @@ class Ladder:
 
     max_opponents = hs_config.GameManager.max_opponents
     self.max_opponents = max_opponents
-    self._dist_support =  hs_config.GameManager.support
+    self._dist_support = hs_config.GameManager.support
 
     self.games = torch.zeros(max_opponents)
     self._scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
