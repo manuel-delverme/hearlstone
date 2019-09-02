@@ -60,7 +60,6 @@ class Ladder:
 
     max_opponents = hs_config.GameManager.max_opponents
     self.max_opponents = max_opponents
-    self._dist_support = hs_config.GameManager.support
 
     self.games = torch.zeros(max_opponents)
     self._scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
@@ -108,10 +107,12 @@ class Ladder:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    if self._dist_support == hs_config.GameManager.support:
+    if hs_config.GameManager.support == "player_strength":
       scores = 1 - self.player_strength()[:number_of_active_opponents]
-    else:
+    elif hs_config.GameManager.support == "elo_score":
       scores = self.scores[:number_of_active_opponents]
+    else:
+      raise NotImplementedError(f"support {hs_config.GameManager.support} not in (player_strength, elo_score)")
     return boltzmann(scores=scores, tau=self.tau).numpy()
 
   @property

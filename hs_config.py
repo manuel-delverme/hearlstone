@@ -60,7 +60,7 @@ class Environment:
 
 
 class GameManager:
-  support = C.DistSupport.player_strength
+  support = "player_strength"
   tau = 1.
   max_opponents = 5
   elo_lr = 16
