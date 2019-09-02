@@ -99,7 +99,7 @@ class Ladder:
   def player_strength(self):
     # the probability of winning against any player in the league
     p = torch.Tensor([self.__call__(idx) for idx in range(self.max_opponents)])
-    avg = p.mean()[None]  # the average of this is his strength
+    avg = p.mean().unsqueeze(0)  # the average of this is his strength
     return torch.cat([p, avg], dim=0)
 
   @property
