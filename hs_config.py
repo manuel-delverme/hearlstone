@@ -19,12 +19,12 @@ log_to_stdout = DEBUG
 
 
 class Environment:
+  num_possible_cards = 30
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
   single_process = DEBUG
   address = "0.0.0.0:50052"
-
 
   # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
@@ -35,7 +35,7 @@ class Environment:
   max_cards_in_hand = 10
   connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
 
-  max_processes = 4 if connection == 'mmf' else 12
+  max_processes = 3 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
   @staticmethod
@@ -72,10 +72,12 @@ class GameManager:
 class SelfPlay:
   num_opponent_updates = 9999999
 
+
 log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 
 class PPOAgent:
+  card_embedding_size = 5
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55
   performance_to_early_eval = 0.55  # <- 0.45
@@ -105,7 +107,6 @@ class PPOAgent:
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
 
-
   entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
 
@@ -113,7 +114,7 @@ class PPOAgent:
   num_mini_batches = 5
   clip_epsilon = 0.2  # PPO paper
 
-  num_updates = 50 if DEBUG else num_env_steps // num_steps // num_processes
+  num_updates = 10 if DEBUG else num_env_steps // num_steps // num_processes
   assert num_updates
 
 

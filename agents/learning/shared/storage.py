@@ -40,14 +40,14 @@ class RolloutStorage(object):
     self.device = device
 
   def to(self, device: torch.device):
-    self._observations = self._observations.to(device)
-    self._rewards = self._rewards.to(device)
-    self._value_predictions = self._value_predictions.to(device)
-    self._returns = self._returns.to(device)
-    self._action_log_probabilities = self._action_log_probabilities.to(device)
-    self._actions = self._actions.to(device)
-    self._possible_actionss = self._possible_actionss.to(device)
-    self._not_dones = self._not_dones.to(device)
+    self._observations = self._observations.to(device, )
+    self._rewards = self._rewards.to(device, )
+    self._value_predictions = self._value_predictions.to(device, )
+    self._returns = self._returns.to(device, )
+    self._action_log_probabilities = self._action_log_probabilities.to(device, )
+    self._actions = self._actions.to(device, )
+    self._possible_actionss = self._possible_actionss.to(device, )
+    self._not_dones = self._not_dones.to(device, )
 
   def store_first_transition(self, observations: torch.FloatTensor, possible_actions: List[torch.FloatTensor],
                              not_done: torch.FloatTensor = None):

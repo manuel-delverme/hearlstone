@@ -228,52 +228,61 @@ class RenderableEnv(BaseEnv):
     else:
       raise NotImplementedError
 
-  def log_plot(self, row_number, values):
-    figure = plot(list(values)[::-1])
-    self.gui.log(figure[1:], row=row_number, multiline=True)
-    row_number += figure.count('\n') + 2
-    return row_number
-
-  def render_player(self, obs, offset=0, show_hand=True):
-    mana = obs[offset]
+  @classmethod
+  def render_player(cls, obs, offset=0, show_hand=True, preserve_types=False):
+    mana = obs[:, offset:offset + 1]
     offset += 1
 
-    hero = obs[offset: offset + self.hero_encoding_size]
-    hero = C.Hero(*hero)
-    offset += self.hero_encoding_size
+    hero = obs[:, offset: offset + cls.hero_encoding_size]
+    if not preserve_types:
+      hero = C.Hero(*hero)
+    offset += cls.hero_encoding_size
 
     hand = []
     if show_hand:
       for minion_number in range(hs_config.Environment.max_cards_in_hand):
-        card_obs = obs[offset: offset + self.hand_encoding_size]
-        if card_obs.max() > -1:
-          card = C.Card(*card_obs)
-          if card.atk == -1 and card.health == -1:  # it's a spell
-            card_dict = card._asdict()
-            spell = C.SPELLS(C.REVERSE_CARD_LOOKUP[tuple(card_obs)])
+        card_obs = obs[:, offset: offset + cls.hand_encoding_size]
+        if not preserve_types:
+          if card_obs.max() > -1:
+            card = C.Card(*card_obs)
+            if card.atk == -1 and card.health == -1:  # it's a spell
+              card_dict = card._asdict()
+              spell = C.SPELLS(C.REVERSE_CARD_LOOKUP[tuple(card_obs)])
 
-            card_id = ''.join(i for i in str(spell)[7:] if i.isupper())
-            if len(card_id) == 1:
-              card_id = str(spell)[7:9]
-            card_dict['atk'] = card_id
-            card_dict['health'] = card.cost
+              card_id = ''.join(i for i in str(spell)[7:] if i.isupper())
+              if len(card_id) == 1:
+                card_id = str(spell)[7:9]
 
-            card = C.Card(**card_dict)
+              card_dict['atk'] = card_id
+              card_dict['health'] = card.cost
 
+              card = C.Card(**card_dict)
+            hand.append(card)
+        else:
+          card = card_obs
           hand.append(card)
-        offset += self.hand_encoding_size
-    # DO NOT TURN INTO ONE STEP NUMPY, flexible > slow
+
+        offset += cls.hand_encoding_size
     board = []
     for minion_number in range(hs_config.Environment.max_cards_in_board):
-      card = obs[offset: offset + self.minion_encoding_size]
-      if card.max() > -1:
-        minion = C.Minion(*card)
-        board.append(minion)
-      offset += self.minion_encoding_size
+      card = obs[:, offset: offset + cls.minion_encoding_size]
+      if not preserve_types:
+        if card.max() > -1:
+          board.append(C.Minion(*card))
+      else:
+        board.append(card)
+      offset += cls.minion_encoding_size
 
-    board_size = obs[offset]
+    deck = []
+    if show_hand:
+      for deck_num in range(hs_config.Environment.max_cards_in_deck):
+        card_obs = obs[:, offset: offset + cls.hand_encoding_size]
+        offset += cls.hand_encoding_size
+        deck.append(card_obs)
+
+    board_size = obs[:, offset:offset + 1]
     offset += 1
-    return offset, board, hand, mana, hero, board_size
+    return offset, board, hand, mana, hero, board_size, deck
 
   def parse_options(self, game_snapshot, return_options):
     raise NotImplementedError
