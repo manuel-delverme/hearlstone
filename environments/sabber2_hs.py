@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import environments.sabber_hs
 import pysabberstone.python.server as mm_server
@@ -54,4 +55,4 @@ class Sabberstone2(environments.sabber_hs.Sabberstone):
     self.stub = Stub2(server)
 
   def close(self):
-    self.logger.warning("Not closing cleanly, restart the server")
+    warnings.warn("Not closing cleanly, restart the server")

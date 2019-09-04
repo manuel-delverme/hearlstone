@@ -16,6 +16,7 @@ log_to_stdout = DEBUG
 
 
 class Environment:
+  num_possible_cards = 30
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
@@ -58,6 +59,7 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 
 class PPOAgent:
+  card_embedding_size = 1
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55
   performance_to_early_eval = 0.55  # <- 0.45
@@ -136,3 +138,7 @@ if any((DEBUG, Environment.ENV_DEBUG, Environment.ENV_DEBUG_HEURISTIC, Environme
  `.__.'                                 `._  /
                                            "' mh
   ''')
+else:
+  C.BoardPosition.__call__ = lambda x: x
+  C.HandPosition.__call__ = lambda x: x
+  C.PlayerTaskType.__call__ = lambda x: x

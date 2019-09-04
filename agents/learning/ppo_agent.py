@@ -153,7 +153,8 @@ class PPOAgent:
       self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, game_statistics=game_statistics)
 
       with torch.no_grad():
-        next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
+        features = self.actor_critic.extract_features(rollouts.get_last_observation())  # TODO: refactor me away
+        next_value = self.actor_critic.critic(features).detach()
 
       rollouts.compute_returns(next_value)
       value_loss, action_loss, dist_entropy, policy_ratio, mean_value, grad_pi, grad_value = self.update(rollouts)
@@ -241,7 +242,7 @@ class PPOAgent:
       self.envs = make_vec_envs('train', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.envs).set_opponents(opponents_id=game_manager.opponents, opponent_distribution=opponent_dist)
+      self.get_last_env(self.envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.eval_envs is None:
       print("[Train] Loading eval environments")
@@ -249,7 +250,7 @@ class PPOAgent:
       self.eval_envs = make_vec_envs('eval', game_manager, self.num_processes)
     else:
       game_manager.use_heuristic_opponent = False
-      self.get_last_env(self.eval_envs).set_opponents(opponents_id=game_manager.opponents, opponent_distribution=opponent_dist)
+      self.get_last_env(self.eval_envs).set_opponents(opponents=game_manager.opponents, opponent_dist=opponent_dist)
 
     if self.validation_envs is None:
       print("[Train] Loading validation environments")
@@ -459,7 +460,7 @@ class PPOAgent:
           value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
         self.pi_optimizer.zero_grad()
-        (action_loss - dist_entropy * self.entropy_coeff).backward()
+        (action_loss - dist_entropy * self.entropy_coeff).backward(retain_graph=True)
         grad_norm_pi = None if slow_stats else get_grad_norm(self.actor_critic.actor)
         self.pi_optimizer.step()
 

@@ -3,6 +3,7 @@ import multiprocessing as mp
 import numpy as np
 
 import specs
+from environments.base_env import BaseEnv
 from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
 
 
@@ -47,7 +48,7 @@ def worker(remote, parent_remote, env_fn_wrapper):
     env.close()
 
 
-class SubprocVecEnv(VecEnv):
+class SubprocVecEnv(VecEnv, BaseEnv):
   """
     VecEnv that runs multiple environments in parallel in subproceses and communicates with them via pipes.
     Recommended to use when num_envs > 1 and step() can be a bottleneck.
