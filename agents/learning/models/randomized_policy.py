@@ -53,7 +53,9 @@ class ActorCritic(nn.Module):
     self.to(device)
 
   def to(self, *args, **kwargs):
-    super(ActorCritic, self).to(*args, **kwargs)
+    self.actor.to(*args, **kwargs)
+    self.critic.to(*args, **kwargs)
+    self.critic_regression.to(*args, **kwargs)
     self.card_embedding.to('cpu')
 
   def reset_actor(self):

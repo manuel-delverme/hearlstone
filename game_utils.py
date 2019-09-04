@@ -67,6 +67,7 @@ class Ladder:
     self.k = hs_config.GameManager.elo_lr
     self.player_idx = -1  # last on the list
     self.tau = hs_config.GameManager.tau
+    self.max_opponents = max_opponents
 
   def __getitem__(self, item: int) -> torch.Tensor:
     return self.scores[item]

@@ -35,7 +35,7 @@ class Environment:
   max_cards_in_hand = 10
   connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
 
-  max_processes = 3 if connection == 'mmf' else 12
+  max_processes = 4 if connection == 'mmf' else 12
   reward_type = C.RewardType.empowerment
 
   @staticmethod
@@ -77,10 +77,10 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 
 class PPOAgent:
-  card_embedding_size = 5
+  card_embedding_size = 1
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55
-  performance_to_early_eval = 0.55  # <- 0.45
+  performance_to_early_eval = 0.45  # <- 0.45
   num_outcomes_for_early_exit = 50
 
   deterministic_training = False  # Set opponent as deterministic during {training, eval}
