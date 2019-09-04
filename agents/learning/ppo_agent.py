@@ -150,7 +150,9 @@ class PPOAgent(agents.base_agent.Agent):
       self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, game_statistics=game_statistics)
 
       with torch.no_grad():
-        features = self.actor_critic.extract_features(rollouts.get_last_observation())  # TODO: refactor me away
+        features = self.actor_critic.extract_features(
+          rollouts.get_last_observation())  # TODO: critic should be a single call, remove extract_features
+
         next_value = self.actor_critic.critic(features).detach()
 
       rollouts.compute_returns(next_value)

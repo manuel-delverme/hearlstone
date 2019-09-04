@@ -131,23 +131,19 @@ class ActorCritic(nn.Module):
 
     assert mana.shape == (batch_size, 1)
     assert hero.shape == (batch_size, 4)
-    assert board_repr.flatten(start_dim=1).shape == (
-      batch_size, hs_config.Environment.max_cards_in_board * (hs_config.PPOAgent.card_embedding_size + 3))
-    assert hand_repr.flatten(start_dim=1).shape == (
-      batch_size, hs_config.Environment.max_cards_in_hand * (hs_config.PPOAgent.card_embedding_size + 3))
-    assert deck_repr.flatten(start_dim=1).shape == (
-      batch_size, hs_config.Environment.max_cards_in_deck * (hs_config.PPOAgent.card_embedding_size + 3))
-    assert o_board_repr.flatten(start_dim=1).shape == (
-      batch_size, hs_config.Environment.max_cards_in_board * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert board_repr.shape == (batch_size, hs_config.Environment.max_cards_in_board * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert hand_repr.shape == (batch_size, hs_config.Environment.max_cards_in_hand * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert deck_repr.shape == (batch_size, hs_config.Environment.max_cards_in_deck * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert o_board_repr.shape == (batch_size, hs_config.Environment.max_cards_in_board * (hs_config.PPOAgent.card_embedding_size + 3))
 
     assert o_mana.shape == (batch_size, 1)
     features = torch.cat((
       mana,
       hero,
-      board_repr.flatten(start_dim=1),
-      hand_repr.flatten(start_dim=1),
-      deck_repr.flatten(start_dim=1),
-      o_board_repr.flatten(start_dim=1),
+      board_repr,
+      hand_repr,
+      deck_repr,
+      o_board_repr,
       o_mana,
     ), dim=1)
     return features
