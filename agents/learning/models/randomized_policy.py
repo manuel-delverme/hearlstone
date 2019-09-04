@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import Sequential
 
 import environments.base_env
 import hs_config
@@ -11,9 +10,6 @@ from shared.utils import init
 
 
 class ActorCritic(nn.Module):
-  critic: Sequential
-  actor: Sequential
-
   def __init__(self, num_inputs: int, num_actions: int, device: torch.device):
     super(ActorCritic, self).__init__()
     assert num_inputs > 0

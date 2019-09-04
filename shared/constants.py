@@ -102,6 +102,11 @@ class HandPosition(enum.IntEnum):
   H9 = 8
   HA = 9
 
+
+BoardPosition.__call__ = lambda x: x
+HandPosition.__call__ = lambda x: x
+PlayerTaskType.__call__ = lambda x: x
+
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249

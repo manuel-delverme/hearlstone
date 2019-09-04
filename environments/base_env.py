@@ -77,9 +77,7 @@ class BaseEnv(gym.Env, ABC):
     raise NotImplemented
 
   def set_opponents(self, opponents, opponent_dist, deterministic_opponent=True):
-    del self.opponents
     self.opponents = []
-
     for player_hash in opponents:
       self.opponents.append(self.load_opponent(player_hash))
 

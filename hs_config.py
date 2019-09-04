@@ -19,7 +19,7 @@ log_to_stdout = DEBUG
 
 
 class Environment:
-  num_possible_cards = 30
+  num_possible_cards = 100
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
   ENV_DEBUG_METRICS = False
@@ -77,10 +77,10 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 
 class PPOAgent:
-  card_embedding_size = 1
+  card_embedding_size = 5
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55
-  performance_to_early_eval = 0.45  # <- 0.45
+  performance_to_early_eval = 0.55  # <- 0.45
   num_outcomes_for_early_exit = 50
 
   deterministic_training = False  # Set opponent as deterministic during {training, eval}
