@@ -316,9 +316,10 @@ class Sabberstone(environments.base_env.RenderableEnv):
     o = game_snapshot.CurrentOpponent
 
     deck = parse_deck(p.deck_zone.entities)
-    assert len(deck) == 390
+    assert len(deck) == hs_config.Environment.max_cards_in_deck * C.INACTIVE_CARD_ENCODING_SIZE
     p_hand = pad(p.hand_zone.entities, length=hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE, parse=parse_card)
-    assert len(p_hand) == 130
+    assert len(p_hand) == hs_config.Environment.max_cards_in_hand * C.INACTIVE_CARD_ENCODING_SIZE
+
     p_board = pad(p.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)
     assert len(p_board) == hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE
     o_board = pad(o.board_zone.minions, length=hs_config.Environment.max_cards_in_board * C.ACTIVE_CARD_ENCODING_SIZE, parse=parse_minion)

@@ -57,9 +57,8 @@ class PPOAgent(agents.base_agent.Agent):
     self.num_inputs = num_inputs
     self.num_actions = num_possible_actions
 
-    actor_critic_network = ActorCritic(self.num_inputs, self.num_actions)
-    actor_critic_network.to(self.device)
-    self.actor_critic = actor_critic_network
+    self.actor_critic = ActorCritic(self.num_inputs, self.num_actions, device=self.device)
+    assert self.actor_critic.card_embedding.weight.device == torch.device('cpu')
 
     self.clip_param = hs_config.PPOAgent.clip_epsilon
     assert specs.check_positive_type(self.clip_param, float)
@@ -151,7 +150,10 @@ class PPOAgent(agents.base_agent.Agent):
       self.gather_rollouts(rollouts, episode_rewards, envs, stop_gathering, game_statistics=game_statistics)
 
       with torch.no_grad():
-        next_value = self.actor_critic.critic(rollouts.get_last_observation()).detach()
+        features = self.actor_critic.extract_features(
+          rollouts.get_last_observation())  # TODO: critic should be a single call, remove extract_features
+
+        next_value = self.actor_critic.critic(features).detach()
 
       rollouts.compute_returns(next_value)
       value_loss, action_loss, dist_entropy, policy_ratio, mean_value, grad_pi, grad_value = self.update(rollouts)
@@ -228,6 +230,7 @@ class PPOAgent(agents.base_agent.Agent):
       self.actor_critic = checkpoint['network']
       self.pi_optimizer, self.value_optimizer = checkpoint['optimizers']
     self.actor_critic.to(hs_config.device)
+    assert self.actor_critic.card_embedding.weight.device == torch.device('cpu')
 
   def setup_envs(self, game_manager: game_utils.GameManager):
 
@@ -300,6 +303,7 @@ class PPOAgent(agents.base_agent.Agent):
       if exit_condition(rewards, step):
         break
 
+      assert self.actor_critic.card_embedding.weight.device == torch.device('cpu')
       with torch.no_grad():
         value, action, action_log_prob = self.actor_critic(obs, possible_actions, deterministic=deterministic)
 
@@ -419,7 +423,7 @@ class PPOAgent(agents.base_agent.Agent):
       if done:
         self.enjoy_env.render(choice=action, action_distribution=action_distribution, value=value, reward=reward)
 
-  def update(self, rollouts: RolloutStorage):
+  def update(self, rollouts: RolloutStorage, slow_stats=False):
     advantages = rollouts.get_advantages()
     advantages -= advantages.mean()
     advantages /= advantages.std() + 1e-5
@@ -458,8 +462,8 @@ class PPOAgent(agents.base_agent.Agent):
           value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
         self.pi_optimizer.zero_grad()
-        (action_loss - dist_entropy * self.entropy_coeff).backward()
-        grad_norm_pi = get_grad_norm(self.actor_critic.actor)  # SUPER SLOW
+        (action_loss - dist_entropy * self.entropy_coeff).backward(retain_graph=True)
+        grad_norm_pi = None if slow_stats else get_grad_norm(self.actor_critic.actor)
         self.pi_optimizer.step()
 
         # torch.nn.utils.clip_grad_norm_(self.actor_critic.actor.parameters(), self.max_grad_norm)
@@ -467,8 +471,7 @@ class PPOAgent(agents.base_agent.Agent):
         self.value_optimizer.zero_grad()
         (value_loss * self.value_loss_coeff).backward()
 
-        grad_norm_critic = get_grad_norm(self.actor_critic.critic)  # SUPER SLOW
-        # torch.nn.utils.clip_grad_norm_(self.actor_critic.critic.parameters(), self.max_grad_norm)
+        grad_norm_critic = None if slow_stats else get_grad_norm(self.actor_critic.critic)
 
         self.value_optimizer.step()
         grad_norm_pi_epoch += grad_norm_pi

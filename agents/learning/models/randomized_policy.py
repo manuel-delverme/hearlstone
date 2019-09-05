@@ -2,13 +2,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+import environments.base_env
 import hs_config
+import shared.constants as C
 import specs
 from shared.utils import init
 
 
 class ActorCritic(nn.Module):
-  def __init__(self, num_inputs: int, num_actions: int):
+  def __init__(self, num_inputs: int, num_actions: int, device: torch.device):
     super(ActorCritic, self).__init__()
     assert num_inputs > 0
     assert num_actions > 0
@@ -18,8 +20,13 @@ class ActorCritic(nn.Module):
 
     init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2) / 100)
 
+    self.card_embedding = nn.Embedding(hs_config.Environment.num_possible_cards, hs_config.PPOAgent.card_embedding_size)
+
+    entities = [-1, ] + list(C.MINIONS) + list(C.SPELLS)
+    self.card_id_to_index = {v: k for k, v in enumerate(entities)}
+
     self.actor = nn.Sequential(
-        init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
+        init_(nn.Linear(438, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -28,7 +35,7 @@ class ActorCritic(nn.Module):
         nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions),
     )
     self.critic = nn.Sequential(
-        init_(nn.Linear(self.num_inputs, hs_config.PPOAgent.hidden_size)),
+        init_(nn.Linear(438, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -39,6 +46,13 @@ class ActorCritic(nn.Module):
     self.reset_actor()
     self.reset_critic()
     self.train()
+    self.to(device)
+
+  def to(self, *args, **kwargs):
+    self.actor.to(*args, **kwargs)
+    self.critic.to(*args, **kwargs)
+    self.critic_regression.to(*args, **kwargs)
+    self.card_embedding.to('cpu')
 
   def reset_actor(self):
     logits = list(self.actor.children())[-1]
@@ -97,11 +111,59 @@ class ActorCritic(nn.Module):
   #   return value
 
   def actor_critic(self, inputs, possible_actions):
-    value = self.critic(inputs)
-    logits = self.actor(inputs)
+    features = self.extract_features(inputs)
+    value = self.critic(features)
+    logits = self.actor(features)
 
     action_distribution = self._get_action_distribution(possible_actions, logits)
     return action_distribution, value
+
+  def extract_features(self, observation):
+    batch_size = observation.shape[0]
+    offset, board, hand, mana, hero, board_size, deck = environments.base_env.RenderableEnv.render_player(observation, preserve_types=True)
+    offset, o_board, _, o_mana, o_hero, o_board_size, _, = environments.base_env.RenderableEnv.render_player(observation, offset,
+                                                                                                             show_hand=False,
+                                                                                                             preserve_types=True)
+    board_repr = self.parse_zone(board)
+    hand_repr = self.parse_zone(hand)
+    o_board_repr = self.parse_zone(o_board)
+    deck_repr = self.parse_zone(deck)
+
+    assert mana.shape == (batch_size, 1)
+    assert hero.shape == (batch_size, 4)
+    assert board_repr.shape == (batch_size, hs_config.Environment.max_cards_in_board * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert hand_repr.shape == (batch_size, hs_config.Environment.max_cards_in_hand * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert deck_repr.shape == (batch_size, hs_config.Environment.max_cards_in_deck * (hs_config.PPOAgent.card_embedding_size + 3))
+    assert o_board_repr.shape == (batch_size, hs_config.Environment.max_cards_in_board * (hs_config.PPOAgent.card_embedding_size + 3))
+
+    assert o_mana.shape == (batch_size, 1)
+    features = torch.cat((
+      mana,
+      hero,
+      board_repr,
+      hand_repr,
+      deck_repr,
+      o_board_repr,
+      o_mana,
+    ), dim=1)
+    return features
+
+  def parse_zone(self, zone):
+    zone = torch.stack(zone)
+    original_device = zone.device
+    zone = zone.cpu().permute(1, 0, 2)  # position, batch, dims -> batch, position, dim
+    sparse = zone[:, :, -1]
+    dense = zone[:, :, :-1]
+
+    ids = []
+    for card_id in sparse.reshape(-1):
+      card_index = self.card_id_to_index[int(card_id)]
+      ids.append(card_index)
+
+    sparse = torch.LongTensor(ids).view(sparse.shape)
+    card_embeddings = self.card_embedding(sparse.long())
+    zone = torch.cat((dense, card_embeddings), dim=-1)
+    return zone.flatten(start_dim=1).to(original_device)  # turn into batch_size x zone
 
   def evaluate_actions(self, observations: torch.FloatTensor, action: torch.LongTensor,
       possible_actions: torch.FloatTensor) -> (

@@ -32,7 +32,7 @@ class DummyVecEnv(_DummyVecEnv):
     return self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones), self.buf_infos.copy()
 
 
-class PyTorchCompatibilityWrapper(VecEnvWrapper):
+class PyTorchCompatibilityWrapper(VecEnvWrapper):  # TODO(esac) avoiding sending stuff to device, this should be done by the network/agent
   def __init__(self, venv: vec_env.VecEnv, device: torch.device):
     super(PyTorchCompatibilityWrapper, self).__init__(venv)
     self.device = device
@@ -225,70 +225,23 @@ def game_stats(game):
 
 
 def parse_card(card):
-  if card.card_id not in C.CARD_LOOKUP:
-    card_draw = 0
-    if card.card_id == C.MINIONS.NoviceEngineer:
-      card_draw = 1
-    elif card.card_id == C.SPELLS.ArcaneIntellect:
-      card_draw = 2
-
-    spell_dmg = 0
-    if card.card_id == C.SPELLS.Fireball:
-      spell_dmg = 6
-    elif card.card_id == C.SPELLS.ArcaneExplosion:
-      spell_dmg = 1
-    elif card.card_id == C.SPELLS.Frostbolt:
-      spell_dmg = 3
-    elif card.card_id == C.SPELLS.Flamestrike:
-      spell_dmg = 4
-
-    card_vec = (
-      card.atk,
-      card.cost,
-      card.base_health,
-      spell_dmg,
-      card_draw,
-      # card.ghostly,
-      # card.card_id,
-      card.card_id == C.SPELLS.Polymorph,
-      card.card_id == C.MINIONS.DoomSayer,
-      card.card_id == C.SPELLS.MirrorImage,
-      card.card_id == C.SPELLS.TheCoin,
-      card.card_id == C.MINIONS.WaterElemental,
-      card.card_id == C.MINIONS.GurubashiBerserker,
-      card.card_id in (C.SPELLS.Frostbolt, C.SPELLS.FrostNova),  # Freeze
-      card.card_id in (C.SPELLS.FrostNova, C.SPELLS.ArcaneExplosion, C.SPELLS.Flamestrike),  # AOE
-    )
-    C.CARD_LOOKUP[card.card_id] = card_vec
-    C.REVERSE_CARD_LOOKUP[card_vec] = card.card_id
+  card_vec = (
+    card.atk,
+    card.base_health,
+    card.cost,
+    card.card_id,
+  )
+  C.CARD_LOOKUP[card.card_id] = card_vec
+  C.REVERSE_CARD_LOOKUP[card_vec] = card.card_id
   return C.CARD_LOOKUP[card.card_id]
 
 
 def parse_minion(card):
   return (
-    # self.card_id,
     card.atk,
     card.base_health - card.damage,
-    # card.num_attacks_this_turn,
-    # card.zone_position,
-    # card.order_of_play,
     card.exhausted,
-    # card.stealth,
-    # card.immune,
-    # card.charge,
-    # card.attackable_by_rush,
-    # card.windfury,
-    # card.lifesteal,
-    card.taunt,
-    # card.divine_shield,
-    # card.elusive,
-    card.frozen,
-    card.card_id == C.MINIONS.DoomSayer,
-    card.card_id == C.MINIONS.WaterElemental,
-    card.card_id == C.MINIONS.GurubashiBerserker,
-    card.card_id in (C.MINIONS.OgreMagi, C.MINIONS.KoboldGeomancer, C.MINIONS.Archmage),  # +1 spell damage
-    # card.deathrattle,
-    # card.silenced
+    card.card_id,
   )
 
 

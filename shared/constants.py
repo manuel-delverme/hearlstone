@@ -110,7 +110,7 @@ PlayerTaskType.__call__ = lambda x: x
 GameStatistics = collections.namedtuple('GameStatistics',
                                         ['mana_adv', 'hand_adv', 'life_adv', 'n_turns_left', 'board_adv', 'empowerment'])
 ACTION_SPACE = 249
-STATE_SPACE = 658
+STATE_SPACE = 228
 
 
 class Players(enum.Enum):
@@ -127,28 +127,14 @@ Minion = collections.namedtuple('minion', [
   'atk',
   'health',
   'exhausted',
-  'taunt',
-  'frozen',
-  'is_doom_sayer',
-  'is_water_elemental',
-  'is_gurubashi_berserker',
-  'one_spellpower',
+  'card_id',
 ])
 
 Card = collections.namedtuple('card', [
   'atk',
   'cost',
   'health',
-  'spell_dmg',
-  'card_draw',
-  'is_sheep',
-  'is_arcane_missels',
-  'is_mirror_image',
-  'is_the_coin',
-  'is_water_elemental',
-  'is_gurubashi_berserker',
-  'freeze',
-  'aoe',
+  'card_id',
 ])
 
 Hero = collections.namedtuple('hero', ['atk', 'health', 'atk_exhausted', 'power_exhausted'])
