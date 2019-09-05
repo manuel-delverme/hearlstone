@@ -90,16 +90,16 @@ def get_deck_list(query, max_decks=50):
 
 def save_decks(deck_dict):
     assert isinstance(deck_dict, dict)
-    with open('deck.csv', 'w') as f:
+    with open('decks.csv', 'w') as f:
         writer = csv.DictWriter(f, fieldnames=['deck_address', 'deck_string'])
         writer.writeheader()
         writer.writerows(deck_dict.values())
 
 
 def load_decks():
-    assert os.path.exists('deck.csv'), FileNotFoundError
+    assert os.path.exists('decks.csv'), FileNotFoundError
     decks = []
-    with open('deck.csv', 'r') as f:
+    with open('decks.csv', 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
             decks.append(row['deck_string'])
