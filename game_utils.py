@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 import hs_config
+import shared.constants as C
 
 
 class GameManager(object):
@@ -107,9 +108,10 @@ class Ladder:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    if hs_config.GameManager.support == "player_winning_probability":
+
+    if hs_config.GameManager.support == C.DistSupport.player_win_prob:
       scores = 1 - self.player_strength()[:number_of_active_opponents]
-    elif hs_config.GameManager.support == "elo_score":
+    elif hs_config.GameManager.support == C.DistSupport.elo_score:
       scores = self.scores[:number_of_active_opponents]
     else:
       raise NotImplementedError(f"support {hs_config.GameManager.support} not in (player_winning_probability, elo_score)")

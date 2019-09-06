@@ -60,7 +60,7 @@ class Environment:
 
 
 class GameManager:
-  support = "player_winning_probability" # elo_score
+  support = C.DistSupport.player_win_prob
   tau = 1.
   max_opponents = 5
   elo_lr = 16
