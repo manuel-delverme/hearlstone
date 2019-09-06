@@ -1,6 +1,7 @@
 import collections
 import random
 
+import gym
 import numpy as np
 import tqdm
 
@@ -98,25 +99,34 @@ class TradingHS(environments.base_env.RenderableEnv):
   id_to_action = [environments.base_env.BaseEnv.GameActions.PASS_TURN, ] + [
     (s, t) for s in range(hs_config.Environment.max_cards_in_board) for t in range(hs_config.Environment.max_cards_in_board)]
   action_to_id = {v: k for k, v in enumerate(id_to_action)}
+  board = np.zeros((5, hs_config.Environment.max_cards_in_board), dtype=np.int8)  # player (hp, atk, exaust), opponent (hp, atk)
+
+  action_space = gym.spaces.Discrete(n=len(id_to_action))
+  observation_space = gym.spaces.Box(low=-1, high=100, shape=(len(board.flatten()),), dtype=np.int)
 
   def __init__(self, *, address: str = None, seed: int = None, env_number: int = None):
     super().__init__()
-    self.board = np.zeros((5, hs_config.Environment.max_cards_in_board), dtype=np.int8)
+    self.board.fill(0)
     self.turns = 0
 
   def agent_game_vale(self):
     if self.turns > 0:
-      return -1
+      reward = -1
     else:
-      return np.float32(np.all(self.board[OPPONENT] <= 0))
+      reward = np.all(self.board[OPPONENT] <= 0)
+    return np.float32(reward)
 
   def step(self, action_id: np.ndarray):
+    action_id = int(action_id)
     assert self.last_info['possible_actions'][action_id]
     if self.id_to_action[action_id] == environments.base_env.BaseEnv.GameActions.PASS_TURN:
       self.board[P_EXAUSTED, :].fill(0)
       self.turns += 1
     else:
       attacker, defender = self.id_to_action[action_id]
+
+      assert self.board[P_ATK, attacker] > 0
+      assert self.board[O_ATK, defender] > 0
 
       self.board[O_HP, defender] -= self.board[P_ATK, attacker]
       self.board[P_HP, attacker] -= self.board[O_ATK, defender]
@@ -165,7 +175,6 @@ class TradingHS(environments.base_env.RenderableEnv):
     player_board, opponent_board = tuple(), tuple()
 
     (player_board, opponent_board), _ = bf_search(actions, exit_condition, prune_condition, player_board, opponent_board)
-    # (player_board, opponent_board), _ = bf_search(actions, exit_condition, prune_condition, player_board, opponent_board)
 
     player_board = (*player_board, (random.randint(1, 3), random.randint(1, 3)))
     return player_board, opponent_board
@@ -175,16 +184,27 @@ class TradingHS(environments.base_env.RenderableEnv):
     terminal = bool(reward)
     observation = self.board.flatten()
     info = {'possible_actions': self.gather_possible_actions(), }
+
+    if terminal:
+      info['game_statistics'] = {
+        'outcome': reward,
+        'opponent_nr': -1,
+        'episode_empowerment': float('nan')
+      }
+
     self.last_info = info
     return observation, reward, terminal, info
 
   def gather_possible_actions(self):
-    possible_actions = np.zeros(hs_config.Environment.max_cards_in_board * hs_config.Environment.max_cards_in_board + 1)
+    possible_actions = np.zeros(hs_config.Environment.max_cards_in_board * hs_config.Environment.max_cards_in_board + 1, dtype=np.float32)
     possible_actions[environments.base_env.BaseEnv.GameActions.PASS_TURN] = 1  # PASS
     action_pos = 0
 
-    for attacker_pos in range(hs_config.Environment.max_cards_in_board):
-      for defender_pos in range(hs_config.Environment.max_cards_in_board):
+    for action_idx, action in enumerate(self.id_to_action):
+      if action == environments.base_env.BaseEnv.GameActions.PASS_TURN:
+        possible_actions[action_pos] = 1
+      else:
+        attacker_pos, defender_pos = action
         if (
             self.board[P_HP, attacker_pos] > 0 and
             self.board[P_ATK, attacker_pos] > 0 and
@@ -192,7 +212,6 @@ class TradingHS(environments.base_env.RenderableEnv):
             self.board[O_HP, defender_pos] > 0
         ):
           possible_actions[action_pos] = 1
-        action_pos += 1
     return possible_actions
 
 

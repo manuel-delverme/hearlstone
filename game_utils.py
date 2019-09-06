@@ -17,6 +17,9 @@ class GameManager(object):
     self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
     self.ladder = Ladder()
 
+    self.observation_space = self.game_class.observation_space
+    self.action_space = self.game_class.action_space
+
   def update_score(self, score):
     self.ladder.update(score)
     return self.ladder.player_score, self.ladder.games_count

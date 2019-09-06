@@ -179,7 +179,7 @@ class PPOAgent(agents.base_agent.Agent):
 
           self.tensorboard.add_scalar('dashboard/elo_score', elo_score, ppo_update_num)
           self.tensorboard.add_scalar('dashboard/player_strength', player_strength.mean(), ppo_update_num)
-          self.tensorboard.add_scalar('dashboard/league_strength', (1-player_strength).mean(), ppo_update_num)
+          self.tensorboard.add_scalar('dashboard/league_strength', (1 - player_strength).mean(), ppo_update_num)
 
           self.tensorboard.add_histogram('dashboard/opponent_dist', opponent_dist, ppo_update_num)
           self.tensorboard.add_histogram('dashboard/games_count', games_count, ppo_update_num)
@@ -285,8 +285,7 @@ class PPOAgent(agents.base_agent.Agent):
     return rewards, dict(scores), game_stats
 
   def gather_rollouts(self, rollouts, rewards: List, envs, exit_condition: Callable[[List, int], bool], game_statistics,
-      deterministic: bool = False,
-      opponents: list = None, timeout=10000):
+      deterministic: bool = False, opponents: list = None, timeout=10000):
     if rollouts is None:
       obs, _, _, infos = envs.reset()
       possible_actions = infos['possible_actions']
