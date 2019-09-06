@@ -9,7 +9,6 @@ import agents.heuristic.random_agent
 import agents.learning.ppo_agent
 import game_utils
 import hs_config
-import shared.constants as C
 
 
 def load_latest_checkpoint(checkpoint=None):
@@ -47,18 +46,24 @@ def train(args):
   game_manager = game_utils.GameManager(address=args.address)
   if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=game_manager.observation_space.shape[0],
+                                                num_possible_actions=game_manager.action_space.n,
+                                                experiment_id=None)
 
     player.enjoy(game_manager, checkpoint_file=args.p1)
 
   elif args.p1 is not None and args.p2 is not None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
     game_manager.add_learned_opponent(args.p2)
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=None)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=game_manager.observation_space.shape[0],
+                                                num_possible_actions=game_manager.action_space.n,
+                                                experiment_id=None)
     player.enjoy(game_manager, checkpoint_file=args.p1)
   else:
     experiment_id = setup_logging()
-    player = agents.learning.ppo_agent.PPOAgent(num_inputs=C.STATE_SPACE, num_possible_actions=C.ACTION_SPACE, experiment_id=experiment_id)
+    player = agents.learning.ppo_agent.PPOAgent(num_inputs=game_manager.observation_space.shape[0],
+                                                num_possible_actions=game_manager.action_space.n,
+                                                experiment_id=experiment_id)
     latest_checkpoint = load_latest_checkpoint(args.load_checkpoint)
     player.self_play(game_manager, checkpoint_file=latest_checkpoint)
 
