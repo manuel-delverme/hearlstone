@@ -197,12 +197,10 @@ class TradingHS(environments.base_env.RenderableEnv):
 
   def gather_possible_actions(self):
     possible_actions = np.zeros(hs_config.Environment.max_cards_in_board * hs_config.Environment.max_cards_in_board + 1, dtype=np.float32)
-    possible_actions[environments.base_env.BaseEnv.GameActions.PASS_TURN] = 1  # PASS
-    action_pos = 0
 
     for action_idx, action in enumerate(self.id_to_action):
       if action == environments.base_env.BaseEnv.GameActions.PASS_TURN:
-        possible_actions[action_pos] = 1
+        possible_actions[action_idx] = 1
       else:
         attacker_pos, defender_pos = action
         if (
@@ -211,19 +209,21 @@ class TradingHS(environments.base_env.RenderableEnv):
             not self.board[P_EXAUSTED, attacker_pos] and
             self.board[O_HP, defender_pos] > 0
         ):
-          possible_actions[action_pos] = 1
+          possible_actions[action_idx] = 1
     return possible_actions
 
 
 if __name__ == "__main__":
   env = TradingHS()
   observation, reward, done, info = env.reset()
+  r_max = 0
   for _ in tqdm.tqdm(range(10000)):
     env.render()
     pa = info['possible_actions']
     pa_list = np.argwhere(pa).squeeze(-1)
     a = np.random.choice(pa_list)
-    _, _, done, info = env.step(a)
+    _, r, done, info = env.step(a)
+    r_max = max(r, r_max)
     if done:
       _, _, done, info = env.reset()
-      print("=" * 10, "NEW GAME", "=" * 10)
+      print("=" * 10, "NEW GAME", "=" * 10, r_max)

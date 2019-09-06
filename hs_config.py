@@ -25,7 +25,6 @@ class Environment:
   single_process = DEBUG
   address = "0.0.0.0:50052"
 
-
   # MOVE TO CONSTANTS, sabberstone doesnt allow change
   max_cards_in_board = 7
   max_cards_in_deck = 30
@@ -51,6 +50,8 @@ class Environment:
         _Sabberstone,
         address=address,
     )
+    # from environments.trading_hs import TradingHS
+    # return TradingHS
     return out
 
   @staticmethod
@@ -71,6 +72,7 @@ class GameManager:
 
 class SelfPlay:
   num_opponent_updates = 9999999
+
 
 log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
@@ -104,7 +106,6 @@ class PPOAgent:
   num_env_steps = int(1e10)
   gamma = 0.99  # discount for rewards
   tau = 0.95  # gae parameter
-
 
   entropy_coeff = 1e-1  # randomness
   value_loss_coeff = 0.5
