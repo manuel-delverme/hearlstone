@@ -60,7 +60,7 @@ class Environment:
 
 
 class GameManager:
-  support = "player_strength"
+  support = "player_winning_probability" # elo_score
   tau = 1.
   max_opponents = 5
   elo_lr = 16
@@ -85,7 +85,7 @@ class PPOAgent:
   deterministic_training = False  # Set opponent as deterministic during {training, eval}
   deterministic_eval = True
 
-  num_eval_games = 10 if DEBUG else 1000 # DO NOT MAKE ME SMALLER...
+  num_eval_games = 10 if DEBUG else 1000 # large_n -> better winning ratio estimate
   num_valid_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256

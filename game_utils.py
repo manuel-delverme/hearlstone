@@ -107,12 +107,12 @@ class Ladder:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    if hs_config.GameManager.support == "player_strength":
+    if hs_config.GameManager.support == "player_winning_probability":
       scores = 1 - self.player_strength()[:number_of_active_opponents]
     elif hs_config.GameManager.support == "elo_score":
       scores = self.scores[:number_of_active_opponents]
     else:
-      raise NotImplementedError(f"support {hs_config.GameManager.support} not in (player_strength, elo_score)")
+      raise NotImplementedError(f"support {hs_config.GameManager.support} not in (player_winning_probability, elo_score)")
     return boltzmann(scores=scores, tau=self.tau).numpy()
 
   @property
