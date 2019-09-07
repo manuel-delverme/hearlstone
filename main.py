@@ -34,16 +34,11 @@ def setup_logging():
       root.destroy()
     except tkinter.TclError as _:
       print("no-comment")
-
-  # hs_config.tensorboard_dir = os.path.join(hs_config.log_dir,
-  #                                          f"tensorboard/{datetime.datetime.now().strftime('%b%d_%H-%M-%S')}_{hs_config.comment}.pt")
-  # if "DELETEME" in hs_config.tensorboard_dir:
-  #   hs_config.tensorboard_dir = tempfile.mktemp()
-  return hs_config.comment
+  return f"{str(hs_config.Environment.game_mode).split('.')[-1]}:{hs_config.comment}"
 
 
 def train(args):
-  game_manager = game_utils.GameManager(address=args.address)
+  game_manager = game_utils.GameManager()
   if args.p1 is not None and args.p2 is None:
     hs_config.use_gpu, hs_config.device = False, torch.device('cpu')
     player = agents.learning.ppo_agent.PPOAgent(num_inputs=game_manager.observation_space.shape[0],

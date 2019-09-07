@@ -119,6 +119,12 @@ class Players(enum.Enum):
   LOG = 2
 
 
+class GameModes(enum.Enum):
+  SabberHS_rpc = 0
+  SabberHS_mmf = 1
+  TradingHS = 2
+
+
 GUI_CARD_WIDTH = 1  # width of box to draw card in
 GUI_CARD_HEIGHT = 3
 

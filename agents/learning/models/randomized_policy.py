@@ -25,8 +25,10 @@ class ActorCritic(nn.Module):
     entities = [-1, ] + list(C.MINIONS) + list(C.SPELLS)
     self.card_id_to_index = {v: k for k, v in enumerate(entities)}
 
+    num_inputs = 438 if hs_config.PPOAgent.encode_cards else self.num_inputs
+
     self.actor = nn.Sequential(
-        init_(nn.Linear(438, hs_config.PPOAgent.hidden_size)),
+        init_(nn.Linear(num_inputs, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -35,7 +37,7 @@ class ActorCritic(nn.Module):
         nn.Linear(hs_config.PPOAgent.hidden_size, self.num_possible_actions),
     )
     self.critic = nn.Sequential(
-        init_(nn.Linear(438, hs_config.PPOAgent.hidden_size)),
+        init_(nn.Linear(num_inputs, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
         init_(nn.Linear(hs_config.PPOAgent.hidden_size, hs_config.PPOAgent.hidden_size)),
         nn.ReLU(),
@@ -119,6 +121,9 @@ class ActorCritic(nn.Module):
     return action_distribution, value
 
   def extract_features(self, observation):
+    if not hs_config.PPOAgent.encode_cards:
+      return observation
+
     batch_size = observation.shape[0]
     offset, board, hand, mana, hero, board_size, deck = environments.base_env.RenderableEnv.render_player(observation, preserve_types=True)
     offset, o_board, _, o_mana, o_hero, o_board_size, _, = environments.base_env.RenderableEnv.render_player(observation, offset,

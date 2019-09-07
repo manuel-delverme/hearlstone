@@ -1,19 +1,30 @@
-# import baselines.common.running_mean_std
 import collections
 from typing import Text
 
 import numpy as np
 import torch
 
+import environments.sabber2_hs
+import environments.sabber_hs
+import environments.trading_hs
 import hs_config
+import shared.constants as C
 
 
 class GameManager(object):
-  def __init__(self, seed=None, address=hs_config.Environment.address):
+  def __init__(self, seed=None):
     self.seed = seed
     self._use_heuristic_opponent = True
 
-    self.game_class = hs_config.Environment.get_game_mode(address)
+    if hs_config.Environment.game_mode == C.GameModes.TradingHS:
+      self.game_class = environments.trading_hs.TradingHS
+    elif hs_config.Environment.game_mode == C.GameModes.SabberHS_rpc:
+      self.game_class = environments.sabber_hs.Sabberstone
+    elif hs_config.Environment.game_mode == C.GameModes.SabberHS_mmf:
+      self.game_class = environments.sabber2_hs.Sabberstone2
+    else:
+      raise ValueError
+
     self.opponents = collections.deque(['random'], maxlen=hs_config.GameManager.max_opponents)
     self.ladder = Ladder()
 

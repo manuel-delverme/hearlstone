@@ -1,8 +1,7 @@
-import functools
 import getpass
 import os
 import sys
-from typing import Callable, Type
+from typing import Type
 
 import torch
 
@@ -19,6 +18,7 @@ log_to_stdout = DEBUG
 
 
 class Environment:
+  game_mode = C.GameModes.SabberHS_mmf if 'esac' == getpass.getuser() else C.GameModes.SabberHS_rpc
   num_possible_cards = 100
   ENV_DEBUG = False
   ENV_DEBUG_HEURISTIC = False
@@ -33,27 +33,9 @@ class Environment:
   max_entities_in_board = max_cards_in_board + 1
 
   max_cards_in_hand = 10
-  connection = 'mmf' if 'esac' == getpass.getuser() else 'rpc'
 
-  max_processes = 4 if connection == 'mmf' else 12
+  max_processes = 4 if game_mode == C.GameModes.SabberHS_mmf else 12
   reward_type = C.RewardType.empowerment
-
-  @staticmethod
-  def get_game_mode(address: str) -> Callable[[], Callable]:
-    if Environment.connection == 'rpc':
-      from environments.sabber_hs import Sabberstone as _Sabberstone
-      print("Running as rpc")
-    else:
-      from environments.sabber2_hs import Sabberstone2 as _Sabberstone
-      print("Running as mmf")
-
-    out = functools.partial(
-        _Sabberstone,
-        address=address,
-    )
-    # from environments.trading_hs import TradingHS
-    # return TradingHS
-    return out
 
   @staticmethod
   def get_opponent() -> Type[agents.base_agent.Agent]:
@@ -79,6 +61,7 @@ log_dir = os.path.join(os.path.dirname(os.getcwd()), "hearlstone", "logs")
 
 
 class PPOAgent:
+  encode_cards = C.GameModes.TradingHS != Environment.game_mode  # Trading doesn't encode yet
   card_embedding_size = 5
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55

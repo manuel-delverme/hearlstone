@@ -152,7 +152,6 @@ class PPOAgent(agents.base_agent.Agent):
       with torch.no_grad():
         features = self.actor_critic.extract_features(
           rollouts.get_last_observation())  # TODO: critic should be a single call, remove extract_features
-
         next_value = self.actor_critic.critic(features).detach()
 
       rollouts.compute_returns(next_value)
