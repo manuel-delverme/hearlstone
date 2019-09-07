@@ -96,8 +96,8 @@ def enumerate_actions():
 
   action_to_id_dict = {v: k for k, v in enumerate(id_to_action)}
 
-  action_to_id_dict[(C.PlayerTaskType.END_TURN, 1, 2)] = action_to_id_dict[pass_action]
-  action_to_id_dict[(C.PlayerTaskType.END_TURN, 2, 1)] = action_to_id_dict[pass_action]
+  #action_to_id_dict[(C.PlayerTaskType.END_TURN, 1, 2)] = action_to_id_dict[pass_action]
+  #action_to_id_dict[(C.PlayerTaskType.END_TURN, 2, 1)] = action_to_id_dict[pass_action]
 
   assert len(id_to_action) == C.ACTION_SPACE
   return action_to_id_dict

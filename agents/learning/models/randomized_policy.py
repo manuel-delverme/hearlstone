@@ -7,6 +7,7 @@ import hs_config
 import shared.constants as C
 import specs
 from shared.utils import init
+from .pointer_networks import PointerNetwork
 
 
 class ActorCritic(nn.Module):
@@ -45,6 +46,7 @@ class ActorCritic(nn.Module):
         nn.ReLU(),
         nn.Linear(hs_config.PPOAgent.hidden_size, 1),
     )
+    self.pointer_network = PointerNetwork(out_features=self.num_possible_actions)
     self.reset_actor()
     self.reset_critic()
     self.train()
@@ -116,7 +118,7 @@ class ActorCritic(nn.Module):
     features = self.extract_features(inputs)
     value = self.critic(features)
     logits = self.actor(features)
-
+    logits = self.pointer_network(logits, possible_actions)
     action_distribution = self._get_action_distribution(possible_actions, logits)
     return action_distribution, value
 
