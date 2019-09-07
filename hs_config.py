@@ -44,6 +44,7 @@ class Environment:
 
 
 class GameManager:
+  support = C.DistSupport.player_win_prob
   tau = 1.
   max_opponents = 5
   elo_lr = 16
@@ -65,13 +66,13 @@ class PPOAgent:
   card_embedding_size = 5
   BIG_NUMBER = 9999999999999
   performance_to_early_exit = 0.55  # <- 0.55
-  performance_to_early_eval = 0.55  # <- 0.45
+  performance_to_early_eval = 0.25  # current best...
   num_outcomes_for_early_exit = 50
 
   deterministic_training = False  # Set opponent as deterministic during {training, eval}
   deterministic_eval = True
 
-  num_eval_games = 10 if DEBUG else 100
+  num_eval_games = 10 if DEBUG else 1000 # large_n -> better winning ratio estimate
   num_valid_games = 10 if DEBUG else 100
   clip_value_loss = True
   hidden_size = 256

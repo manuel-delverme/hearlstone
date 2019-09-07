@@ -11,6 +11,10 @@ def idx_to_one_hot(index, max_size):
   return tuple([0, ] * index + [1, ] + [0, ] * (max_size - index - 1))
 
 
+class DistSupport(enum.IntEnum):  
+  player_win_prob = 0
+  elo_score = 1 
+
 class RewardType(enum.Enum):
   mana_efficency = "mana_efficency"
   hand_adv = "hand_adv"

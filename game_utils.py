@@ -73,6 +73,7 @@ class Ladder:
     # https://arxiv.org/pdf/1806.02643.pdf
 
     max_opponents = hs_config.GameManager.max_opponents
+    self.max_opponents = max_opponents
 
     self.games = torch.zeros(max_opponents)
     self._scores = torch.ones((max_opponents + 1,)) * hs_config.GameManager.elo_lr
@@ -113,7 +114,7 @@ class Ladder:
   def player_strength(self):
     # the probability of winning against any player in the league
     p = torch.Tensor([self.__call__(idx) for idx in range(self.max_opponents)])
-    avg = p.mean()[None]  # the avberage of this is his strength
+    avg = p.mean().unsqueeze(0)  # the average of this is his strength
     return torch.cat([p, avg], dim=0)
 
   @property
@@ -121,7 +122,14 @@ class Ladder:
     return self.__getitem__(self.player_idx)
 
   def opponent_distribution(self, number_of_active_opponents) -> np.ndarray:
-    return boltzmann(scores=self.scores[:number_of_active_opponents], tau=self.tau).numpy()
+
+    if hs_config.GameManager.support == C.DistSupport.player_win_prob:
+      scores = 1 - self.player_strength()[:number_of_active_opponents]
+    elif hs_config.GameManager.support == C.DistSupport.elo_score:
+      scores = self.scores[:number_of_active_opponents]
+    else:
+      raise NotImplementedError(f"support {hs_config.GameManager.support} not in (player_winning_probability, elo_score)")
+    return boltzmann(scores=scores, tau=self.tau).numpy()
 
   @property
   def scores(self) -> torch.Tensor:
