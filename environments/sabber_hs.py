@@ -106,9 +106,11 @@ def enumerate_actions():
 class Sabberstone(environments.base_env.RenderableEnv):
   action_to_id = enumerate_actions()
   board_to_board = {C.PlayerTaskType.MINION_ATTACK, C.PlayerTaskType.HERO_ATTACK, C.PlayerTaskType.HERO_POWER}
+  action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
+  observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
 
-  def __init__(self, *, address: str = None, seed: int = None, env_number: int = None):
-    assert address is not None or env_number is not None
+  def __init__(self, *, seed: int = None, env_number: int = None):
+    assert env_number is not None
     super().__init__()
     self.gui = None
     self.logger = shared.utils.HSLogger(__class__.__name__, log_to_stdout=hs_config.log_to_stdout)
@@ -116,11 +118,9 @@ class Sabberstone(environments.base_env.RenderableEnv):
     if seed is not None:
       warnings.warn("Setting the seed is not implemented")
 
-    self.connect(address, env_number)
+    self.connect(hs_config.Environment.address, env_number)
     self.game_snapshot = self.stub.NewGame(deck1=C.DECK1, deck2=C.DECK2)
 
-    self.action_space = gym.spaces.Discrete(n=C.ACTION_SPACE)
-    self.observation_space = gym.spaces.Box(low=-1, high=100, shape=(C.STATE_SPACE,), dtype=np.int)
     self.turn_stats = {k: [] for k in C.GameStatistics._fields}  # TODO: do this in game_stats initilaization everywhere
     self._game_matrix = {}
     self.logger.info(f"Env with id {env_number} started.")
